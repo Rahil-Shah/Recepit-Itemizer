@@ -1,0 +1,13 @@
+{
+  "name": "receipt-ring",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal receipt itemizer and spending category ring.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Receipt Ring</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Receipt tracker</p>
+          <h1>Itemize a receipt into clean spending categories.</h1>
+        </div>
+        <button class="ghost-button" id="sampleButton" type="button">Load sample</button>
+      </header>
+
+      <section class="workspace" aria-label="Receipt workspace">
+        <section class="panel scanner-panel" aria-label="Scan receipt">
+          <div class="panel-heading">
+            <h2>Scan</h2>
+            <span class="pill" id="itemCount">0 items</span>
+          </div>
+
+          <label class="dropzone" id="dropzone">
+            <input id="receiptImage" type="file" accept="image/*" capture="environment" />
+            <span class="dropzone-icon" aria-hidden="true"></span>
+            <span class="dropzone-title">Upload receipt</span>
+            <span class="dropzone-note">Camera or image file</span>
+          </label>
+
+          <figure class="receipt-preview hidden" id="receiptPreviewWrap">
+            <img id="receiptPreview" alt="Uploaded receipt preview" />
+            <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">x</button>
+          </figure>
+
+          <label class="field-label" for="receiptText">Receipt text</label>
+          <textarea
+            id="receiptText"
+            rows="9"
+            spellcheck="false"
+            placeholder="Paste detected receipt text here..."
+          ></textarea>
+
+          <div class="button-row">
+            <button class="primary-button" id="parseButton" type="button">Itemize receipt</button>
+            <button class="secondary-button" id="clearButton" type="button">Clear</button>
+          </div>
+        </section>
+
+        <section class="panel items-panel" aria-label="Itemized purchases">
+          <div class="panel-heading">
+            <h2>Purchases</h2>
+            <button class="secondary-button compact" id="addItemButton" type="button">Add item</button>
+          </div>
+
+          <div class="items-table" role="table" aria-label="Itemized receipt purchases">
+            <div class="table-row table-head" role="row">
+              <span role="columnheader">Item</span>
+              <span role="columnheader">Category</span>
+              <span role="columnheader">Amount</span>
+              <span role="columnheader" aria-label="Actions"></span>
+            </div>
+            <div id="itemsList"></div>
+          </div>
+
+          <div class="empty-state" id="emptyState">
+            <strong>No purchases yet</strong>
+            <span>Upload a receipt or paste receipt text to get started.</span>
+          </div>
+        </section>
+
+        <aside class="panel summary-panel" aria-label="Spending summary">
+          <div class="panel-heading">
+            <h2>Breakdown</h2>
+            <span class="pill" id="receiptTotal">$0.00</span>
+          </div>
+
+          <div class="ring-wrap">
+            <svg id="categoryRing" viewBox="0 0 240 240" aria-label="Spending category ring"></svg>
+            <div class="ring-center">
+              <span>Total</span>
+              <strong id="ringTotal">$0.00</strong>
+            </div>
+          </div>
+
+          <div class="category-list" id="categoryList"></div>
+        </aside>
+      </section>
+    </main>
+
+    <script src="dist/app.js"></script>
+  </body>
+</html>

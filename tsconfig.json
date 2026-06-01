@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "none",
+    "lib": ["DOM", "ES2020"],
+    "strict": true,
+    "noImplicitOverride": true,
+    "forceConsistentCasingInFileNames": true,
+    "outFile": "dist/app.js",
+    "removeComments": true
+  },
+  "files": [
+    "src/domain/models.ts",
+    "src/config/categories.ts",
+    "src/config/sampleReceipt.ts",
+    "src/services/id.service.ts",
+    "src/services/currency-format.service.ts",
+    "src/services/categorization.service.ts",
+    "src/services/receipt-parser.service.ts",
+    "src/services/storage.service.ts",
+    "src/services/spending-summary.service.ts",
+    "src/services/image-preview.service.ts",
+    "src/ui/dom-registry.ts",
+    "src/ui/item-list.view.ts",
+    "src/ui/category-ring.view.ts",
+    "src/ui/category-summary.view.ts",
+    "src/app/app.controller.ts",
+    "src/main.ts"
+  ]
+}
