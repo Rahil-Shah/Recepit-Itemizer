@@ -32,11 +32,16 @@ namespace ReceiptRing.Services {
         return null;
       }
 
+      const categorization = this.categorizationService.categorize(label);
+
       return {
         id: this.idService.create(),
         label: this.toTitleCase(label),
         amount: Number(amount.toFixed(2)),
-        category: this.categorizationService.assignCategory(label)
+        category: categorization.category,
+        categorizationConfidence: categorization.confidence,
+        categorizationSource: categorization.source,
+        needsCategoryReview: categorization.shouldPrompt
       };
     }
 

@@ -17,6 +17,12 @@ namespace ReceiptRing.UI {
     ringTotal: HTMLElement;
     categoryRing: SVGSVGElement;
     categoryList: HTMLElement;
+    categoryPrompt: HTMLElement;
+    categoryPromptItem: HTMLElement;
+    categoryPromptSelect: HTMLSelectElement;
+    categoryPromptRemember: HTMLInputElement;
+    categoryPromptSkip: HTMLButtonElement;
+    categoryPromptSave: HTMLButtonElement;
   }
 
   export class DomRegistryFactory {
@@ -38,7 +44,13 @@ namespace ReceiptRing.UI {
         receiptTotal: this.getElement("#receiptTotal", HTMLElement),
         ringTotal: this.getElement("#ringTotal", HTMLElement),
         categoryRing: this.getElement("#categoryRing", SVGSVGElement),
-        categoryList: this.getElement("#categoryList", HTMLElement)
+        categoryList: this.getElement("#categoryList", HTMLElement),
+        categoryPrompt: this.getElement("#categoryPrompt", HTMLElement),
+        categoryPromptItem: this.getElement("#categoryPromptItem", HTMLElement),
+        categoryPromptSelect: this.getElement("#categoryPromptSelect", HTMLSelectElement),
+        categoryPromptRemember: this.getElement("#categoryPromptRemember", HTMLInputElement),
+        categoryPromptSkip: this.getElement("#categoryPromptSkip", HTMLButtonElement),
+        categoryPromptSave: this.getElement("#categoryPromptSave", HTMLButtonElement)
       };
     }
 

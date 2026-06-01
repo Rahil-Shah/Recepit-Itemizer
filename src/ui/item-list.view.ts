@@ -35,7 +35,7 @@ namespace ReceiptRing.UI {
       input.className = "table-input";
       input.value = item.label;
       input.setAttribute("aria-label", "Item name");
-      input.addEventListener("input", () => handlers.onUpdate(item.id, { label: input.value }));
+      input.addEventListener("change", () => handlers.onUpdate(item.id, { label: input.value }));
       return input;
     }
 

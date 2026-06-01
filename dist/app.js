@@ -21,7 +21,23 @@ var ReceiptRing;
                     "organic",
                     "cereal",
                     "rice",
-                    "pasta"
+                    "pasta",
+                    "flour",
+                    "sugar",
+                    "butter",
+                    "juice",
+                    "chicken",
+                    "beef",
+                    "fish",
+                    "lettuce",
+                    "tomato",
+                    "avocado",
+                    "potato",
+                    "onion",
+                    "snack",
+                    "chips",
+                    "sauce",
+                    "water"
                 ]
             },
             {
@@ -39,7 +55,17 @@ var ReceiptRing;
                     "sandwich",
                     "salad",
                     "tea",
-                    "bowl"
+                    "bowl",
+                    "espresso",
+                    "grill",
+                    "bar",
+                    "bakery",
+                    "donut",
+                    "sushi",
+                    "noodle",
+                    "meal",
+                    "combo",
+                    "takeout"
                 ]
             },
             {
@@ -56,7 +82,17 @@ var ReceiptRing;
                     "kitchen",
                     "home",
                     "batteries",
-                    "foil"
+                    "foil",
+                    "tissue",
+                    "napkin",
+                    "laundry",
+                    "dish",
+                    "sponge",
+                    "wipes",
+                    "bulb",
+                    "decor",
+                    "hardware",
+                    "garden"
                 ]
             },
             {
@@ -71,23 +107,77 @@ var ReceiptRing;
                     "wellness",
                     "protein",
                     "toothpaste",
-                    "shampoo"
+                    "shampoo",
+                    "ibuprofen",
+                    "acetaminophen",
+                    "allergy",
+                    "first aid",
+                    "mouthwash",
+                    "deodorant",
+                    "supplement",
+                    "clinic"
                 ]
             },
             {
                 name: "Transport",
                 color: "#5ca8ff",
-                keywords: ["fuel", "gas", "parking", "uber", "lyft", "transit", "metro", "toll", "car wash"]
+                keywords: [
+                    "fuel",
+                    "gas",
+                    "parking",
+                    "uber",
+                    "lyft",
+                    "transit",
+                    "metro",
+                    "toll",
+                    "car wash",
+                    "bus",
+                    "train",
+                    "taxi",
+                    "airfare",
+                    "rideshare",
+                    "oil change"
+                ]
             },
             {
                 name: "Personal",
                 color: "#ff89c2",
-                keywords: ["shirt", "socks", "cosmetic", "lotion", "beauty", "skincare", "hair", "gift"]
+                keywords: [
+                    "shirt",
+                    "socks",
+                    "cosmetic",
+                    "lotion",
+                    "beauty",
+                    "skincare",
+                    "hair",
+                    "gift",
+                    "jeans",
+                    "shoes",
+                    "jacket",
+                    "makeup",
+                    "perfume",
+                    "razor",
+                    "clothing"
+                ]
             },
             {
                 name: "Entertainment",
                 color: "#96dc5c",
-                keywords: ["movie", "book", "game", "ticket", "music", "stream", "toy"]
+                keywords: [
+                    "movie",
+                    "book",
+                    "game",
+                    "ticket",
+                    "music",
+                    "stream",
+                    "toy",
+                    "concert",
+                    "theater",
+                    "museum",
+                    "bowling",
+                    "arcade",
+                    "subscription"
+                ]
             },
             {
                 name: "Other",
@@ -148,14 +238,140 @@ var ReceiptRing;
 (function (ReceiptRing) {
     var Services;
     (function (Services) {
-        class CategorizationService {
-            constructor(categories) {
-                this.categories = categories;
+        class CategoryRuleStorageService {
+            constructor(storageKey) {
+                this.storageKey = storageKey;
             }
-            assignCategory(label) {
-                const normalizedLabel = label.toLowerCase();
-                const category = this.categories.find((candidate) => candidate.keywords.some((keyword) => normalizedLabel.includes(keyword)));
-                return category?.name ?? "Other";
+            getCategoryFor(label) {
+                const normalizedLabel = this.normalizeLabel(label);
+                return this.loadRules()[normalizedLabel]?.category ?? null;
+            }
+            saveRule(label, category) {
+                const normalizedLabel = this.normalizeLabel(label);
+                if (!normalizedLabel)
+                    return;
+                const rules = this.loadRules();
+                rules[normalizedLabel] = {
+                    normalizedLabel,
+                    category,
+                    createdAt: new Date().toISOString()
+                };
+                localStorage.setItem(this.storageKey, JSON.stringify(rules));
+            }
+            normalizeLabel(label) {
+                return label
+                    .toLowerCase()
+                    .replace(/&/g, " and ")
+                    .replace(/[^a-z0-9\s]/g, " ")
+                    .replace(/\b(\d+(\.\d+)?|oz|lb|lbs|ct|pk|pkg|ea|each|small|medium|large)\b/g, " ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+            }
+            loadRules() {
+                try {
+                    const rawRules = localStorage.getItem(this.storageKey);
+                    return rawRules ? JSON.parse(rawRules) : {};
+                }
+                catch {
+                    return {};
+                }
+            }
+        }
+        Services.CategoryRuleStorageService = CategoryRuleStorageService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class CategorizationService {
+            constructor(categories, ruleStorageService) {
+                this.categories = categories;
+                this.ruleStorageService = ruleStorageService;
+                this.promptThreshold = 0.66;
+            }
+            categorize(label) {
+                const savedCategory = this.ruleStorageService.getCategoryFor(label);
+                if (savedCategory) {
+                    return {
+                        category: savedCategory,
+                        confidence: 1,
+                        source: "saved-rule",
+                        matchedTerms: [],
+                        shouldPrompt: false
+                    };
+                }
+                const normalizedLabel = this.ruleStorageService.normalizeLabel(label);
+                const tokens = this.getTokens(normalizedLabel);
+                const scoredCategories = this.categories
+                    .filter((category) => category.name !== "Other")
+                    .map((category) => this.scoreCategory(category, normalizedLabel, tokens))
+                    .sort((left, right) => right.score - left.score);
+                const bestMatch = scoredCategories[0];
+                const runnerUp = scoredCategories[1];
+                if (!bestMatch || bestMatch.score <= 0) {
+                    return this.createUncertainResult("Other", 0.18);
+                }
+                const margin = bestMatch.score - (runnerUp?.score ?? 0);
+                const confidence = Math.min(0.96, 0.48 + bestMatch.score * 0.095 + margin * 0.055);
+                if (confidence < this.promptThreshold) {
+                    return this.createUncertainResult(bestMatch.category.name, confidence, bestMatch.matchedTerms);
+                }
+                return {
+                    category: bestMatch.category.name,
+                    confidence,
+                    source: "keyword-match",
+                    matchedTerms: bestMatch.matchedTerms,
+                    shouldPrompt: false
+                };
+            }
+            scoreCategory(category, normalizedLabel, tokens) {
+                const matchedTerms = [];
+                let score = 0;
+                category.keywords.forEach((keyword) => {
+                    const normalizedKeyword = this.ruleStorageService.normalizeLabel(keyword);
+                    const keywordTokens = this.getTokens(normalizedKeyword);
+                    if (normalizedKeyword && normalizedLabel.includes(normalizedKeyword)) {
+                        score += keywordTokens.length > 1 ? 4.5 : 3;
+                        matchedTerms.push(keyword);
+                        return;
+                    }
+                    const overlap = keywordTokens.filter((token) => tokens.includes(token)).length;
+                    if (overlap > 0) {
+                        score += overlap * 1.25;
+                        matchedTerms.push(keyword);
+                    }
+                });
+                return { category, score, matchedTerms };
+            }
+            createUncertainResult(category, confidence, matchedTerms = []) {
+                return {
+                    category,
+                    confidence,
+                    source: "uncertain",
+                    matchedTerms,
+                    shouldPrompt: true
+                };
+            }
+            getTokens(value) {
+                const stopWords = new Set(["and", "the", "with", "for", "fresh", "organic", "item"]);
+                return value
+                    .split(" ")
+                    .map((token) => token.trim())
+                    .map((token) => this.stemToken(token))
+                    .filter((token) => token.length > 1 && !stopWords.has(token));
+            }
+            stemToken(token) {
+                if (token.endsWith("ies") && token.length > 4) {
+                    return `${token.slice(0, -3)}y`;
+                }
+                if (token.endsWith("es") && token.length > 3) {
+                    return token.slice(0, -2);
+                }
+                if (token.endsWith("s") && token.length > 3) {
+                    return token.slice(0, -1);
+                }
+                return token;
             }
         }
         Services.CategorizationService = CategorizationService;
@@ -193,11 +409,15 @@ var ReceiptRing;
                 if (!label || this.ignoredLabel.test(label) || !Number.isFinite(amount) || amount <= 0) {
                     return null;
                 }
+                const categorization = this.categorizationService.categorize(label);
                 return {
                     id: this.idService.create(),
                     label: this.toTitleCase(label),
                     amount: Number(amount.toFixed(2)),
-                    category: this.categorizationService.assignCategory(label)
+                    category: categorization.category,
+                    categorizationConfidence: categorization.confidence,
+                    categorizationSource: categorization.source,
+                    needsCategoryReview: categorization.shouldPrompt
                 };
             }
             toTitleCase(value) {
@@ -305,7 +525,13 @@ var ReceiptRing;
                     receiptTotal: this.getElement("#receiptTotal", HTMLElement),
                     ringTotal: this.getElement("#ringTotal", HTMLElement),
                     categoryRing: this.getElement("#categoryRing", SVGSVGElement),
-                    categoryList: this.getElement("#categoryList", HTMLElement)
+                    categoryList: this.getElement("#categoryList", HTMLElement),
+                    categoryPrompt: this.getElement("#categoryPrompt", HTMLElement),
+                    categoryPromptItem: this.getElement("#categoryPromptItem", HTMLElement),
+                    categoryPromptSelect: this.getElement("#categoryPromptSelect", HTMLSelectElement),
+                    categoryPromptRemember: this.getElement("#categoryPromptRemember", HTMLInputElement),
+                    categoryPromptSkip: this.getElement("#categoryPromptSkip", HTMLButtonElement),
+                    categoryPromptSave: this.getElement("#categoryPromptSave", HTMLButtonElement)
                 };
             }
             getElement(selector, constructorReference) {
@@ -350,7 +576,7 @@ var ReceiptRing;
                 input.className = "table-input";
                 input.value = item.label;
                 input.setAttribute("aria-label", "Item name");
-                input.addEventListener("input", () => handlers.onUpdate(item.id, { label: input.value }));
+                input.addEventListener("change", () => handlers.onUpdate(item.id, { label: input.value }));
                 return input;
             }
             createCategorySelect(item, handlers) {
@@ -514,12 +740,70 @@ var ReceiptRing;
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
 (function (ReceiptRing) {
+    var UI;
+    (function (UI) {
+        class CategoryPromptView {
+            constructor(categories, elements) {
+                this.categories = categories;
+                this.elements = elements;
+                this.activeResolve = null;
+                this.renderOptions();
+                this.bindEvents();
+            }
+            prompt(item) {
+                this.elements.categoryPromptItem.textContent = item.label;
+                this.elements.categoryPromptSelect.value = item.category;
+                this.elements.categoryPromptRemember.checked = false;
+                this.elements.categoryPrompt.classList.remove("hidden");
+                this.elements.categoryPromptSelect.focus();
+                return new Promise((resolve) => {
+                    this.activeResolve = resolve;
+                });
+            }
+            renderOptions() {
+                this.elements.categoryPromptSelect.innerHTML = "";
+                this.categories.forEach((category) => {
+                    const option = document.createElement("option");
+                    option.value = category.name;
+                    option.textContent = category.name;
+                    this.elements.categoryPromptSelect.append(option);
+                });
+            }
+            bindEvents() {
+                this.elements.categoryPromptSave.addEventListener("click", () => this.resolvePrompt());
+                this.elements.categoryPromptSkip.addEventListener("click", () => this.closePrompt(null));
+                this.elements.categoryPrompt.addEventListener("keydown", (event) => {
+                    if (event.key === "Escape") {
+                        this.closePrompt(null);
+                    }
+                });
+            }
+            resolvePrompt() {
+                this.closePrompt({
+                    category: this.elements.categoryPromptSelect.value,
+                    remember: this.elements.categoryPromptRemember.checked
+                });
+            }
+            closePrompt(result) {
+                this.elements.categoryPrompt.classList.add("hidden");
+                const resolve = this.activeResolve;
+                this.activeResolve = null;
+                resolve?.(result);
+            }
+        }
+        UI.CategoryPromptView = CategoryPromptView;
+    })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
     var App;
     (function (App) {
         class AppController {
-            constructor(elements, parserService, storageService, summaryService, currencyFormatService, imagePreviewService, itemListView, ringView, categorySummaryView, idService) {
+            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, summaryService, currencyFormatService, imagePreviewService, itemListView, ringView, categorySummaryView, categoryPromptView, idService) {
                 this.elements = elements;
                 this.parserService = parserService;
+                this.categorizationService = categorizationService;
+                this.categoryRuleStorageService = categoryRuleStorageService;
                 this.storageService = storageService;
                 this.summaryService = summaryService;
                 this.currencyFormatService = currencyFormatService;
@@ -527,7 +811,10 @@ var ReceiptRing;
                 this.itemListView = itemListView;
                 this.ringView = ringView;
                 this.categorySummaryView = categorySummaryView;
+                this.categoryPromptView = categoryPromptView;
                 this.idService = idService;
+                this.isPromptingForCategories = false;
+                this.reviewTimer = null;
                 this.items = this.storageService.load();
             }
             start() {
@@ -559,6 +846,7 @@ var ReceiptRing;
                 this.elements.receiptText.value = ReceiptRing.Config.SAMPLE_RECEIPT;
                 this.items = this.parserService.parse(ReceiptRing.Config.SAMPLE_RECEIPT);
                 this.render();
+                void this.reviewAmbiguousItems();
             }
             handleImageInput() {
                 const file = this.elements.receiptImage.files?.[0];
@@ -578,6 +866,7 @@ var ReceiptRing;
             itemizeReceiptText() {
                 this.items = this.parserService.parse(this.elements.receiptText.value);
                 this.render();
+                void this.reviewAmbiguousItems();
             }
             clearReceipt() {
                 this.elements.receiptText.value = "";
@@ -591,14 +880,39 @@ var ReceiptRing;
                         id: this.idService.create(),
                         label: "New item",
                         category: "Other",
-                        amount: 0
+                        amount: 0,
+                        categorizationConfidence: 0,
+                        categorizationSource: "uncertain",
+                        needsCategoryReview: false
                     }
                 ];
                 this.render();
             }
             updateItem(id, patch) {
-                this.items = this.items.map((item) => (item.id === id ? { ...item, ...patch } : item));
+                const shouldRenderItems = patch.label !== undefined;
+                this.items = this.items.map((item) => {
+                    if (item.id !== id)
+                        return item;
+                    const nextItem = { ...item, ...patch };
+                    if (patch.label !== undefined && nextItem.label.trim().length > 2 && nextItem.label !== "New item") {
+                        const categorization = this.categorizationService.categorize(nextItem.label);
+                        nextItem.category = categorization.category;
+                        nextItem.categorizationConfidence = categorization.confidence;
+                        nextItem.categorizationSource = categorization.source;
+                        nextItem.needsCategoryReview = categorization.shouldPrompt;
+                        this.scheduleCategoryReview();
+                    }
+                    if (patch.category !== undefined) {
+                        nextItem.categorizationConfidence = 1;
+                        nextItem.categorizationSource = "saved-rule";
+                        nextItem.needsCategoryReview = false;
+                    }
+                    return nextItem;
+                });
                 this.storageService.save(this.items);
+                if (shouldRenderItems) {
+                    this.renderItems();
+                }
                 this.renderSummary();
             }
             deleteItem(id) {
@@ -626,6 +940,57 @@ var ReceiptRing;
                 this.ringView.render(this.elements.categoryRing, totals, grandTotal);
                 this.categorySummaryView.render(this.elements.categoryList, totals, grandTotal);
             }
+            scheduleCategoryReview() {
+                if (this.reviewTimer !== null) {
+                    window.clearTimeout(this.reviewTimer);
+                }
+                this.reviewTimer = window.setTimeout(() => {
+                    this.reviewTimer = null;
+                    void this.reviewAmbiguousItems();
+                }, 650);
+            }
+            async reviewAmbiguousItems() {
+                if (this.isPromptingForCategories)
+                    return;
+                this.isPromptingForCategories = true;
+                try {
+                    let item = this.items.find((candidate) => candidate.needsCategoryReview);
+                    while (item) {
+                        const result = await this.categoryPromptView.prompt(item);
+                        if (result) {
+                            this.applyPromptResult(item.id, result);
+                        }
+                        else {
+                            this.markItemReviewed(item.id);
+                        }
+                        this.render();
+                        item = this.items.find((candidate) => candidate.needsCategoryReview);
+                    }
+                }
+                finally {
+                    this.isPromptingForCategories = false;
+                }
+            }
+            applyPromptResult(id, result) {
+                const item = this.items.find((candidate) => candidate.id === id);
+                if (!item)
+                    return;
+                if (result.remember) {
+                    this.categoryRuleStorageService.saveRule(item.label, result.category);
+                }
+                this.items = this.items.map((candidate) => candidate.id === id
+                    ? {
+                        ...candidate,
+                        category: result.category,
+                        categorizationConfidence: 1,
+                        categorizationSource: result.remember ? "saved-rule" : "keyword-match",
+                        needsCategoryReview: false
+                    }
+                    : candidate);
+            }
+            markItemReviewed(id) {
+                this.items = this.items.map((candidate) => candidate.id === id ? { ...candidate, needsCategoryReview: false } : candidate);
+            }
         }
         App.AppController = AppController;
     })(App = ReceiptRing.App || (ReceiptRing.App = {}));
@@ -635,7 +1000,8 @@ var ReceiptRing;
     const categories = ReceiptRing.Config.CATEGORIES;
     const idService = new ReceiptRing.Services.IdService();
     const currencyFormatService = new ReceiptRing.Services.CurrencyFormatService();
-    const categorizationService = new ReceiptRing.Services.CategorizationService(categories);
+    const categoryRuleStorageService = new ReceiptRing.Services.CategoryRuleStorageService("receipt-ring-category-rules");
+    const categorizationService = new ReceiptRing.Services.CategorizationService(categories, categoryRuleStorageService);
     const parserService = new ReceiptRing.Services.ReceiptParserService(categorizationService, idService);
     const storageService = new ReceiptRing.Services.StorageService("receipt-ring-items");
     const summaryService = new ReceiptRing.Services.SpendingSummaryService(categories);
@@ -644,5 +1010,6 @@ var ReceiptRing;
     const categorySummaryView = new ReceiptRing.UI.CategorySummaryView(categories, currencyFormatService, ringView);
     const itemListView = new ReceiptRing.UI.ItemListView(categories);
     const elements = new ReceiptRing.UI.DomRegistryFactory().create();
-    new ReceiptRing.App.AppController(elements, parserService, storageService, summaryService, currencyFormatService, imagePreviewService, itemListView, ringView, categorySummaryView, idService).start();
+    const categoryPromptView = new ReceiptRing.UI.CategoryPromptView(categories, elements);
+    new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, summaryService, currencyFormatService, imagePreviewService, itemListView, ringView, categorySummaryView, categoryPromptView, idService).start();
 })(ReceiptRing || (ReceiptRing = {}));

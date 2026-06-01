@@ -20,7 +20,26 @@ namespace ReceiptRing.Domain {
     label: string;
     amount: number;
     category: CategoryName;
+    categorizationConfidence: number;
+    categorizationSource: CategorizationSource;
+    needsCategoryReview: boolean;
   }
 
   export type CategoryTotals = Record<CategoryName, number>;
+
+  export type CategorizationSource = "saved-rule" | "keyword-match" | "uncertain";
+
+  export interface CategorizationResult {
+    category: CategoryName;
+    confidence: number;
+    source: CategorizationSource;
+    matchedTerms: readonly string[];
+    shouldPrompt: boolean;
+  }
+
+  export interface StoredCategoryRule {
+    normalizedLabel: string;
+    category: CategoryName;
+    createdAt: string;
+  }
 }

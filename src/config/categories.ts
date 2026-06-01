@@ -17,7 +17,23 @@ namespace ReceiptRing.Config {
         "organic",
         "cereal",
         "rice",
-        "pasta"
+        "pasta",
+        "flour",
+        "sugar",
+        "butter",
+        "juice",
+        "chicken",
+        "beef",
+        "fish",
+        "lettuce",
+        "tomato",
+        "avocado",
+        "potato",
+        "onion",
+        "snack",
+        "chips",
+        "sauce",
+        "water"
       ]
     },
     {
@@ -35,7 +51,17 @@ namespace ReceiptRing.Config {
         "sandwich",
         "salad",
         "tea",
-        "bowl"
+        "bowl",
+        "espresso",
+        "grill",
+        "bar",
+        "bakery",
+        "donut",
+        "sushi",
+        "noodle",
+        "meal",
+        "combo",
+        "takeout"
       ]
     },
     {
@@ -52,7 +78,17 @@ namespace ReceiptRing.Config {
         "kitchen",
         "home",
         "batteries",
-        "foil"
+        "foil",
+        "tissue",
+        "napkin",
+        "laundry",
+        "dish",
+        "sponge",
+        "wipes",
+        "bulb",
+        "decor",
+        "hardware",
+        "garden"
       ]
     },
     {
@@ -67,23 +103,77 @@ namespace ReceiptRing.Config {
         "wellness",
         "protein",
         "toothpaste",
-        "shampoo"
+        "shampoo",
+        "ibuprofen",
+        "acetaminophen",
+        "allergy",
+        "first aid",
+        "mouthwash",
+        "deodorant",
+        "supplement",
+        "clinic"
       ]
     },
     {
       name: "Transport",
       color: "#5ca8ff",
-      keywords: ["fuel", "gas", "parking", "uber", "lyft", "transit", "metro", "toll", "car wash"]
+      keywords: [
+        "fuel",
+        "gas",
+        "parking",
+        "uber",
+        "lyft",
+        "transit",
+        "metro",
+        "toll",
+        "car wash",
+        "bus",
+        "train",
+        "taxi",
+        "airfare",
+        "rideshare",
+        "oil change"
+      ]
     },
     {
       name: "Personal",
       color: "#ff89c2",
-      keywords: ["shirt", "socks", "cosmetic", "lotion", "beauty", "skincare", "hair", "gift"]
+      keywords: [
+        "shirt",
+        "socks",
+        "cosmetic",
+        "lotion",
+        "beauty",
+        "skincare",
+        "hair",
+        "gift",
+        "jeans",
+        "shoes",
+        "jacket",
+        "makeup",
+        "perfume",
+        "razor",
+        "clothing"
+      ]
     },
     {
       name: "Entertainment",
       color: "#96dc5c",
-      keywords: ["movie", "book", "game", "ticket", "music", "stream", "toy"]
+      keywords: [
+        "movie",
+        "book",
+        "game",
+        "ticket",
+        "music",
+        "stream",
+        "toy",
+        "concert",
+        "theater",
+        "museum",
+        "bowling",
+        "arcade",
+        "subscription"
+      ]
     },
     {
       name: "Other",

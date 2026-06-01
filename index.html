@@ -90,6 +90,29 @@
       </section>
     </main>
 
+    <div class="modal-backdrop hidden" id="categoryPrompt" role="dialog" aria-modal="true" aria-labelledby="categoryPromptTitle">
+      <section class="category-modal">
+        <div class="modal-heading">
+          <p class="eyebrow">Review category</p>
+          <h2 id="categoryPromptTitle">Choose a category for this item</h2>
+        </div>
+        <div class="prompt-item">
+          <span>Item</span>
+          <strong id="categoryPromptItem">Unknown item</strong>
+        </div>
+        <label class="field-label" for="categoryPromptSelect">Category</label>
+        <select class="table-select" id="categoryPromptSelect"></select>
+        <label class="checkbox-row">
+          <input id="categoryPromptRemember" type="checkbox" />
+          <span>Always categorize this item this way</span>
+        </label>
+        <div class="modal-actions">
+          <button class="secondary-button" id="categoryPromptSkip" type="button">Skip</button>
+          <button class="primary-button" id="categoryPromptSave" type="button">Save category</button>
+        </div>
+      </section>
+    </div>
+
     <script src="dist/app.js"></script>
   </body>
 </html>
