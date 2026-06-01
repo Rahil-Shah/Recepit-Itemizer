@@ -6,7 +6,7 @@ var ReceiptRing;
         Config.CATEGORIES = [
             {
                 name: "Groceries",
-                color: "#1e7f68",
+                color: "#43d6a3",
                 keywords: [
                     "apple",
                     "banana",
@@ -26,7 +26,7 @@ var ReceiptRing;
             },
             {
                 name: "Dining",
-                color: "#d25039",
+                color: "#ff6d5f",
                 keywords: [
                     "coffee",
                     "latte",
@@ -44,7 +44,7 @@ var ReceiptRing;
             },
             {
                 name: "Home",
-                color: "#d99f2b",
+                color: "#f8bd45",
                 keywords: [
                     "detergent",
                     "soap",
@@ -61,7 +61,7 @@ var ReceiptRing;
             },
             {
                 name: "Health",
-                color: "#7f5aa2",
+                color: "#b58cff",
                 keywords: [
                     "vitamin",
                     "pharmacy",
@@ -76,22 +76,22 @@ var ReceiptRing;
             },
             {
                 name: "Transport",
-                color: "#2f6fb3",
+                color: "#5ca8ff",
                 keywords: ["fuel", "gas", "parking", "uber", "lyft", "transit", "metro", "toll", "car wash"]
             },
             {
                 name: "Personal",
-                color: "#c66b8f",
+                color: "#ff89c2",
                 keywords: ["shirt", "socks", "cosmetic", "lotion", "beauty", "skincare", "hair", "gift"]
             },
             {
                 name: "Entertainment",
-                color: "#4f8f3d",
+                color: "#96dc5c",
                 keywords: ["movie", "book", "game", "ticket", "music", "stream", "toy"]
             },
             {
                 name: "Other",
-                color: "#7c766d",
+                color: "#a5a097",
                 keywords: []
             }
         ];
@@ -498,6 +498,7 @@ var ReceiptRing;
                 const swatch = document.createElement("span");
                 swatch.className = "swatch";
                 swatch.style.background = category.color;
+                swatch.style.color = category.color;
                 const name = document.createElement("span");
                 name.className = "category-name";
                 name.textContent = category.name;

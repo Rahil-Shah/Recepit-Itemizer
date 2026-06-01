@@ -2,7 +2,7 @@ namespace ReceiptRing.Config {
   export const CATEGORIES: readonly Domain.Category[] = [
     {
       name: "Groceries",
-      color: "#1e7f68",
+      color: "#43d6a3",
       keywords: [
         "apple",
         "banana",
@@ -22,7 +22,7 @@ namespace ReceiptRing.Config {
     },
     {
       name: "Dining",
-      color: "#d25039",
+      color: "#ff6d5f",
       keywords: [
         "coffee",
         "latte",
@@ -40,7 +40,7 @@ namespace ReceiptRing.Config {
     },
     {
       name: "Home",
-      color: "#d99f2b",
+      color: "#f8bd45",
       keywords: [
         "detergent",
         "soap",
@@ -57,7 +57,7 @@ namespace ReceiptRing.Config {
     },
     {
       name: "Health",
-      color: "#7f5aa2",
+      color: "#b58cff",
       keywords: [
         "vitamin",
         "pharmacy",
@@ -72,22 +72,22 @@ namespace ReceiptRing.Config {
     },
     {
       name: "Transport",
-      color: "#2f6fb3",
+      color: "#5ca8ff",
       keywords: ["fuel", "gas", "parking", "uber", "lyft", "transit", "metro", "toll", "car wash"]
     },
     {
       name: "Personal",
-      color: "#c66b8f",
+      color: "#ff89c2",
       keywords: ["shirt", "socks", "cosmetic", "lotion", "beauty", "skincare", "hair", "gift"]
     },
     {
       name: "Entertainment",
-      color: "#4f8f3d",
+      color: "#96dc5c",
       keywords: ["movie", "book", "game", "ticket", "music", "stream", "toy"]
     },
     {
       name: "Other",
-      color: "#7c766d",
+      color: "#a5a097",
       keywords: []
     }
   ];

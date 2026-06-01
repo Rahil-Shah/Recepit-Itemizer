@@ -26,6 +26,7 @@ namespace ReceiptRing.UI {
       const swatch = document.createElement("span");
       swatch.className = "swatch";
       swatch.style.background = category.color;
+      swatch.style.color = category.color;
 
       const name = document.createElement("span");
       name.className = "category-name";
