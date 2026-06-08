@@ -5,9 +5,13 @@
   "description": "Minimal receipt itemizer and spending category ring.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "tsc --noEmit -p tsconfig.json"
+    "check": "tsc --noEmit -p tsconfig.json",
+    "serve": "python3 -m http.server 4173"
   },
   "devDependencies": {
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "tesseract.js": "^7.0.0"
   }
 }

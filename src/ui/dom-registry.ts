@@ -6,6 +6,9 @@ namespace ReceiptRing.UI {
     receiptPreviewWrap: HTMLElement;
     receiptPreview: HTMLImageElement;
     clearImageButton: HTMLButtonElement;
+    ocrStatus: HTMLElement;
+    ocrStatusText: HTMLElement;
+    ocrProgressBar: HTMLElement;
     receiptText: HTMLTextAreaElement;
     parseButton: HTMLButtonElement;
     clearButton: HTMLButtonElement;
@@ -34,6 +37,9 @@ namespace ReceiptRing.UI {
         receiptPreviewWrap: this.getElement("#receiptPreviewWrap", HTMLElement),
         receiptPreview: this.getElement("#receiptPreview", HTMLImageElement),
         clearImageButton: this.getElement("#clearImageButton", HTMLButtonElement),
+        ocrStatus: this.getElement("#ocrStatus", HTMLElement),
+        ocrStatusText: this.getElement("#ocrStatusText", HTMLElement),
+        ocrProgressBar: this.getElement("#ocrProgressBar", HTMLElement),
         receiptText: this.getElement("#receiptText", HTMLTextAreaElement),
         parseButton: this.getElement("#parseButton", HTMLButtonElement),
         clearButton: this.getElement("#clearButton", HTMLButtonElement),

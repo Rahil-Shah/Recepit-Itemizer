@@ -8,6 +8,7 @@ namespace ReceiptRing {
   const storageService = new Services.StorageService("receipt-ring-items");
   const summaryService = new Services.SpendingSummaryService(categories);
   const imagePreviewService = new Services.ImagePreviewService();
+  const receiptOcrService = new Services.ReceiptOcrService();
   const ringView = new UI.CategoryRingView(categories);
   const categorySummaryView = new UI.CategorySummaryView(categories, currencyFormatService, ringView);
   const itemListView = new UI.ItemListView(categories);
@@ -23,6 +24,7 @@ namespace ReceiptRing {
     summaryService,
     currencyFormatService,
     imagePreviewService,
+    receiptOcrService,
     itemListView,
     ringView,
     categorySummaryView,

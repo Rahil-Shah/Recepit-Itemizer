@@ -13,6 +13,7 @@ namespace ReceiptRing.App {
       private readonly summaryService: Services.SpendingSummaryService,
       private readonly currencyFormatService: Services.CurrencyFormatService,
       private readonly imagePreviewService: Services.ImagePreviewService,
+      private readonly receiptOcrService: Services.ReceiptOcrService,
       private readonly itemListView: UI.ItemListView,
       private readonly ringView: UI.CategoryRingView,
       private readonly categorySummaryView: UI.CategorySummaryView,
@@ -63,6 +64,7 @@ namespace ReceiptRing.App {
       const file = this.elements.receiptImage.files?.[0];
       if (file) {
         this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
+        void this.extractAndItemizeReceipt(file);
       }
     }
 
@@ -70,6 +72,7 @@ namespace ReceiptRing.App {
       const file = event.dataTransfer?.files?.[0];
       if (file) {
         this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
+        void this.extractAndItemizeReceipt(file);
       }
     }
 
@@ -79,6 +82,7 @@ namespace ReceiptRing.App {
         this.elements.receiptPreview,
         this.elements.receiptPreviewWrap
       );
+      this.hideOcrStatus();
     }
 
     private itemizeReceiptText(): void {
@@ -168,6 +172,46 @@ namespace ReceiptRing.App {
       this.elements.ringTotal.textContent = this.currencyFormatService.format(grandTotal);
       this.ringView.render(this.elements.categoryRing, totals, grandTotal);
       this.categorySummaryView.render(this.elements.categoryList, totals, grandTotal);
+    }
+
+    private async extractAndItemizeReceipt(file: File): Promise<void> {
+      this.setOcrStatus("Starting OCR", 0.04);
+      this.elements.parseButton.setAttribute("disabled", "true");
+
+      try {
+        const text = await this.receiptOcrService.recognize(file, (progress) => {
+          this.setOcrStatus(progress.label, progress.progress);
+        });
+
+        this.elements.receiptText.value = text;
+        this.items = this.parserService.parse(text);
+        this.render();
+
+        if (this.items.length === 0) {
+          this.setOcrStatus("Text found, but no item prices were detected. You can edit the text and itemize it.", 1);
+          return;
+        }
+
+        this.setOcrStatus(`Found ${this.items.length} ${this.items.length === 1 ? "item" : "items"}`, 1);
+        window.setTimeout(() => this.hideOcrStatus(), 1600);
+        void this.reviewAmbiguousItems();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not extract text from this receipt.";
+        this.setOcrStatus(message, 1);
+      } finally {
+        this.elements.parseButton.removeAttribute("disabled");
+      }
+    }
+
+    private setOcrStatus(label: string, progress: number): void {
+      this.elements.ocrStatus.classList.remove("hidden");
+      this.elements.ocrStatusText.textContent = label;
+      this.elements.ocrProgressBar.style.width = `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
+    }
+
+    private hideOcrStatus(): void {
+      this.elements.ocrStatus.classList.add("hidden");
+      this.elements.ocrProgressBar.style.width = "0%";
     }
 
     private scheduleCategoryReview(): void {

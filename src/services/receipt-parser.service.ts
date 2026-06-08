@@ -1,7 +1,7 @@
 namespace ReceiptRing.Services {
   export class ReceiptParserService {
     private readonly ignoredLabel = /^(total|subtotal|tax|cash|change|visa|mastercard|amex|debit|credit|balance|auth|approval|receipt)\b/i;
-    private readonly amountPattern = /(-?\$?\d{1,4}(?:,\d{3})*(?:\.\d{2})?)\s*$/;
+    private readonly amountPattern = /(-?\$?\s*\d{1,4}(?:(?:,\d{3})+)?[,.]\d{2}|-?\$\s*\d{1,5})\s*$/;
 
     constructor(
       private readonly categorizationService: CategorizationService,
@@ -21,7 +21,7 @@ namespace ReceiptRing.Services {
       const match = line.match(this.amountPattern);
       if (!match || match.index === undefined) return null;
 
-      const amount = Number(match[1].replace(/[$,]/g, ""));
+      const amount = this.parseAmount(match[1]);
       const label = line
         .slice(0, match.index)
         .replace(/[*#@]/g, "")
@@ -51,6 +51,16 @@ namespace ReceiptRing.Services {
         .split(" ")
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
+    }
+
+    private parseAmount(value: string): number {
+      const compactValue = value.replace(/[$\s]/g, "");
+      const normalizedValue =
+        compactValue.includes(".") || !compactValue.includes(",")
+          ? compactValue.replace(/,/g, "")
+          : compactValue.replace(",", ".");
+
+      return Number(normalizedValue);
     }
   }
 }

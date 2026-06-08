@@ -10,6 +10,7 @@
     "removeComments": true
   },
   "files": [
+    "src/integrations/tesseract.types.ts",
     "src/domain/models.ts",
     "src/config/categories.ts",
     "src/config/sampleReceipt.ts",
@@ -21,6 +22,7 @@
     "src/services/storage.service.ts",
     "src/services/spending-summary.service.ts",
     "src/services/image-preview.service.ts",
+    "src/services/receipt-ocr.service.ts",
     "src/ui/dom-registry.ts",
     "src/ui/item-list.view.ts",
     "src/ui/category-ring.view.ts",

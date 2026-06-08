@@ -35,6 +35,13 @@
             <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">x</button>
           </figure>
 
+          <div class="ocr-status hidden" id="ocrStatus" aria-live="polite">
+            <span id="ocrStatusText">Reading receipt...</span>
+            <div class="ocr-progress">
+              <span id="ocrProgressBar"></span>
+            </div>
+          </div>
+
           <label class="field-label" for="receiptText">Receipt text</label>
           <textarea
             id="receiptText"
@@ -113,6 +120,7 @@
       </section>
     </div>
 
+    <script src="vendor/tesseract/tesseract.min.js"></script>
     <script src="dist/app.js"></script>
   </body>
 </html>
