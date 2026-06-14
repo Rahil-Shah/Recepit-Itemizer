@@ -549,6 +549,17 @@ var ReceiptRing;
         class GeminiService {
             async loadDotEnv() {
                 try {
+                    const apiResponse = await fetch("/api/gemini-config");
+                    if (apiResponse.ok) {
+                        const config = (await apiResponse.json());
+                        if (config && (config.GEMINI_API_KEY || config.GEMINI_MODEL)) {
+                            return config;
+                        }
+                    }
+                }
+                catch {
+                }
+                try {
                     const response = await fetch(".env");
                     if (!response.ok)
                         return {};
@@ -699,6 +710,34 @@ Return only JSON.`;
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
 (function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class ReceiptApiService {
+            async save(payload) {
+                const response = await fetch("/api/receipts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(`Save failed (${response.status}): ${message}`);
+                }
+                return (await response.json());
+            }
+            async list() {
+                const response = await fetch("/api/receipts");
+                if (!response.ok) {
+                    throw new Error(`Could not load history (${response.status}).`);
+                }
+                return (await response.json());
+            }
+        }
+        Services.ReceiptApiService = ReceiptApiService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
     var UI;
     (function (UI) {
         class DomRegistryFactory {
@@ -725,17 +764,24 @@ var ReceiptRing;
                     receiptLinesList: this.getElement("#receiptLinesList", HTMLElement),
                     emptyState: this.getElement("#emptyState", HTMLElement),
                     unassignedCount: this.getElement("#unassignedCount", HTMLElement),
+                    storeNameInput: this.getElement("#storeNameInput", HTMLInputElement),
                     receiptCategory: this.getElement("#receiptCategory", HTMLSelectElement),
                     personNameInput: this.getElement("#personNameInput", HTMLInputElement),
                     addPersonButton: this.getElement("#addPersonButton", HTMLButtonElement),
                     peopleList: this.getElement("#peopleList", HTMLElement),
-                    assignmentMode: this.getElement("#assignmentMode", HTMLSelectElement),
-                    assignmentValue: this.getElement("#assignmentValue", HTMLInputElement),
-                    assignLinesButton: this.getElement("#assignLinesButton", HTMLButtonElement),
                     taxInput: this.getElement("#taxInput", HTMLInputElement),
                     splitTotalsList: this.getElement("#splitTotalsList", HTMLElement),
+                    saveReceiptButton: this.getElement("#saveReceiptButton", HTMLButtonElement),
+                    saveStatus: this.getElement("#saveStatus", HTMLElement),
                     itemCount: this.getElement("#itemCount", HTMLElement),
                     receiptTotal: this.getElement("#receiptTotal", HTMLElement),
+                    tabButtons: Array.from(document.querySelectorAll(".tab-button")).filter((element) => element instanceof HTMLButtonElement),
+                    receiptsView: this.getElement("#receiptsView", HTMLElement),
+                    historyView: this.getElement("#historyView", HTMLElement),
+                    budgetingView: this.getElement("#budgetingView", HTMLElement),
+                    historyList: this.getElement("#historyList", HTMLElement),
+                    historyEmpty: this.getElement("#historyEmpty", HTMLElement),
+                    refreshHistoryButton: this.getElement("#refreshHistoryButton", HTMLButtonElement),
                     categoryPrompt: this.getElement("#categoryPrompt", HTMLElement),
                     categoryPromptItem: this.getElement("#categoryPromptItem", HTMLElement),
                     categoryPromptSelect: this.getElement("#categoryPromptSelect", HTMLSelectElement),
@@ -765,25 +811,27 @@ var ReceiptRing;
 (function (ReceiptRing) {
     var UI;
     (function (UI) {
+        const MODE_LABELS = {
+            equal: "Split evenly",
+            percentage: "Split by percentage",
+            amount: "Split by custom amount"
+        };
         class SplitWorkspaceView {
             constructor(currencyFormatService) {
                 this.currencyFormatService = currencyFormatService;
             }
-            renderLines(container, lines, assignments, people, selectedLineIds, handlers) {
+            renderLines(container, lines, assignments, people, lineModes, handlers) {
                 container.innerHTML = "";
                 lines.forEach((line) => {
                     const row = document.createElement("div");
                     row.className = "table-row";
-                    row.classList.toggle("is-selected", selectedLineIds.has(line.id));
                     row.classList.toggle("is-ignored", line.ignored);
-                    const name = document.createElement("button");
-                    name.className = "line-select-button";
-                    name.type = "button";
+                    const name = document.createElement("span");
+                    name.className = "line-label";
                     name.textContent = line.label;
-                    name.addEventListener("click", () => handlers.onLineToggle(line.id));
-                    const assigned = document.createElement("span");
-                    assigned.className = "assignment-summary";
-                    assigned.textContent = this.getAssignmentSummary(line.id, assignments, people);
+                    const assignCell = document.createElement("div");
+                    assignCell.className = "assign-cell";
+                    assignCell.append(this.buildAssignDropdown(line, assignments, people, lineModes, handlers));
                     const amount = document.createElement("span");
                     amount.className = "amount-cell";
                     amount.textContent = this.currencyFormatService.format(line.amount);
@@ -793,26 +841,82 @@ var ReceiptRing;
                     ignore.textContent = line.ignored ? "+" : "x";
                     ignore.setAttribute("aria-label", line.ignored ? "Restore line" : "Ignore line");
                     ignore.addEventListener("click", () => handlers.onLineIgnore(line.id));
-                    row.append(name, assigned, amount, ignore);
+                    row.append(name, assignCell, amount, ignore);
                     container.append(row);
                 });
             }
-            renderPeople(container, people, activePersonId, handlers) {
+            buildAssignDropdown(line, assignments, people, lineModes, handlers) {
+                const lineAssignments = assignments.filter((assignment) => assignment.lineId === line.id);
+                const mode = lineModes.get(line.id) ?? "equal";
+                const details = document.createElement("details");
+                details.className = "assign-dropdown";
+                const summary = document.createElement("summary");
+                summary.className = "assign-summary";
+                summary.textContent = this.getAssignmentSummary(lineAssignments, people);
+                details.append(summary);
+                const panel = document.createElement("div");
+                panel.className = "assign-panel-pop";
+                if (people.length === 0) {
+                    const hint = document.createElement("p");
+                    hint.className = "assign-hint";
+                    hint.textContent = "Add people first, then assign them here.";
+                    panel.append(hint);
+                    details.append(panel);
+                    return details;
+                }
+                const modeSelect = document.createElement("select");
+                modeSelect.className = "table-select assign-mode";
+                Object.keys(MODE_LABELS).forEach((value) => {
+                    const option = document.createElement("option");
+                    option.value = value;
+                    option.textContent = MODE_LABELS[value];
+                    modeSelect.append(option);
+                });
+                modeSelect.value = mode;
+                modeSelect.addEventListener("change", () => handlers.onLineModeChange(line.id, modeSelect.value));
+                panel.append(modeSelect);
+                people.forEach((person) => {
+                    const assignment = lineAssignments.find((candidate) => candidate.personId === person.id);
+                    const personRow = document.createElement("label");
+                    personRow.className = "assign-person-row";
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.checked = Boolean(assignment);
+                    checkbox.addEventListener("change", () => handlers.onAssignToggle(line.id, person.id));
+                    const personName = document.createElement("span");
+                    personName.className = "assign-person-name";
+                    personName.textContent = person.name;
+                    personRow.append(checkbox, personName);
+                    if (mode !== "equal") {
+                        const valueInput = document.createElement("input");
+                        valueInput.type = "number";
+                        valueInput.min = "0";
+                        valueInput.step = "0.01";
+                        valueInput.className = "table-input assign-value";
+                        valueInput.placeholder = mode === "percentage" ? "%" : "$";
+                        valueInput.value = assignment ? String(assignment.value) : "";
+                        valueInput.disabled = !assignment;
+                        valueInput.addEventListener("input", () => handlers.onAssignValueChange(line.id, person.id, Number(valueInput.value)));
+                        personRow.append(valueInput);
+                    }
+                    panel.append(personRow);
+                });
+                details.append(panel);
+                return details;
+            }
+            renderPeople(container, people, handlers) {
                 container.innerHTML = "";
                 people.forEach((person) => {
                     const row = document.createElement("div");
                     row.className = "person-chip";
-                    row.classList.toggle("is-active", person.id === activePersonId);
-                    const select = document.createElement("button");
-                    select.type = "button";
-                    select.textContent = person.name;
-                    select.addEventListener("click", () => handlers.onPersonSelect(person.id));
+                    const label = document.createElement("span");
+                    label.textContent = person.name;
                     const remove = document.createElement("button");
                     remove.type = "button";
                     remove.textContent = "x";
                     remove.setAttribute("aria-label", `Remove ${person.name}`);
                     remove.addEventListener("click", () => handlers.onPersonDelete(person.id));
-                    row.append(select, remove);
+                    row.append(label, remove);
                     container.append(row);
                 });
             }
@@ -830,12 +934,62 @@ var ReceiptRing;
                     container.append(row);
                 });
             }
-            getAssignmentSummary(lineId, assignments, people) {
-                const names = assignments
-                    .filter((assignment) => assignment.lineId === lineId)
+            renderHistory(container, receipts) {
+                container.innerHTML = "";
+                receipts.forEach((receipt) => {
+                    const card = document.createElement("details");
+                    card.className = "history-card";
+                    const summary = document.createElement("summary");
+                    summary.className = "history-summary";
+                    const heading = document.createElement("div");
+                    heading.className = "history-heading";
+                    const title = document.createElement("strong");
+                    title.textContent = receipt.storeName || "Untitled receipt";
+                    const meta = document.createElement("span");
+                    meta.className = "history-meta";
+                    const when = new Date(receipt.createdAt).toLocaleDateString();
+                    meta.textContent = `${receipt.category} · ${when}`;
+                    heading.append(title, meta);
+                    const total = document.createElement("b");
+                    total.className = "history-total";
+                    total.textContent = this.currencyFormatService.format(Number(receipt.total ?? 0));
+                    summary.append(heading, total);
+                    card.append(summary);
+                    const body = document.createElement("div");
+                    body.className = "history-body";
+                    if (receipt.lines.length > 0) {
+                        const linesWrap = document.createElement("div");
+                        linesWrap.className = "history-lines";
+                        receipt.lines.forEach((line) => {
+                            const lineRow = document.createElement("div");
+                            lineRow.className = "history-line";
+                            const names = line.assignments
+                                .map((assignment) => assignment.personName)
+                                .filter((value) => Boolean(value));
+                            lineRow.innerHTML = `
+              <span>${line.label}</span>
+              <span class="history-line-people">${names.length ? names.join(", ") : "Unassigned"}</span>
+              <b>${this.currencyFormatService.format(Number(line.amount))}</b>
+            `;
+                            linesWrap.append(lineRow);
+                        });
+                        body.append(linesWrap);
+                    }
+                    if (receipt.people.length > 0) {
+                        const peopleWrap = document.createElement("div");
+                        peopleWrap.className = "history-people";
+                        peopleWrap.textContent = `People: ${receipt.people.map((person) => person.name).join(", ")}`;
+                        body.append(peopleWrap);
+                    }
+                    card.append(body);
+                    container.append(card);
+                });
+            }
+            getAssignmentSummary(lineAssignments, people) {
+                const names = lineAssignments
                     .map((assignment) => people.find((person) => person.id === assignment.personId)?.name)
                     .filter((name) => Boolean(name));
-                return names.length > 0 ? names.join(", ") : "Unassigned";
+                return names.length > 0 ? names.join(", ") : "Assign ▾";
             }
         }
         UI.SplitWorkspaceView = SplitWorkspaceView;
@@ -902,7 +1056,7 @@ var ReceiptRing;
     var App;
     (function (App) {
         class AppController {
-            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService) {
+            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService) {
                 this.elements = elements;
                 this.parserService = parserService;
                 this.categorizationService = categorizationService;
@@ -915,12 +1069,12 @@ var ReceiptRing;
                 this.splitWorkspaceView = splitWorkspaceView;
                 this.splitCalculatorService = splitCalculatorService;
                 this.idService = idService;
+                this.receiptApiService = receiptApiService;
                 this.receiptLines = [];
                 this.people = [];
                 this.assignments = [];
-                this.selectedLineIds = new Set();
-                this.activePersonId = null;
-                this.receiptCategory = "Dining";
+                this.lineModes = new Map();
+                this.receiptCategory = "Groceries";
                 this.cameraStream = null;
                 this.isPromptingForCategories = false;
                 this.reviewTimer = null;
@@ -951,14 +1105,18 @@ var ReceiptRing;
                     if (event.key === "Enter")
                         this.addPerson();
                 });
-                this.elements.assignLinesButton.addEventListener("click", () => this.assignSelectedLines());
-                this.elements.taxInput.addEventListener("input", () => this.render());
+                this.elements.taxInput.addEventListener("input", () => this.renderTotals());
                 this.elements.receiptCategory.addEventListener("change", () => {
                     this.receiptCategory = this.elements.receiptCategory.value;
                 });
                 this.elements.settingsButton.addEventListener("click", () => this.openSettings());
                 this.elements.closeSettingsButton.addEventListener("click", () => this.closeSettings());
                 this.elements.saveSettingsButton.addEventListener("click", () => this.saveSettings());
+                this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
+                this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
+                this.elements.tabButtons.forEach((button) => {
+                    button.addEventListener("click", () => this.switchTab(button.dataset.tab));
+                });
                 ["dragenter", "dragover"].forEach((eventName) => {
                     this.elements.dropzone.addEventListener(eventName, (event) => {
                         event.preventDefault();
@@ -973,9 +1131,20 @@ var ReceiptRing;
                 });
                 this.elements.dropzone.addEventListener("drop", (event) => this.handleImageDrop(event));
             }
+            switchTab(tab) {
+                this.elements.tabButtons.forEach((button) => {
+                    button.classList.toggle("is-active", button.dataset.tab === tab);
+                });
+                this.elements.receiptsView.classList.toggle("hidden", tab !== "receipts");
+                this.elements.historyView.classList.toggle("hidden", tab !== "history");
+                this.elements.budgetingView.classList.toggle("hidden", tab !== "budgeting");
+                if (tab === "history") {
+                    void this.loadHistory();
+                }
+            }
             loadSample() {
                 this.elements.receiptText.value = ReceiptRing.Config.SAMPLE_RECEIPT;
-                this.items = this.parserService.parse(ReceiptRing.Config.SAMPLE_RECEIPT);
+                this.setItemsFromParse(this.parserService.parse(ReceiptRing.Config.SAMPLE_RECEIPT));
                 this.render();
                 void this.reviewAmbiguousItems();
             }
@@ -995,11 +1164,11 @@ var ReceiptRing;
                 this.imagePreviewService.clear(this.elements.receiptImage, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
                 this.receiptLines = [];
                 this.assignments = [];
-                this.selectedLineIds.clear();
+                this.lineModes.clear();
                 this.hideOcrStatus();
             }
-            itemizeReceiptText() {
-                this.items = this.parserService.parse(this.elements.receiptText.value);
+            setItemsFromParse(items) {
+                this.items = items;
                 this.receiptLines = this.items.map((item) => ({
                     id: item.id,
                     label: item.label,
@@ -1007,43 +1176,47 @@ var ReceiptRing;
                     confidence: item.categorizationConfidence * 100,
                     ignored: false
                 }));
+                this.assignments = [];
+                this.lineModes.clear();
+            }
+            itemizeReceiptText() {
+                this.setItemsFromParse(this.parserService.parse(this.elements.receiptText.value));
                 this.render();
             }
             clearReceipt() {
                 this.elements.receiptText.value = "";
+                this.elements.storeNameInput.value = "";
                 this.items = [];
                 this.receiptLines = [];
                 this.assignments = [];
-                this.selectedLineIds.clear();
+                this.lineModes.clear();
+                this.setSaveStatus("");
                 this.render();
             }
             render() {
                 this.storageService.save(this.items);
-                this.renderSplitWorkspace();
-                this.renderSummary();
+                this.renderWorkspace();
+                this.renderTotals();
             }
-            renderSplitWorkspace() {
+            renderWorkspace() {
                 this.elements.emptyState.classList.toggle("hidden", this.receiptLines.length > 0);
                 this.elements.itemCount.textContent = `${this.receiptLines.length} ${this.receiptLines.length === 1 ? "line" : "lines"}`;
+                const handlers = {
+                    onLineIgnore: (lineId) => this.toggleIgnoredLine(lineId),
+                    onPersonDelete: (personId) => this.deletePerson(personId),
+                    onAssignToggle: (lineId, personId) => this.toggleAssignment(lineId, personId),
+                    onLineModeChange: (lineId, mode) => this.setLineMode(lineId, mode),
+                    onAssignValueChange: (lineId, personId, value) => this.setAssignmentValue(lineId, personId, value)
+                };
+                this.splitWorkspaceView.renderLines(this.elements.receiptLinesList, this.receiptLines, this.assignments, this.people, this.lineModes, handlers);
+                this.splitWorkspaceView.renderPeople(this.elements.peopleList, this.people, handlers);
+            }
+            renderTotals() {
                 const unassignedCount = this.splitCalculatorService.getUnassignedCount(this.receiptLines, this.assignments);
                 this.elements.unassignedCount.textContent = `${unassignedCount} unassigned`;
                 this.elements.unassignedCount.classList.toggle("is-warning", unassignedCount > 0);
-                this.splitWorkspaceView.renderLines(this.elements.receiptLinesList, this.receiptLines, this.assignments, this.people, this.selectedLineIds, {
-                    onLineToggle: (lineId) => this.toggleLineSelection(lineId),
-                    onLineIgnore: (lineId) => this.toggleIgnoredLine(lineId),
-                    onPersonSelect: (personId) => this.selectPerson(personId),
-                    onPersonDelete: (personId) => this.deletePerson(personId)
-                });
-                this.splitWorkspaceView.renderPeople(this.elements.peopleList, this.people, this.activePersonId, {
-                    onLineToggle: (lineId) => this.toggleLineSelection(lineId),
-                    onLineIgnore: (lineId) => this.toggleIgnoredLine(lineId),
-                    onPersonSelect: (personId) => this.selectPerson(personId),
-                    onPersonDelete: (personId) => this.deletePerson(personId)
-                });
                 this.splitWorkspaceView.renderTotals(this.elements.splitTotalsList, this.splitCalculatorService.calculate(this.people, this.receiptLines, this.assignments, this.getTaxAmount()));
-            }
-            renderSummary() {
-                const grandTotal = this.receiptLines.filter((line) => !line.ignored).reduce((sum, line) => sum + line.amount, 0) + this.getTaxAmount();
+                const grandTotal = this.getSubtotal() + this.getTaxAmount();
                 this.elements.receiptTotal.textContent = this.currencyFormatService.format(grandTotal);
             }
             async extractAndItemizeReceipt(file) {
@@ -1063,6 +1236,7 @@ var ReceiptRing;
                     const subtotal = typeof result.subtotal === "number" ? result.subtotal : null;
                     const tax = typeof result.tax === "number" ? result.tax : null;
                     const total = typeof result.total === "number" ? result.total : null;
+                    this.elements.storeNameInput.value = storeName;
                     this.elements.taxInput.value = String(tax ?? 0);
                     let formattedText = `Store: ${storeName}\n\nItems:\n`;
                     const purchaseItems = [];
@@ -1104,16 +1278,8 @@ var ReceiptRing;
                     }
                     formattedText += `\nSubtotal: $${(subtotal ?? 0).toFixed(2)}\nTax: $${(tax ?? 0).toFixed(2)}\nTotal: $${(total ?? 0).toFixed(2)}`;
                     this.elements.receiptText.value = formattedText;
-                    this.items = purchaseItems;
-                    this.receiptLines = this.items.map((item) => ({
-                        id: item.id,
-                        label: item.label,
-                        amount: item.amount,
-                        confidence: item.categorizationConfidence * 100,
-                        ignored: false
-                    }));
-                    this.assignments = [];
-                    this.selectedLineIds.clear();
+                    this.setItemsFromParse(purchaseItems);
+                    this.setSaveStatus("");
                     this.render();
                     this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`, 1);
                     window.setTimeout(() => this.hideOcrStatus(), 1600);
@@ -1226,59 +1392,114 @@ var ReceiptRing;
                     return;
                 const person = { id: this.idService.create(), name };
                 this.people = [...this.people, person];
-                this.activePersonId = person.id;
                 this.elements.personNameInput.value = "";
-                this.render();
-            }
-            selectPerson(personId) {
-                this.activePersonId = personId;
                 this.render();
             }
             deletePerson(personId) {
                 this.people = this.people.filter((person) => person.id !== personId);
                 this.assignments = this.assignments.filter((assignment) => assignment.personId !== personId);
-                if (this.activePersonId === personId)
-                    this.activePersonId = this.people[0]?.id ?? null;
-                this.render();
-            }
-            toggleLineSelection(lineId) {
-                if (this.selectedLineIds.has(lineId)) {
-                    this.selectedLineIds.delete(lineId);
-                }
-                else {
-                    this.selectedLineIds.add(lineId);
-                }
                 this.render();
             }
             toggleIgnoredLine(lineId) {
                 this.receiptLines = this.receiptLines.map((line) => line.id === lineId ? { ...line, ignored: !line.ignored } : line);
                 this.assignments = this.assignments.filter((assignment) => assignment.lineId !== lineId);
-                this.selectedLineIds.delete(lineId);
                 this.render();
             }
-            assignSelectedLines() {
-                if (!this.activePersonId || this.selectedLineIds.size === 0)
-                    return;
-                const mode = this.elements.assignmentMode.value;
-                const rawValue = Number(this.elements.assignmentValue.value);
-                const value = mode === "equal" ? 0 : Number.isFinite(rawValue) ? rawValue : 0;
-                const nextAssignments = this.assignments.filter((assignment) => !this.selectedLineIds.has(assignment.lineId) || assignment.personId !== this.activePersonId);
-                this.selectedLineIds.forEach((lineId) => {
-                    nextAssignments.push({
-                        id: this.idService.create(),
-                        lineId,
-                        personId: this.activePersonId,
-                        mode,
-                        value
-                    });
-                });
-                this.assignments = nextAssignments;
-                this.selectedLineIds.clear();
+            toggleAssignment(lineId, personId) {
+                const existing = this.assignments.find((assignment) => assignment.lineId === lineId && assignment.personId === personId);
+                if (existing) {
+                    this.assignments = this.assignments.filter((assignment) => assignment !== existing);
+                }
+                else {
+                    this.assignments = [
+                        ...this.assignments,
+                        {
+                            id: this.idService.create(),
+                            lineId,
+                            personId,
+                            mode: this.lineModes.get(lineId) ?? "equal",
+                            value: 0
+                        }
+                    ];
+                }
                 this.render();
+            }
+            setLineMode(lineId, mode) {
+                this.lineModes.set(lineId, mode);
+                this.assignments = this.assignments.map((assignment) => assignment.lineId === lineId
+                    ? { ...assignment, mode, value: mode === "equal" ? 0 : assignment.value }
+                    : assignment);
+                this.render();
+            }
+            setAssignmentValue(lineId, personId, value) {
+                this.assignments = this.assignments.map((assignment) => assignment.lineId === lineId && assignment.personId === personId
+                    ? { ...assignment, value: Number.isFinite(value) ? value : 0 }
+                    : assignment);
+                this.renderTotals();
+            }
+            getSubtotal() {
+                return this.receiptLines.filter((line) => !line.ignored).reduce((sum, line) => sum + line.amount, 0);
             }
             getTaxAmount() {
                 const value = Number(this.elements.taxInput.value);
                 return Number.isFinite(value) ? value : 0;
+            }
+            setSaveStatus(message, isError = false) {
+                this.elements.saveStatus.textContent = message;
+                this.elements.saveStatus.classList.toggle("is-error", isError);
+            }
+            async saveReceipt() {
+                if (this.receiptLines.length === 0) {
+                    this.setSaveStatus("Add receipt lines before saving.", true);
+                    return;
+                }
+                const subtotal = this.getSubtotal();
+                const tax = this.getTaxAmount();
+                const payload = {
+                    storeName: this.elements.storeNameInput.value.trim() || null,
+                    category: this.receiptCategory,
+                    subtotal,
+                    tax,
+                    total: subtotal + tax,
+                    people: this.people.map((person) => ({ clientId: person.id, name: person.name })),
+                    lines: this.receiptLines.map((line) => ({
+                        clientId: line.id,
+                        label: line.label,
+                        amount: line.amount,
+                        ignored: line.ignored
+                    })),
+                    assignments: this.assignments.map((assignment) => ({
+                        lineClientId: assignment.lineId,
+                        personClientId: assignment.personId,
+                        mode: assignment.mode,
+                        value: assignment.value
+                    }))
+                };
+                this.elements.saveReceiptButton.setAttribute("disabled", "true");
+                this.setSaveStatus("Saving...");
+                try {
+                    await this.receiptApiService.save(payload);
+                    this.setSaveStatus("Saved to history.");
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : "Could not save receipt.";
+                    this.setSaveStatus(message, true);
+                }
+                finally {
+                    this.elements.saveReceiptButton.removeAttribute("disabled");
+                }
+            }
+            async loadHistory() {
+                try {
+                    const receipts = await this.receiptApiService.list();
+                    this.elements.historyEmpty.classList.toggle("hidden", receipts.length > 0);
+                    this.splitWorkspaceView.renderHistory(this.elements.historyList, receipts);
+                }
+                catch (error) {
+                    this.elements.historyEmpty.classList.remove("hidden");
+                    this.elements.historyEmpty.innerHTML = `<strong>Couldn't load history</strong><span>${error instanceof Error ? error.message : "Is the server running?"}</span>`;
+                    this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
+                }
             }
             scheduleCategoryReview() {
                 if (this.reviewTimer !== null) {
@@ -1347,8 +1568,9 @@ var ReceiptRing;
     const splitCalculatorService = new ReceiptRing.Services.SplitCalculatorService();
     const imagePreviewService = new ReceiptRing.Services.ImagePreviewService();
     const geminiService = new ReceiptRing.Services.GeminiService();
+    const receiptApiService = new ReceiptRing.Services.ReceiptApiService();
     const elements = new ReceiptRing.UI.DomRegistryFactory().create();
     const categoryPromptView = new ReceiptRing.UI.CategoryPromptView(categories, elements);
     const splitWorkspaceView = new ReceiptRing.UI.SplitWorkspaceView(currencyFormatService);
-    new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService).start();
+    new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService).start();
 })(ReceiptRing || (ReceiptRing = {}));

@@ -1,6 +1,19 @@
 namespace ReceiptRing.Services {
   export class GeminiService {
     async loadDotEnv(): Promise<Record<string, string>> {
+      // Prefer the backend config endpoint so the raw .env file is never served over HTTP.
+      try {
+        const apiResponse = await fetch("/api/gemini-config");
+        if (apiResponse.ok) {
+          const config = (await apiResponse.json()) as Record<string, string>;
+          if (config && (config.GEMINI_API_KEY || config.GEMINI_MODEL)) {
+            return config;
+          }
+        }
+      } catch {
+        // Fall back to reading the .env file directly (e.g. static-only hosting).
+      }
+
       try {
         const response = await fetch(".env");
         if (!response.ok) return {};

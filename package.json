@@ -7,13 +7,23 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate",
-    "serve": "python3 -m http.server 4173"
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "serve": "node server.mjs",
+    "start": "npm run build && node server.mjs",
+    "dev": "node --watch server.mjs"
   },
   "devDependencies": {
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "pg": "^8.21.0",
     "prisma": "^7.8.0"
   }
 }

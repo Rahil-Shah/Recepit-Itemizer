@@ -9,6 +9,7 @@ namespace ReceiptRing {
   const splitCalculatorService = new Services.SplitCalculatorService();
   const imagePreviewService = new Services.ImagePreviewService();
   const geminiService = new Services.GeminiService();
+  const receiptApiService = new Services.ReceiptApiService();
   const elements = new UI.DomRegistryFactory().create();
   const categoryPromptView = new UI.CategoryPromptView(categories, elements);
   const splitWorkspaceView = new UI.SplitWorkspaceView(currencyFormatService);
@@ -25,6 +26,7 @@ namespace ReceiptRing {
     categoryPromptView,
     splitWorkspaceView,
     splitCalculatorService,
-    idService
+    idService,
+    receiptApiService
   ).start();
 }

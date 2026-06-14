@@ -30,8 +30,11 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
   - **Split Evenly**: Distribute the cost of items equally among selected people.
   - **Split by Percentage**: Allocate item shares based on custom percentages.
   - **Split by Custom Amount**: Assign exact cost allocations to individuals.
+- **Per-line People Assignment**: Each receipt line has a dropdown of the people you've added — check/uncheck to assign, choose even / percentage / custom-amount split per line.
 - **Tax Auto-Calculation**: Input tax and automatically distribute it proportionally based on each person's subtotal.
-- **Smart Categorization**: Categorize receipt items (Dining, Groceries, Travel, etc.) and save defaults for specific items.
+- **Smart Categorization**: Categorize receipt items (Dining, Groceries, Travel, etc.) and save defaults for specific items. Receipt category defaults to **Groceries**.
+- **Saved History (Postgres)**: Save a split to a Postgres database and review previous receipts, items, prices, and per-person splits under the **History** tab.
+- **Budgeting (coming soon)**: A dedicated tab reserved for upcoming monthly budgets and spending trends.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
 
 ---
@@ -40,7 +43,8 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 
 ### Prerequisites
 
-Make sure you have [Node.js](https://nodejs.org/) installed.
+- [Node.js](https://nodejs.org/) (v20+)
+- [Docker](https://www.docker.com/) (for the local Postgres database)
 
 ### Installation
 
@@ -59,17 +63,55 @@ Make sure you have [Node.js](https://nodejs.org/) installed.
    ```bash
    cp .env.example .env
    ```
-   Open `.env` and replace `your_gemini_api_key_here` with your real Gemini API key.
+   Open `.env` and replace `your_gemini_api_key_here` with your real Gemini API key. The
+   `DATABASE_URL` is pre-filled to match the bundled Docker Postgres.
 
 ### Running the App Locally
 
-Compile the TypeScript bundle, then start the static server:
-```bash
-npm run build
-npm run serve
-```
+1. Start the Postgres database (Docker):
+   ```bash
+   npm run db:up
+   ```
+
+2. Apply the database schema (first run only, or after schema changes):
+   ```bash
+   npm run db:migrate
+   ```
+
+3. Build the frontend bundle and start the server:
+   ```bash
+   npm run start
+   ```
+   (`npm run start` runs `build` then launches the server. During development you can run
+   `npm run build` and `npm run dev` in separate terminals.)
 
 Open `http://localhost:4173` in your browser.
+
+> The single Node/Express server serves the frontend **and** the `/api` routes. It never
+> exposes `.env` or source files over HTTP — the Gemini config is served via `/api/gemini-config`.
+
+### Architecture & Scaling
+
+```
+Browser (dist/app.js)  ──fetch /api──▶  Express (server.mjs)  ──Prisma──▶  Postgres
+                                         └─ also serves the static frontend
+```
+
+The database connection is a single `DATABASE_URL`. Locally it points at the Docker Postgres
+(`npm run db:up`); to scale, point it at a managed Postgres (Neon, Supabase, RDS, …) and run
+`npm run db:deploy` — no code changes required. Schema changes are versioned as Prisma
+migrations under `prisma/migrations/`.
+
+### Useful scripts
+
+| Script | Description |
+| --- | --- |
+| `npm run db:up` / `npm run db:down` | Start / stop the local Postgres container |
+| `npm run db:migrate` | Create & apply a migration (development) |
+| `npm run db:deploy` | Apply existing migrations (production) |
+| `npm run build` | Compile the TypeScript frontend to `dist/app.js` |
+| `npm run dev` | Run the server with `--watch` for reloads |
+| `npm run start` | Build the frontend and start the server |
 
 ---
 

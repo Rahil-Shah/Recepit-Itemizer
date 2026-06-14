@@ -24,6 +24,7 @@
     "src/services/storage.service.ts",
     "src/services/image-preview.service.ts",
     "src/services/gemini.service.ts",
+    "src/services/receipt-api.service.ts",
     "src/ui/dom-registry.ts",
     "src/ui/split-workspace.view.ts",
     "src/ui/category-prompt.view.ts",

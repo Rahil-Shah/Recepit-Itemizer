@@ -19,113 +19,146 @@
         </div>
       </header>
 
-      <section class="workspace" aria-label="Receipt workspace">
-        <section class="panel scanner-panel" aria-label="Scan receipt">
-          <div class="panel-heading">
-            <h2>Scan</h2>
-            <span class="pill" id="itemCount">0 items</span>
-          </div>
+      <nav class="tab-nav" aria-label="Sections">
+        <button class="tab-button is-active" id="tabReceipts" type="button" data-tab="receipts">Receipts</button>
+        <button class="tab-button" id="tabHistory" type="button" data-tab="history">History</button>
+        <button class="tab-button" id="tabBudgeting" type="button" data-tab="budgeting">Budgeting</button>
+      </nav>
 
-          <label class="dropzone" id="dropzone">
-            <input id="receiptImage" type="file" accept="image/*" capture="environment" />
-            <span class="dropzone-icon" aria-hidden="true"></span>
-            <span class="dropzone-title">Upload receipt</span>
-            <span class="dropzone-note">Camera or image file</span>
-          </label>
-
-          <figure class="receipt-preview hidden" id="receiptPreviewWrap">
-            <img id="receiptPreview" alt="Uploaded receipt preview" />
-            <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">x</button>
-          </figure>
-
-          <div class="ocr-status hidden" id="ocrStatus" aria-live="polite">
-            <span id="ocrStatusText">Reading receipt...</span>
-            <div class="ocr-progress">
-              <span id="ocrProgressBar"></span>
+      <div class="tab-view" id="receiptsView">
+        <section class="workspace" aria-label="Receipt workspace">
+          <section class="panel scanner-panel" aria-label="Scan receipt">
+            <div class="panel-heading">
+              <h2>Scan</h2>
+              <span class="pill" id="itemCount">0 items</span>
             </div>
+
+            <label class="dropzone" id="dropzone">
+              <input id="receiptImage" type="file" accept="image/*" capture="environment" />
+              <span class="dropzone-icon" aria-hidden="true"></span>
+              <span class="dropzone-title">Upload receipt</span>
+              <span class="dropzone-note">Camera or image file</span>
+            </label>
+
+            <figure class="receipt-preview hidden" id="receiptPreviewWrap">
+              <img id="receiptPreview" alt="Uploaded receipt preview" />
+              <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">x</button>
+            </figure>
+
+            <div class="ocr-status hidden" id="ocrStatus" aria-live="polite">
+              <span id="ocrStatusText">Reading receipt...</span>
+              <div class="ocr-progress">
+                <span id="ocrProgressBar"></span>
+              </div>
+            </div>
+
+            <label class="field-label" for="receiptText">Receipt text</label>
+            <textarea
+              id="receiptText"
+              rows="9"
+              spellcheck="false"
+              placeholder="Paste detected receipt text here..."
+            ></textarea>
+
+            <div class="button-row">
+              <button class="secondary-button" id="openCameraButton" type="button">Camera</button>
+              <button class="primary-button" id="parseButton" type="button">Itemize receipt</button>
+              <button class="secondary-button" id="clearButton" type="button">Clear</button>
+            </div>
+          </section>
+
+          <section class="panel items-panel" aria-label="Receipt split">
+            <div class="panel-heading">
+              <h2>Receipt lines</h2>
+              <span class="pill" id="unassignedCount">0 unassigned</span>
+            </div>
+
+            <div class="split-toolbar">
+              <div class="toolbar-field">
+                <label class="field-label compact-label" for="storeNameInput">Store</label>
+                <input class="table-input" id="storeNameInput" placeholder="Store name" />
+              </div>
+              <div class="toolbar-field">
+                <label class="field-label compact-label" for="receiptCategory">Receipt category</label>
+                <select class="table-select" id="receiptCategory">
+                  <option>Groceries</option>
+                  <option>Dining</option>
+                  <option>Entertainment</option>
+                  <option>Travel</option>
+                  <option>Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="items-table" role="table" aria-label="Receipt lines">
+              <div class="table-row table-head" role="row">
+                <span role="columnheader">Item</span>
+                <span role="columnheader">Assigned</span>
+                <span role="columnheader">Amount</span>
+                <span role="columnheader" aria-label="Actions"></span>
+              </div>
+              <div id="receiptLinesList"></div>
+            </div>
+
+            <div class="empty-state" id="emptyState">
+              <strong>No receipt lines yet</strong>
+              <span>Take or upload a receipt photo to detect purchasable rows.</span>
+            </div>
+          </section>
+
+          <aside class="panel summary-panel" aria-label="Spending summary">
+            <div class="panel-heading">
+              <h2>Split</h2>
+              <span class="pill" id="receiptTotal">$0.00</span>
+            </div>
+
+            <div class="people-panel">
+              <div class="person-form">
+                <input class="table-input" id="personNameInput" placeholder="Add person" />
+                <button class="primary-button compact" id="addPersonButton" type="button">Add</button>
+              </div>
+              <div class="people-list" id="peopleList"></div>
+              <p class="people-hint">Tip: add people, then check them off in each receipt line's <strong>Assigned</strong> dropdown.</p>
+            </div>
+
+            <div class="tax-panel">
+              <label class="field-label" for="taxInput">Tax</label>
+              <input class="table-input" id="taxInput" type="number" min="0" step="0.01" value="0" />
+            </div>
+
+            <div class="split-total-list" id="splitTotalsList"></div>
+
+            <div class="save-panel">
+              <button class="primary-button" id="saveReceiptButton" type="button">Save to history</button>
+              <span class="save-status" id="saveStatus" aria-live="polite"></span>
+            </div>
+          </aside>
+        </section>
+      </div>
+
+      <div class="tab-view hidden" id="historyView">
+        <section class="panel history-panel" aria-label="Saved receipts">
+          <div class="panel-heading">
+            <h2>Saved receipts</h2>
+            <button class="secondary-button compact" id="refreshHistoryButton" type="button">Refresh</button>
           </div>
-
-          <label class="field-label" for="receiptText">Receipt text</label>
-          <textarea
-            id="receiptText"
-            rows="9"
-            spellcheck="false"
-            placeholder="Paste detected receipt text here..."
-          ></textarea>
-
-          <div class="button-row">
-            <button class="secondary-button" id="openCameraButton" type="button">Camera</button>
-            <button class="primary-button" id="parseButton" type="button">Itemize receipt</button>
-            <button class="secondary-button" id="clearButton" type="button">Clear</button>
+          <div class="history-list" id="historyList"></div>
+          <div class="empty-state" id="historyEmpty">
+            <strong>No saved receipts yet</strong>
+            <span>Save a split from the Receipts tab to see it here.</span>
           </div>
         </section>
+      </div>
 
-        <section class="panel items-panel" aria-label="Receipt split">
-          <div class="panel-heading">
-            <h2>Receipt lines</h2>
-            <span class="pill" id="unassignedCount">0 unassigned</span>
-          </div>
-
-          <div class="split-toolbar">
-            <label class="field-label compact-label" for="receiptCategory">Receipt category</label>
-            <select class="table-select" id="receiptCategory">
-              <option>Dining</option>
-              <option>Groceries</option>
-              <option>Entertainment</option>
-              <option>Travel</option>
-              <option>Other</option>
-            </select>
-          </div>
-
-          <div class="items-table" role="table" aria-label="Receipt lines">
-            <div class="table-row table-head" role="row">
-              <span role="columnheader">Item</span>
-              <span role="columnheader">Assigned</span>
-              <span role="columnheader">Amount</span>
-              <span role="columnheader" aria-label="Actions"></span>
-            </div>
-            <div id="receiptLinesList"></div>
-          </div>
-
-          <div class="empty-state" id="emptyState">
-            <strong>No receipt lines yet</strong>
-            <span>Take or upload a receipt photo to detect purchasable rows.</span>
+      <div class="tab-view hidden" id="budgetingView">
+        <section class="panel coming-soon-panel" aria-label="Budgeting">
+          <div class="coming-soon">
+            <span class="coming-soon-badge">Coming soon</span>
+            <h2>Budgeting</h2>
+            <p>Monthly budgets, category limits, and spending trends across your saved receipts are on the way.</p>
           </div>
         </section>
-
-        <aside class="panel summary-panel" aria-label="Spending summary">
-          <div class="panel-heading">
-            <h2>Split</h2>
-            <span class="pill" id="receiptTotal">$0.00</span>
-          </div>
-
-          <div class="people-panel">
-            <div class="person-form">
-              <input class="table-input" id="personNameInput" placeholder="Add person" />
-              <button class="primary-button compact" id="addPersonButton" type="button">Add</button>
-            </div>
-            <div class="people-list" id="peopleList"></div>
-          </div>
-
-          <div class="assignment-panel">
-            <label class="field-label" for="assignmentMode">Assign selected lines</label>
-            <select class="table-select" id="assignmentMode">
-              <option value="equal">Split evenly</option>
-              <option value="percentage">Split by percentage</option>
-              <option value="amount">Split by custom amount</option>
-            </select>
-            <input class="table-input" id="assignmentValue" type="number" min="0" step="0.01" placeholder="Percent or amount" />
-            <button class="primary-button" id="assignLinesButton" type="button">Assign</button>
-          </div>
-
-          <div class="tax-panel">
-            <label class="field-label" for="taxInput">Tax</label>
-            <input class="table-input" id="taxInput" type="number" min="0" step="0.01" value="0" />
-          </div>
-
-          <div class="split-total-list" id="splitTotalsList"></div>
-        </aside>
-      </section>
+      </div>
     </main>
 
     <div class="modal-backdrop hidden" id="categoryPrompt" role="dialog" aria-modal="true" aria-labelledby="categoryPromptTitle">
@@ -175,7 +208,7 @@
         <div class="settings-form">
           <label class="field-label" style="margin-top: 0;" for="geminiApiKey">Gemini API Key</label>
           <input class="table-input" id="geminiApiKey" type="password" placeholder="Enter Gemini API key" />
-          
+
           <label class="field-label" style="margin-top: 14px;" for="geminiModel">Model</label>
           <select class="table-select" id="geminiModel">
             <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>

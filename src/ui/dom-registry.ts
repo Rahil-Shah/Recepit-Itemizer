@@ -21,17 +21,24 @@ namespace ReceiptRing.UI {
     receiptLinesList: HTMLElement;
     emptyState: HTMLElement;
     unassignedCount: HTMLElement;
+    storeNameInput: HTMLInputElement;
     receiptCategory: HTMLSelectElement;
     personNameInput: HTMLInputElement;
     addPersonButton: HTMLButtonElement;
     peopleList: HTMLElement;
-    assignmentMode: HTMLSelectElement;
-    assignmentValue: HTMLInputElement;
-    assignLinesButton: HTMLButtonElement;
     taxInput: HTMLInputElement;
     splitTotalsList: HTMLElement;
+    saveReceiptButton: HTMLButtonElement;
+    saveStatus: HTMLElement;
     itemCount: HTMLElement;
     receiptTotal: HTMLElement;
+    tabButtons: HTMLButtonElement[];
+    receiptsView: HTMLElement;
+    historyView: HTMLElement;
+    budgetingView: HTMLElement;
+    historyList: HTMLElement;
+    historyEmpty: HTMLElement;
+    refreshHistoryButton: HTMLButtonElement;
     categoryPrompt: HTMLElement;
     categoryPromptItem: HTMLElement;
     categoryPromptSelect: HTMLSelectElement;
@@ -70,17 +77,26 @@ namespace ReceiptRing.UI {
         receiptLinesList: this.getElement("#receiptLinesList", HTMLElement),
         emptyState: this.getElement("#emptyState", HTMLElement),
         unassignedCount: this.getElement("#unassignedCount", HTMLElement),
+        storeNameInput: this.getElement("#storeNameInput", HTMLInputElement),
         receiptCategory: this.getElement("#receiptCategory", HTMLSelectElement),
         personNameInput: this.getElement("#personNameInput", HTMLInputElement),
         addPersonButton: this.getElement("#addPersonButton", HTMLButtonElement),
         peopleList: this.getElement("#peopleList", HTMLElement),
-        assignmentMode: this.getElement("#assignmentMode", HTMLSelectElement),
-        assignmentValue: this.getElement("#assignmentValue", HTMLInputElement),
-        assignLinesButton: this.getElement("#assignLinesButton", HTMLButtonElement),
         taxInput: this.getElement("#taxInput", HTMLInputElement),
         splitTotalsList: this.getElement("#splitTotalsList", HTMLElement),
+        saveReceiptButton: this.getElement("#saveReceiptButton", HTMLButtonElement),
+        saveStatus: this.getElement("#saveStatus", HTMLElement),
         itemCount: this.getElement("#itemCount", HTMLElement),
         receiptTotal: this.getElement("#receiptTotal", HTMLElement),
+        tabButtons: Array.from(document.querySelectorAll(".tab-button")).filter(
+          (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
+        ),
+        receiptsView: this.getElement("#receiptsView", HTMLElement),
+        historyView: this.getElement("#historyView", HTMLElement),
+        budgetingView: this.getElement("#budgetingView", HTMLElement),
+        historyList: this.getElement("#historyList", HTMLElement),
+        historyEmpty: this.getElement("#historyEmpty", HTMLElement),
+        refreshHistoryButton: this.getElement("#refreshHistoryButton", HTMLButtonElement),
         categoryPrompt: this.getElement("#categoryPrompt", HTMLElement),
         categoryPromptItem: this.getElement("#categoryPromptItem", HTMLElement),
         categoryPromptSelect: this.getElement("#categoryPromptSelect", HTMLSelectElement),
