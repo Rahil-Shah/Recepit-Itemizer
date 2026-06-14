@@ -25,8 +25,6 @@ namespace ReceiptRing.Domain {
     needsCategoryReview: boolean;
   }
 
-  export type CategoryTotals = Record<CategoryName, number>;
-
   export type CategorizationSource = "saved-rule" | "keyword-match" | "uncertain";
 
   export interface CategorizationResult {
@@ -43,56 +41,6 @@ namespace ReceiptRing.Domain {
     createdAt: string;
   }
 
-  export interface OcrWord {
-    id: string;
-    text: string;
-    confidence: number;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }
-
-  export interface OcrLine {
-    id: string;
-    words: OcrWord[];
-    confidence: number;
-  }
-
-  export interface OcrImageArtifact {
-    label: string;
-    dataUrl: string;
-    width: number;
-    height: number;
-  }
-
-  export interface ImageQualityReport {
-    blurVariance: number;
-    contrast: number;
-    warnings: string[];
-  }
-
-  export interface ReceiptMetadata {
-    storeName: string;
-    date: string;
-    time: string;
-    receiptNumber: string;
-    subtotal: number | null;
-    tax: number | null;
-    total: number | null;
-  }
-
-  export interface OcrDocument {
-    provider: string;
-    text: string;
-    lines: OcrLine[];
-    confidence: number;
-    imageWidth: number;
-    imageHeight: number;
-    artifacts: OcrImageArtifact[];
-    quality: ImageQualityReport;
-  }
-
   export type ReceiptCategory = "Dining" | "Groceries" | "Entertainment" | "Travel" | "Other";
 
   export interface ReceiptLine {
@@ -101,13 +49,6 @@ namespace ReceiptRing.Domain {
     amount: number;
     confidence: number;
     ignored: boolean;
-    ocrLineId?: string;
-    bounds?: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    };
   }
 
   export interface SplitPerson {

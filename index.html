@@ -35,17 +35,8 @@
 
           <figure class="receipt-preview hidden" id="receiptPreviewWrap">
             <img id="receiptPreview" alt="Uploaded receipt preview" />
-            <div class="ocr-overlay" id="ocrOverlay" aria-label="OCR text overlay"></div>
             <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">x</button>
           </figure>
-
-          <div class="review-tools hidden" id="ocrReviewTools">
-            <label class="switch-row">
-              <input id="ocrOverlayToggle" type="checkbox" checked />
-              <span>OCR overlay</span>
-            </label>
-            <button class="secondary-button compact" id="diagnosticsToggle" type="button">Diagnostics</button>
-          </div>
 
           <div class="ocr-status hidden" id="ocrStatus" aria-live="polite">
             <span id="ocrStatusText">Reading receipt...</span>
@@ -135,18 +126,6 @@
           <div class="split-total-list" id="splitTotalsList"></div>
         </aside>
       </section>
-
-      <section class="panel diagnostics-panel hidden" id="diagnosticsPanel" aria-label="OCR diagnostics">
-        <div class="panel-heading">
-          <h2>Diagnostics</h2>
-          <span class="pill" id="diagnosticsSummary">No OCR run</span>
-        </div>
-        <div class="diagnostics-grid" id="diagnosticsGrid"></div>
-        <div class="diagnostics-output">
-          <h2>Consensus OCR</h2>
-          <pre id="diagnosticsText"></pre>
-        </div>
-      </section>
     </main>
 
     <div class="modal-backdrop hidden" id="categoryPrompt" role="dialog" aria-modal="true" aria-labelledby="categoryPromptTitle">
@@ -215,7 +194,6 @@
       </section>
     </div>
 
-    <script src="vendor/tesseract/tesseract.min.js"></script>
     <script src="dist/app.js"></script>
   </body>
 </html>

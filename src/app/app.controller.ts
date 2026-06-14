@@ -7,8 +7,6 @@ namespace ReceiptRing.App {
     private selectedLineIds = new Set<string>();
     private activePersonId: string | null = null;
     private receiptCategory: Domain.ReceiptCategory = "Dining";
-    private ocrDocument: Domain.OcrDocument | null = null;
-    private metadata: Domain.ReceiptMetadata | null = null;
     private cameraStream: MediaStream | null = null;
     private isPromptingForCategories = false;
     private reviewTimer: number | null = null;
@@ -19,17 +17,10 @@ namespace ReceiptRing.App {
       private readonly categorizationService: Services.CategorizationService,
       private readonly categoryRuleStorageService: Services.CategoryRuleStorageService,
       private readonly storageService: Services.StorageService,
-      private readonly summaryService: Services.SpendingSummaryService,
       private readonly currencyFormatService: Services.CurrencyFormatService,
       private readonly imagePreviewService: Services.ImagePreviewService,
-      private readonly receiptOcrService: Services.ReceiptOcrService,
       private readonly geminiService: Services.GeminiService,
-      private readonly itemListView: UI.ItemListView,
-      private readonly ringView: UI.CategoryRingView,
-      private readonly categorySummaryView: UI.CategorySummaryView,
       private readonly categoryPromptView: UI.CategoryPromptView,
-      private readonly ocrOverlayView: UI.OcrOverlayView,
-      private readonly diagnosticsView: UI.DiagnosticsView,
       private readonly splitWorkspaceView: UI.SplitWorkspaceView,
       private readonly splitCalculatorService: Services.SplitCalculatorService,
       private readonly idService: Services.IdService
@@ -65,12 +56,6 @@ namespace ReceiptRing.App {
       this.elements.taxInput.addEventListener("input", () => this.render());
       this.elements.receiptCategory.addEventListener("change", () => {
         this.receiptCategory = this.elements.receiptCategory.value as Domain.ReceiptCategory;
-      });
-      this.elements.ocrOverlayToggle.addEventListener("change", () =>
-        this.ocrOverlayView.setVisible(this.elements.ocrOverlay, this.elements.ocrOverlayToggle.checked)
-      );
-      this.elements.diagnosticsToggle.addEventListener("click", () => {
-        this.elements.diagnosticsPanel.classList.toggle("hidden");
       });
       this.elements.settingsButton.addEventListener("click", () => this.openSettings());
       this.elements.closeSettingsButton.addEventListener("click", () => this.closeSettings());
@@ -120,13 +105,9 @@ namespace ReceiptRing.App {
         this.elements.receiptPreview,
         this.elements.receiptPreviewWrap
       );
-      this.ocrDocument = null;
-      this.metadata = null;
       this.receiptLines = [];
       this.assignments = [];
       this.selectedLineIds.clear();
-      this.elements.ocrOverlay.innerHTML = "";
-      this.elements.ocrReviewTools.classList.add("hidden");
       this.hideOcrStatus();
     }
 
@@ -139,7 +120,6 @@ namespace ReceiptRing.App {
         confidence: item.categorizationConfidence * 100,
         ignored: false
       }));
-      this.metadata = null;
       this.render();
     }
 
@@ -149,63 +129,6 @@ namespace ReceiptRing.App {
       this.receiptLines = [];
       this.assignments = [];
       this.selectedLineIds.clear();
-      this.ocrDocument = null;
-      this.metadata = null;
-      this.elements.ocrOverlay.innerHTML = "";
-      this.elements.ocrReviewTools.classList.add("hidden");
-      this.render();
-    }
-
-    private addItem(): void {
-      this.items = [
-        ...this.items,
-        {
-          id: this.idService.create(),
-          label: "New item",
-          category: "Other",
-          amount: 0,
-          categorizationConfidence: 0,
-          categorizationSource: "uncertain",
-          needsCategoryReview: false
-        }
-      ];
-      this.render();
-    }
-
-    private updateItem(id: string, patch: Partial<Domain.PurchaseItem>): void {
-      const shouldRenderItems = patch.label !== undefined;
-
-      this.items = this.items.map((item) => {
-        if (item.id !== id) return item;
-
-        const nextItem = { ...item, ...patch };
-
-        if (patch.label !== undefined && nextItem.label.trim().length > 2 && nextItem.label !== "New item") {
-          const categorization = this.categorizationService.categorize(nextItem.label);
-          nextItem.category = categorization.category;
-          nextItem.categorizationConfidence = categorization.confidence;
-          nextItem.categorizationSource = categorization.source;
-          nextItem.needsCategoryReview = categorization.shouldPrompt;
-          this.scheduleCategoryReview();
-        }
-
-        if (patch.category !== undefined) {
-          nextItem.categorizationConfidence = 1;
-          nextItem.categorizationSource = "saved-rule";
-          nextItem.needsCategoryReview = false;
-        }
-
-        return nextItem;
-      });
-      this.storageService.save(this.items);
-      if (shouldRenderItems) {
-        this.renderSplitWorkspace();
-      }
-      this.renderSummary();
-    }
-
-    private deleteItem(id: string): void {
-      this.items = this.items.filter((candidate) => candidate.id !== id);
       this.render();
     }
 
@@ -213,7 +136,6 @@ namespace ReceiptRing.App {
       this.storageService.save(this.items);
       this.renderSplitWorkspace();
       this.renderSummary();
-      this.renderDiagnostics();
     }
 
     private renderSplitWorkspace(): void {
@@ -269,7 +191,7 @@ namespace ReceiptRing.App {
 
       try {
         const result = await this.geminiService.parseReceiptImage(file, apiKey, model);
-        
+
         // Log the JSON output in the terminal/console when putting a photo
         console.log("Gemini parsed receipt output:", result);
 
@@ -277,16 +199,6 @@ namespace ReceiptRing.App {
         const subtotal = typeof result.subtotal === "number" ? result.subtotal : null;
         const tax = typeof result.tax === "number" ? result.tax : null;
         const total = typeof result.total === "number" ? result.total : null;
-
-        this.metadata = {
-          storeName,
-          date: "",
-          time: "",
-          receiptNumber: "",
-          subtotal,
-          tax,
-          total
-        };
 
         this.elements.taxInput.value = String(tax ?? 0);
 
@@ -348,24 +260,8 @@ namespace ReceiptRing.App {
           ignored: false
         }));
 
-        this.ocrDocument = {
-          provider: `Gemini (${model})`,
-          text: formattedText,
-          lines: [],
-          confidence: 100,
-          imageWidth: 800,
-          imageHeight: 600,
-          artifacts: [],
-          quality: {
-            blurVariance: 100,
-            contrast: 100,
-            warnings: []
-          }
-        };
-
         this.assignments = [];
         this.selectedLineIds.clear();
-        this.renderOcrOverlay();
         this.render();
 
         this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`, 1);
@@ -486,58 +382,6 @@ namespace ReceiptRing.App {
       void this.extractAndItemizeReceipt(file);
     }
 
-    private renderOcrOverlay(): void {
-      this.elements.ocrReviewTools.classList.toggle("hidden", !this.ocrDocument);
-      this.ocrOverlayView.render(this.elements.ocrOverlay, this.ocrDocument, {
-        onLineSelect: (lineId) => this.toggleLineSelection(lineId),
-        onWordUpdate: (wordId, text) => this.updateOcrWord(wordId, text)
-      });
-      this.ocrOverlayView.setVisible(this.elements.ocrOverlay, this.elements.ocrOverlayToggle.checked);
-    }
-
-    private updateOcrWord(wordId: string, text: string): void {
-      if (!this.ocrDocument) return;
-
-      this.ocrDocument = {
-        ...this.ocrDocument,
-        lines: this.ocrDocument.lines.map((line) => ({
-          ...line,
-          words: line.words.map((word) =>
-            word.id === wordId ? { ...word, text, confidence: 100 } : word
-          )
-        }))
-      };
-      this.ocrDocument = {
-        ...this.ocrDocument,
-        text: this.ocrDocument.lines.map((line) => line.words.map((word) => word.text).join(" ")).join("\n")
-      };
-      this.metadata = this.parserService.extractMetadata(this.ocrDocument);
-      this.receiptLines = this.parserService.parseReceiptLines(this.ocrDocument);
-      this.items = this.parserService.parseOcr(this.ocrDocument);
-      this.elements.receiptText.value = this.ocrDocument.text;
-      this.renderOcrOverlay();
-      this.render();
-    }
-
-    private renderDiagnostics(): void {
-      this.diagnosticsView.render(
-        this.elements.diagnosticsGrid,
-        this.elements.diagnosticsText,
-        this.elements.diagnosticsSummary,
-        this.ocrDocument,
-        this.metadata,
-        this.receiptLines.map((line) => ({
-          id: line.id,
-          label: line.label,
-          amount: line.amount,
-          category: "Other",
-          categorizationConfidence: line.confidence / 100,
-          categorizationSource: "uncertain",
-          needsCategoryReview: false
-        }))
-      );
-    }
-
     private addPerson(): void {
       const name = this.elements.personNameInput.value.trim();
       if (!name) return;
@@ -567,7 +411,6 @@ namespace ReceiptRing.App {
       } else {
         this.selectedLineIds.add(lineId);
       }
-      this.ocrOverlayView.highlightLines(this.elements.ocrOverlay, this.selectedLineIds);
       this.render();
     }
 
@@ -602,7 +445,6 @@ namespace ReceiptRing.App {
 
       this.assignments = nextAssignments;
       this.selectedLineIds.clear();
-      this.renderOcrOverlay();
       this.render();
     }
 

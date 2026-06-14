@@ -5,14 +5,6 @@ namespace ReceiptRing.UI {
     dropzone: HTMLElement;
     receiptPreviewWrap: HTMLElement;
     receiptPreview: HTMLImageElement;
-    ocrOverlay: HTMLElement;
-    ocrReviewTools: HTMLElement;
-    ocrOverlayToggle: HTMLInputElement;
-    diagnosticsToggle: HTMLButtonElement;
-    diagnosticsPanel: HTMLElement;
-    diagnosticsGrid: HTMLElement;
-    diagnosticsText: HTMLElement;
-    diagnosticsSummary: HTMLElement;
     clearImageButton: HTMLButtonElement;
     ocrStatus: HTMLElement;
     ocrStatusText: HTMLElement;
@@ -26,7 +18,6 @@ namespace ReceiptRing.UI {
     capturePhotoButton: HTMLButtonElement;
     parseButton: HTMLButtonElement;
     clearButton: HTMLButtonElement;
-    addItemButton: HTMLButtonElement;
     receiptLinesList: HTMLElement;
     emptyState: HTMLElement;
     unassignedCount: HTMLElement;
@@ -63,14 +54,6 @@ namespace ReceiptRing.UI {
         dropzone: this.getElement("#dropzone", HTMLElement),
         receiptPreviewWrap: this.getElement("#receiptPreviewWrap", HTMLElement),
         receiptPreview: this.getElement("#receiptPreview", HTMLImageElement),
-        ocrOverlay: this.getElement("#ocrOverlay", HTMLElement),
-        ocrReviewTools: this.getElement("#ocrReviewTools", HTMLElement),
-        ocrOverlayToggle: this.getElement("#ocrOverlayToggle", HTMLInputElement),
-        diagnosticsToggle: this.getElement("#diagnosticsToggle", HTMLButtonElement),
-        diagnosticsPanel: this.getElement("#diagnosticsPanel", HTMLElement),
-        diagnosticsGrid: this.getElement("#diagnosticsGrid", HTMLElement),
-        diagnosticsText: this.getElement("#diagnosticsText", HTMLElement),
-        diagnosticsSummary: this.getElement("#diagnosticsSummary", HTMLElement),
         clearImageButton: this.getElement("#clearImageButton", HTMLButtonElement),
         ocrStatus: this.getElement("#ocrStatus", HTMLElement),
         ocrStatusText: this.getElement("#ocrStatusText", HTMLElement),
@@ -84,7 +67,6 @@ namespace ReceiptRing.UI {
         capturePhotoButton: this.getElement("#capturePhotoButton", HTMLButtonElement),
         parseButton: this.getElement("#parseButton", HTMLButtonElement),
         clearButton: this.getElement("#clearButton", HTMLButtonElement),
-        addItemButton: document.createElement("button"),
         receiptLinesList: this.getElement("#receiptLinesList", HTMLElement),
         emptyState: this.getElement("#emptyState", HTMLElement),
         unassignedCount: this.getElement("#unassignedCount", HTMLElement),
