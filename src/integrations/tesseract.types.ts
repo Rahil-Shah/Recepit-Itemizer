@@ -36,6 +36,13 @@ namespace ReceiptRing.Integrations {
   }
 
   export interface TesseractLine {
+    words: TesseractWord[];
+    text: string;
+    confidence: number;
+    bbox: TesseractBoundingBox;
+  }
+
+  export interface TesseractWord {
     text: string;
     confidence: number;
     bbox: TesseractBoundingBox;

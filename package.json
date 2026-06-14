@@ -6,12 +6,16 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
+    "prisma:generate": "prisma generate",
     "serve": "python3 -m http.server 4173"
   },
   "devDependencies": {
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@paddleocr/paddleocr-js": "^0.3.2",
+    "@prisma/client": "^7.8.0",
+    "prisma": "^7.8.0",
     "tesseract.js": "^7.0.0"
   }
 }

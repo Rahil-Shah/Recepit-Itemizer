@@ -11,9 +11,12 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">Receipt tracker</p>
-          <h1>Itemize a receipt into clean spending categories.</h1>
+          <h1>Split a receipt from the photo, line by line.</h1>
         </div>
-        <button class="ghost-button" id="sampleButton" type="button">Load sample</button>
+        <div class="button-row" style="margin-top: 0; align-items: center;">
+          <button class="secondary-button" id="settingsButton" type="button">⚙️ Settings</button>
+          <button class="ghost-button" id="sampleButton" type="button">Load sample</button>
+        </div>
       </header>
 
       <section class="workspace" aria-label="Receipt workspace">
@@ -32,8 +35,17 @@
 
           <figure class="receipt-preview hidden" id="receiptPreviewWrap">
             <img id="receiptPreview" alt="Uploaded receipt preview" />
+            <div class="ocr-overlay" id="ocrOverlay" aria-label="OCR text overlay"></div>
             <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">x</button>
           </figure>
+
+          <div class="review-tools hidden" id="ocrReviewTools">
+            <label class="switch-row">
+              <input id="ocrOverlayToggle" type="checkbox" checked />
+              <span>OCR overlay</span>
+            </label>
+            <button class="secondary-button compact" id="diagnosticsToggle" type="button">Diagnostics</button>
+          </div>
 
           <div class="ocr-status hidden" id="ocrStatus" aria-live="polite">
             <span id="ocrStatusText">Reading receipt...</span>
@@ -51,49 +63,89 @@
           ></textarea>
 
           <div class="button-row">
+            <button class="secondary-button" id="openCameraButton" type="button">Camera</button>
             <button class="primary-button" id="parseButton" type="button">Itemize receipt</button>
             <button class="secondary-button" id="clearButton" type="button">Clear</button>
           </div>
         </section>
 
-        <section class="panel items-panel" aria-label="Itemized purchases">
+        <section class="panel items-panel" aria-label="Receipt split">
           <div class="panel-heading">
-            <h2>Purchases</h2>
-            <button class="secondary-button compact" id="addItemButton" type="button">Add item</button>
+            <h2>Receipt lines</h2>
+            <span class="pill" id="unassignedCount">0 unassigned</span>
           </div>
 
-          <div class="items-table" role="table" aria-label="Itemized receipt purchases">
+          <div class="split-toolbar">
+            <label class="field-label compact-label" for="receiptCategory">Receipt category</label>
+            <select class="table-select" id="receiptCategory">
+              <option>Dining</option>
+              <option>Groceries</option>
+              <option>Entertainment</option>
+              <option>Travel</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <div class="items-table" role="table" aria-label="Receipt lines">
             <div class="table-row table-head" role="row">
               <span role="columnheader">Item</span>
-              <span role="columnheader">Category</span>
+              <span role="columnheader">Assigned</span>
               <span role="columnheader">Amount</span>
               <span role="columnheader" aria-label="Actions"></span>
             </div>
-            <div id="itemsList"></div>
+            <div id="receiptLinesList"></div>
           </div>
 
           <div class="empty-state" id="emptyState">
-            <strong>No purchases yet</strong>
-            <span>Upload a receipt or paste receipt text to get started.</span>
+            <strong>No receipt lines yet</strong>
+            <span>Take or upload a receipt photo to detect purchasable rows.</span>
           </div>
         </section>
 
         <aside class="panel summary-panel" aria-label="Spending summary">
           <div class="panel-heading">
-            <h2>Breakdown</h2>
+            <h2>Split</h2>
             <span class="pill" id="receiptTotal">$0.00</span>
           </div>
 
-          <div class="ring-wrap">
-            <svg id="categoryRing" viewBox="0 0 240 240" aria-label="Spending category ring"></svg>
-            <div class="ring-center">
-              <span>Total</span>
-              <strong id="ringTotal">$0.00</strong>
+          <div class="people-panel">
+            <div class="person-form">
+              <input class="table-input" id="personNameInput" placeholder="Add person" />
+              <button class="primary-button compact" id="addPersonButton" type="button">Add</button>
             </div>
+            <div class="people-list" id="peopleList"></div>
           </div>
 
-          <div class="category-list" id="categoryList"></div>
+          <div class="assignment-panel">
+            <label class="field-label" for="assignmentMode">Assign selected lines</label>
+            <select class="table-select" id="assignmentMode">
+              <option value="equal">Split evenly</option>
+              <option value="percentage">Split by percentage</option>
+              <option value="amount">Split by custom amount</option>
+            </select>
+            <input class="table-input" id="assignmentValue" type="number" min="0" step="0.01" placeholder="Percent or amount" />
+            <button class="primary-button" id="assignLinesButton" type="button">Assign</button>
+          </div>
+
+          <div class="tax-panel">
+            <label class="field-label" for="taxInput">Tax</label>
+            <input class="table-input" id="taxInput" type="number" min="0" step="0.01" value="0" />
+          </div>
+
+          <div class="split-total-list" id="splitTotalsList"></div>
         </aside>
+      </section>
+
+      <section class="panel diagnostics-panel hidden" id="diagnosticsPanel" aria-label="OCR diagnostics">
+        <div class="panel-heading">
+          <h2>Diagnostics</h2>
+          <span class="pill" id="diagnosticsSummary">No OCR run</span>
+        </div>
+        <div class="diagnostics-grid" id="diagnosticsGrid"></div>
+        <div class="diagnostics-output">
+          <h2>Consensus OCR</h2>
+          <pre id="diagnosticsText"></pre>
+        </div>
       </section>
     </main>
 
@@ -116,6 +168,49 @@
         <div class="modal-actions">
           <button class="secondary-button" id="categoryPromptSkip" type="button">Skip</button>
           <button class="primary-button" id="categoryPromptSave" type="button">Save category</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="cameraModal" role="dialog" aria-modal="true" aria-labelledby="cameraTitle">
+      <section class="camera-modal">
+        <div class="modal-heading">
+          <p class="eyebrow">Camera</p>
+          <h2 id="cameraTitle">Capture receipt</h2>
+        </div>
+        <video id="cameraVideo" autoplay playsinline muted></video>
+        <canvas id="cameraCanvas" class="hidden"></canvas>
+        <div class="modal-actions">
+          <button class="secondary-button" id="closeCameraButton" type="button">Close</button>
+          <button class="primary-button" id="capturePhotoButton" type="button">Capture</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <section class="category-modal">
+        <div class="modal-heading">
+          <p class="eyebrow">Configuration</p>
+          <h2 id="settingsTitle">Gemini API Settings</h2>
+        </div>
+        <div class="settings-form">
+          <label class="field-label" style="margin-top: 0;" for="geminiApiKey">Gemini API Key</label>
+          <input class="table-input" id="geminiApiKey" type="password" placeholder="Enter Gemini API key" />
+          
+          <label class="field-label" style="margin-top: 14px;" for="geminiModel">Model</label>
+          <select class="table-select" id="geminiModel">
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+            <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+          </select>
+          <p class="settings-note" style="font-size: 0.76rem; color: var(--muted); margin-top: 8px; line-height: 1.35;">
+            API key is saved locally in your browser's storage and can be loaded from `.env` automatically on startup.
+          </p>
+        </div>
+        <div class="modal-actions" style="margin-top: 20px;">
+          <button class="secondary-button" id="closeSettingsButton" type="button">Cancel</button>
+          <button class="primary-button" id="saveSettingsButton" type="button">Save Settings</button>
         </div>
       </section>
     </div>

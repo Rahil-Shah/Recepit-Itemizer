@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  receipts  Receipt[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model Receipt {
+  id            String       @id @default(cuid())
+  userId        String?
+  user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  storeName     String?
+  receiptDate   DateTime?
+  receiptNumber String?
+  category      String      @default("Other")
+  subtotal      Decimal?    @db.Decimal(10, 2)
+  tax           Decimal?    @db.Decimal(10, 2)
+  total         Decimal?    @db.Decimal(10, 2)
+  ocrProvider   String?
+  ocrConfidence Decimal?    @db.Decimal(5, 2)
+  rawOcrText    String?
+  ocrDocument   Json?
+  imageUrl      String?
+  lines         ReceiptLine[]
+  people        Person[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@map("receipts")
+}
+
+model ReceiptLine {
+  id          String           @id @default(cuid())
+  receiptId   String
+  receipt     Receipt          @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  label       String
+  amount      Decimal          @db.Decimal(10, 2)
+  confidence  Decimal?         @db.Decimal(5, 2)
+  ignored     Boolean          @default(false)
+  ocrLineId   String?
+  boundingBox Json?
+  sortOrder   Int              @default(0)
+  assignments LineAssignment[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("receipt_lines")
+}
+
+model Person {
+  id          String           @id @default(cuid())
+  receiptId   String
+  receipt     Receipt          @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  name        String
+  assignments LineAssignment[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("people")
+}
+
+model LineAssignment {
+  id        String      @id @default(cuid())
+  lineId    String
+  line      ReceiptLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  personId  String
+  person    Person      @relation(fields: [personId], references: [id], onDelete: Cascade)
+  mode      String      @default("equal")
+  value     Decimal     @default(0) @db.Decimal(10, 2)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@map("line_assignments")
+}

@@ -1,6 +1,15 @@
 namespace ReceiptRing.App {
   export class AppController {
     private items: Domain.PurchaseItem[];
+    private receiptLines: Domain.ReceiptLine[] = [];
+    private people: Domain.SplitPerson[] = [];
+    private assignments: Domain.LineAssignment[] = [];
+    private selectedLineIds = new Set<string>();
+    private activePersonId: string | null = null;
+    private receiptCategory: Domain.ReceiptCategory = "Dining";
+    private ocrDocument: Domain.OcrDocument | null = null;
+    private metadata: Domain.ReceiptMetadata | null = null;
+    private cameraStream: MediaStream | null = null;
     private isPromptingForCategories = false;
     private reviewTimer: number | null = null;
 
@@ -14,10 +23,15 @@ namespace ReceiptRing.App {
       private readonly currencyFormatService: Services.CurrencyFormatService,
       private readonly imagePreviewService: Services.ImagePreviewService,
       private readonly receiptOcrService: Services.ReceiptOcrService,
+      private readonly geminiService: Services.GeminiService,
       private readonly itemListView: UI.ItemListView,
       private readonly ringView: UI.CategoryRingView,
       private readonly categorySummaryView: UI.CategorySummaryView,
       private readonly categoryPromptView: UI.CategoryPromptView,
+      private readonly ocrOverlayView: UI.OcrOverlayView,
+      private readonly diagnosticsView: UI.DiagnosticsView,
+      private readonly splitWorkspaceView: UI.SplitWorkspaceView,
+      private readonly splitCalculatorService: Services.SplitCalculatorService,
       private readonly idService: Services.IdService
     ) {
       this.items = this.storageService.load();
@@ -26,15 +40,41 @@ namespace ReceiptRing.App {
     start(): void {
       this.bindEvents();
       this.render();
+      void this.initGeminiSettings();
     }
 
     private bindEvents(): void {
       this.elements.sampleButton.addEventListener("click", () => this.loadSample());
+      this.elements.dropzone.addEventListener("click", (event) => {
+        if (event.target === this.elements.receiptImage) return;
+        event.preventDefault();
+        this.elements.receiptImage.click();
+      });
       this.elements.receiptImage.addEventListener("change", () => this.handleImageInput());
       this.elements.clearImageButton.addEventListener("click", () => this.clearImage());
       this.elements.parseButton.addEventListener("click", () => this.itemizeReceiptText());
       this.elements.clearButton.addEventListener("click", () => this.clearReceipt());
-      this.elements.addItemButton.addEventListener("click", () => this.addItem());
+      this.elements.openCameraButton.addEventListener("click", () => void this.openCamera());
+      this.elements.closeCameraButton.addEventListener("click", () => this.closeCamera());
+      this.elements.capturePhotoButton.addEventListener("click", () => void this.captureCameraPhoto());
+      this.elements.addPersonButton.addEventListener("click", () => this.addPerson());
+      this.elements.personNameInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") this.addPerson();
+      });
+      this.elements.assignLinesButton.addEventListener("click", () => this.assignSelectedLines());
+      this.elements.taxInput.addEventListener("input", () => this.render());
+      this.elements.receiptCategory.addEventListener("change", () => {
+        this.receiptCategory = this.elements.receiptCategory.value as Domain.ReceiptCategory;
+      });
+      this.elements.ocrOverlayToggle.addEventListener("change", () =>
+        this.ocrOverlayView.setVisible(this.elements.ocrOverlay, this.elements.ocrOverlayToggle.checked)
+      );
+      this.elements.diagnosticsToggle.addEventListener("click", () => {
+        this.elements.diagnosticsPanel.classList.toggle("hidden");
+      });
+      this.elements.settingsButton.addEventListener("click", () => this.openSettings());
+      this.elements.closeSettingsButton.addEventListener("click", () => this.closeSettings());
+      this.elements.saveSettingsButton.addEventListener("click", () => this.saveSettings());
 
       ["dragenter", "dragover"].forEach((eventName) => {
         this.elements.dropzone.addEventListener(eventName, (event) => {
@@ -63,16 +103,14 @@ namespace ReceiptRing.App {
     private handleImageInput(): void {
       const file = this.elements.receiptImage.files?.[0];
       if (file) {
-        this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
-        void this.extractAndItemizeReceipt(file);
+        this.processReceiptImage(file);
       }
     }
 
     private handleImageDrop(event: DragEvent): void {
       const file = event.dataTransfer?.files?.[0];
       if (file) {
-        this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
-        void this.extractAndItemizeReceipt(file);
+        this.processReceiptImage(file);
       }
     }
 
@@ -82,18 +120,39 @@ namespace ReceiptRing.App {
         this.elements.receiptPreview,
         this.elements.receiptPreviewWrap
       );
+      this.ocrDocument = null;
+      this.metadata = null;
+      this.receiptLines = [];
+      this.assignments = [];
+      this.selectedLineIds.clear();
+      this.elements.ocrOverlay.innerHTML = "";
+      this.elements.ocrReviewTools.classList.add("hidden");
       this.hideOcrStatus();
     }
 
     private itemizeReceiptText(): void {
       this.items = this.parserService.parse(this.elements.receiptText.value);
+      this.receiptLines = this.items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        amount: item.amount,
+        confidence: item.categorizationConfidence * 100,
+        ignored: false
+      }));
+      this.metadata = null;
       this.render();
-      void this.reviewAmbiguousItems();
     }
 
     private clearReceipt(): void {
       this.elements.receiptText.value = "";
       this.items = [];
+      this.receiptLines = [];
+      this.assignments = [];
+      this.selectedLineIds.clear();
+      this.ocrDocument = null;
+      this.metadata = null;
+      this.elements.ocrOverlay.innerHTML = "";
+      this.elements.ocrReviewTools.classList.add("hidden");
       this.render();
     }
 
@@ -140,7 +199,7 @@ namespace ReceiptRing.App {
       });
       this.storageService.save(this.items);
       if (shouldRenderItems) {
-        this.renderItems();
+        this.renderSplitWorkspace();
       }
       this.renderSummary();
     }
@@ -152,55 +211,211 @@ namespace ReceiptRing.App {
 
     private render(): void {
       this.storageService.save(this.items);
-      this.renderItems();
+      this.renderSplitWorkspace();
       this.renderSummary();
+      this.renderDiagnostics();
     }
 
-    private renderItems(): void {
-      this.elements.emptyState.classList.toggle("hidden", this.items.length > 0);
-      this.elements.itemCount.textContent = `${this.items.length} ${this.items.length === 1 ? "item" : "items"}`;
-      this.itemListView.render(this.elements.itemsList, this.items, {
-        onUpdate: (id, patch) => this.updateItem(id, patch),
-        onDelete: (id) => this.deleteItem(id)
+    private renderSplitWorkspace(): void {
+      this.elements.emptyState.classList.toggle("hidden", this.receiptLines.length > 0);
+      this.elements.itemCount.textContent = `${this.receiptLines.length} ${this.receiptLines.length === 1 ? "line" : "lines"}`;
+      const unassignedCount = this.splitCalculatorService.getUnassignedCount(this.receiptLines, this.assignments);
+      this.elements.unassignedCount.textContent = `${unassignedCount} unassigned`;
+      this.elements.unassignedCount.classList.toggle("is-warning", unassignedCount > 0);
+
+      this.splitWorkspaceView.renderLines(
+        this.elements.receiptLinesList,
+        this.receiptLines,
+        this.assignments,
+        this.people,
+        this.selectedLineIds,
+        {
+          onLineToggle: (lineId) => this.toggleLineSelection(lineId),
+          onLineIgnore: (lineId) => this.toggleIgnoredLine(lineId),
+          onPersonSelect: (personId) => this.selectPerson(personId),
+          onPersonDelete: (personId) => this.deletePerson(personId)
+        }
+      );
+      this.splitWorkspaceView.renderPeople(this.elements.peopleList, this.people, this.activePersonId, {
+        onLineToggle: (lineId) => this.toggleLineSelection(lineId),
+        onLineIgnore: (lineId) => this.toggleIgnoredLine(lineId),
+        onPersonSelect: (personId) => this.selectPerson(personId),
+        onPersonDelete: (personId) => this.deletePerson(personId)
       });
+      this.splitWorkspaceView.renderTotals(
+        this.elements.splitTotalsList,
+        this.splitCalculatorService.calculate(this.people, this.receiptLines, this.assignments, this.getTaxAmount())
+      );
     }
 
     private renderSummary(): void {
-      const totals = this.summaryService.getTotals(this.items);
-      const grandTotal = this.summaryService.getGrandTotal(totals);
+      const grandTotal =
+        this.receiptLines.filter((line) => !line.ignored).reduce((sum, line) => sum + line.amount, 0) + this.getTaxAmount();
       this.elements.receiptTotal.textContent = this.currencyFormatService.format(grandTotal);
-      this.elements.ringTotal.textContent = this.currencyFormatService.format(grandTotal);
-      this.ringView.render(this.elements.categoryRing, totals, grandTotal);
-      this.categorySummaryView.render(this.elements.categoryList, totals, grandTotal);
     }
 
     private async extractAndItemizeReceipt(file: File): Promise<void> {
-      this.setOcrStatus("Starting OCR", 0.04);
+      const apiKey = localStorage.getItem("gemini_api_key") || "";
+      const model = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
+
+      if (!apiKey) {
+        this.setOcrStatus("Please configure your Gemini API Key in Settings first.", 1);
+        this.openSettings();
+        return;
+      }
+
+      this.setOcrStatus("Analyzing receipt with Gemini...", 0.15);
       this.elements.parseButton.setAttribute("disabled", "true");
 
       try {
-        const text = await this.receiptOcrService.recognize(file, (progress) => {
-          this.setOcrStatus(progress.label, progress.progress);
-        });
+        const result = await this.geminiService.parseReceiptImage(file, apiKey, model);
+        
+        // Log the JSON output in the terminal/console when putting a photo
+        console.log("Gemini parsed receipt output:", result);
 
-        this.elements.receiptText.value = text;
-        this.items = this.parserService.parse(text);
-        this.render();
+        const storeName = result.storeName || "";
+        const subtotal = typeof result.subtotal === "number" ? result.subtotal : null;
+        const tax = typeof result.tax === "number" ? result.tax : null;
+        const total = typeof result.total === "number" ? result.total : null;
 
-        if (this.items.length === 0) {
-          this.setOcrStatus("Text found, but no item prices were detected. You can edit the text and itemize it.", 1);
-          return;
+        this.metadata = {
+          storeName,
+          date: "",
+          time: "",
+          receiptNumber: "",
+          subtotal,
+          tax,
+          total
+        };
+
+        this.elements.taxInput.value = String(tax ?? 0);
+
+        let formattedText = `Store: ${storeName}\n\nItems:\n`;
+        const purchaseItems: Domain.PurchaseItem[] = [];
+
+        if (Array.isArray(result.items)) {
+          result.items.forEach((item: any) => {
+            const label = this.toTitleCase(item.name || "Unknown Item");
+            const amount = typeof item.price === "number" ? item.price : Number(item.price) || 0;
+            const lowConfidence = !!item.lowConfidence;
+
+            formattedText += `- ${label}: $${amount.toFixed(2)}${lowConfidence ? " (low confidence)" : ""}\n`;
+
+            const categorization = this.categorizationService.categorize(label);
+
+            purchaseItems.push({
+              id: this.idService.create(),
+              label,
+              amount: Number(amount.toFixed(2)),
+              category: categorization.category,
+              categorizationConfidence: lowConfidence ? 0.3 : categorization.confidence,
+              categorizationSource: categorization.source,
+              needsCategoryReview: lowConfidence || categorization.shouldPrompt
+            });
+          });
         }
 
-        this.setOcrStatus(`Found ${this.items.length} ${this.items.length === 1 ? "item" : "items"}`, 1);
+        if (Array.isArray(result.discounts) && result.discounts.length > 0) {
+          formattedText += `\nDiscounts:\n`;
+          result.discounts.forEach((discount: any) => {
+            const label = this.toTitleCase(discount.name || "Discount") + " (Discount)";
+            const amount = typeof discount.amount === "number" ? discount.amount : Number(discount.amount) || 0;
+            const negativeAmount = -Math.abs(amount);
+
+            formattedText += `- ${label}: -$${Math.abs(negativeAmount).toFixed(2)}\n`;
+
+            purchaseItems.push({
+              id: this.idService.create(),
+              label,
+              amount: Number(negativeAmount.toFixed(2)),
+              category: "Other",
+              categorizationConfidence: 1.0,
+              categorizationSource: "saved-rule",
+              needsCategoryReview: false
+            });
+          });
+        }
+
+        formattedText += `\nSubtotal: $${(subtotal ?? 0).toFixed(2)}\nTax: $${(tax ?? 0).toFixed(2)}\nTotal: $${(total ?? 0).toFixed(2)}`;
+
+        this.elements.receiptText.value = formattedText;
+        this.items = purchaseItems;
+        this.receiptLines = this.items.map((item) => ({
+          id: item.id,
+          label: item.label,
+          amount: item.amount,
+          confidence: item.categorizationConfidence * 100,
+          ignored: false
+        }));
+
+        this.ocrDocument = {
+          provider: `Gemini (${model})`,
+          text: formattedText,
+          lines: [],
+          confidence: 100,
+          imageWidth: 800,
+          imageHeight: 600,
+          artifacts: [],
+          quality: {
+            blurVariance: 100,
+            contrast: 100,
+            warnings: []
+          }
+        };
+
+        this.assignments = [];
+        this.selectedLineIds.clear();
+        this.renderOcrOverlay();
+        this.render();
+
+        this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`, 1);
         window.setTimeout(() => this.hideOcrStatus(), 1600);
-        void this.reviewAmbiguousItems();
       } catch (error) {
+        console.error("Gemini receipt parsing failed:", error);
         const message = error instanceof Error ? error.message : "Could not extract text from this receipt.";
         this.setOcrStatus(message, 1);
       } finally {
         this.elements.parseButton.removeAttribute("disabled");
       }
+    }
+
+    private async initGeminiSettings(): Promise<void> {
+      const env = await this.geminiService.loadDotEnv();
+      if (env.GEMINI_API_KEY) {
+        localStorage.setItem("gemini_api_key", env.GEMINI_API_KEY);
+      }
+      if (env.GEMINI_MODEL) {
+        localStorage.setItem("gemini_model", env.GEMINI_MODEL);
+      }
+
+      this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
+      this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
+    }
+
+    private openSettings(): void {
+      this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
+      this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
+      this.elements.settingsModal.classList.remove("hidden");
+    }
+
+    private closeSettings(): void {
+      this.elements.settingsModal.classList.add("hidden");
+    }
+
+    private saveSettings(): void {
+      const key = this.elements.geminiApiKey.value.trim();
+      const model = this.elements.geminiModel.value;
+      localStorage.setItem("gemini_api_key", key);
+      localStorage.setItem("gemini_model", model);
+      this.closeSettings();
+    }
+
+    private toTitleCase(value: string): string {
+      return value
+        .toLowerCase()
+        .split(" ")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
     }
 
     private setOcrStatus(label: string, progress: number): void {
@@ -212,6 +427,188 @@ namespace ReceiptRing.App {
     private hideOcrStatus(): void {
       this.elements.ocrStatus.classList.add("hidden");
       this.elements.ocrProgressBar.style.width = "0%";
+    }
+
+    private async openCamera(): Promise<void> {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        this.setOcrStatus("Camera is not available here. Opening file upload instead.", 1);
+        this.elements.receiptImage.click();
+        return;
+      }
+
+      try {
+        this.cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 2560 }
+          },
+          audio: false
+        });
+        this.elements.cameraVideo.srcObject = this.cameraStream;
+        this.elements.cameraModal.classList.remove("hidden");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Camera permission was denied.";
+        this.setOcrStatus(`Camera unavailable: ${message}. Opening file upload instead.`, 1);
+        this.elements.receiptImage.click();
+      }
+    }
+
+    private closeCamera(): void {
+      this.cameraStream?.getTracks().forEach((track) => track.stop());
+      this.cameraStream = null;
+      this.elements.cameraVideo.srcObject = null;
+      this.elements.cameraModal.classList.add("hidden");
+    }
+
+    private async captureCameraPhoto(): Promise<void> {
+      const video = this.elements.cameraVideo;
+      const canvas = this.elements.cameraCanvas;
+      const context = canvas.getContext("2d");
+
+      if (!context || video.videoWidth === 0 || video.videoHeight === 0) return;
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+      if (!blob) return;
+
+      const file = new File([blob], `receipt-${Date.now()}.jpg`, { type: "image/jpeg" });
+      this.closeCamera();
+      this.processReceiptImage(file);
+    }
+
+    private processReceiptImage(file: File): void {
+      this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
+      this.setOcrStatus(`Loaded ${file.name || "receipt image"}`, 0.02);
+      void this.extractAndItemizeReceipt(file);
+    }
+
+    private renderOcrOverlay(): void {
+      this.elements.ocrReviewTools.classList.toggle("hidden", !this.ocrDocument);
+      this.ocrOverlayView.render(this.elements.ocrOverlay, this.ocrDocument, {
+        onLineSelect: (lineId) => this.toggleLineSelection(lineId),
+        onWordUpdate: (wordId, text) => this.updateOcrWord(wordId, text)
+      });
+      this.ocrOverlayView.setVisible(this.elements.ocrOverlay, this.elements.ocrOverlayToggle.checked);
+    }
+
+    private updateOcrWord(wordId: string, text: string): void {
+      if (!this.ocrDocument) return;
+
+      this.ocrDocument = {
+        ...this.ocrDocument,
+        lines: this.ocrDocument.lines.map((line) => ({
+          ...line,
+          words: line.words.map((word) =>
+            word.id === wordId ? { ...word, text, confidence: 100 } : word
+          )
+        }))
+      };
+      this.ocrDocument = {
+        ...this.ocrDocument,
+        text: this.ocrDocument.lines.map((line) => line.words.map((word) => word.text).join(" ")).join("\n")
+      };
+      this.metadata = this.parserService.extractMetadata(this.ocrDocument);
+      this.receiptLines = this.parserService.parseReceiptLines(this.ocrDocument);
+      this.items = this.parserService.parseOcr(this.ocrDocument);
+      this.elements.receiptText.value = this.ocrDocument.text;
+      this.renderOcrOverlay();
+      this.render();
+    }
+
+    private renderDiagnostics(): void {
+      this.diagnosticsView.render(
+        this.elements.diagnosticsGrid,
+        this.elements.diagnosticsText,
+        this.elements.diagnosticsSummary,
+        this.ocrDocument,
+        this.metadata,
+        this.receiptLines.map((line) => ({
+          id: line.id,
+          label: line.label,
+          amount: line.amount,
+          category: "Other",
+          categorizationConfidence: line.confidence / 100,
+          categorizationSource: "uncertain",
+          needsCategoryReview: false
+        }))
+      );
+    }
+
+    private addPerson(): void {
+      const name = this.elements.personNameInput.value.trim();
+      if (!name) return;
+
+      const person = { id: this.idService.create(), name };
+      this.people = [...this.people, person];
+      this.activePersonId = person.id;
+      this.elements.personNameInput.value = "";
+      this.render();
+    }
+
+    private selectPerson(personId: string): void {
+      this.activePersonId = personId;
+      this.render();
+    }
+
+    private deletePerson(personId: string): void {
+      this.people = this.people.filter((person) => person.id !== personId);
+      this.assignments = this.assignments.filter((assignment) => assignment.personId !== personId);
+      if (this.activePersonId === personId) this.activePersonId = this.people[0]?.id ?? null;
+      this.render();
+    }
+
+    private toggleLineSelection(lineId: string): void {
+      if (this.selectedLineIds.has(lineId)) {
+        this.selectedLineIds.delete(lineId);
+      } else {
+        this.selectedLineIds.add(lineId);
+      }
+      this.ocrOverlayView.highlightLines(this.elements.ocrOverlay, this.selectedLineIds);
+      this.render();
+    }
+
+    private toggleIgnoredLine(lineId: string): void {
+      this.receiptLines = this.receiptLines.map((line) =>
+        line.id === lineId ? { ...line, ignored: !line.ignored } : line
+      );
+      this.assignments = this.assignments.filter((assignment) => assignment.lineId !== lineId);
+      this.selectedLineIds.delete(lineId);
+      this.render();
+    }
+
+    private assignSelectedLines(): void {
+      if (!this.activePersonId || this.selectedLineIds.size === 0) return;
+
+      const mode = this.elements.assignmentMode.value as Domain.AssignmentMode;
+      const rawValue = Number(this.elements.assignmentValue.value);
+      const value = mode === "equal" ? 0 : Number.isFinite(rawValue) ? rawValue : 0;
+      const nextAssignments = this.assignments.filter(
+        (assignment) => !this.selectedLineIds.has(assignment.lineId) || assignment.personId !== this.activePersonId
+      );
+
+      this.selectedLineIds.forEach((lineId) => {
+        nextAssignments.push({
+          id: this.idService.create(),
+          lineId,
+          personId: this.activePersonId as string,
+          mode,
+          value
+        });
+      });
+
+      this.assignments = nextAssignments;
+      this.selectedLineIds.clear();
+      this.renderOcrOverlay();
+      this.render();
+    }
+
+    private getTaxAmount(): number {
+      const value = Number(this.elements.taxInput.value);
+      return Number.isFinite(value) ? value : 0;
     }
 
     private scheduleCategoryReview(): void {

@@ -238,6 +238,45 @@ var ReceiptRing;
 (function (ReceiptRing) {
     var Services;
     (function (Services) {
+        class PaddleOcrProvider {
+            constructor() {
+                this.name = "PaddleOCR";
+            }
+            async recognize(_file, _onProgress) {
+                throw new Error("PaddleOCR provider is installed but not active in the static bundle. Move the app to an ESM bundler to enable @paddleocr/paddleocr-js as the primary OCR engine.");
+            }
+        }
+        Services.PaddleOcrProvider = PaddleOcrProvider;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class NoopOcrRepairService {
+            async repair(document) {
+                return document;
+            }
+        }
+        Services.NoopOcrRepairService = NoopOcrRepairService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class NoopAiCategorizationService {
+            async categorize(items) {
+                return items;
+            }
+        }
+        Services.NoopAiCategorizationService = NoopAiCategorizationService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
         class CategoryRuleStorageService {
             constructor(storageKey) {
                 this.storageKey = storageKey;
@@ -396,6 +435,37 @@ var ReceiptRing;
                     .map((line) => this.parseLine(line))
                     .filter((item) => item !== null);
             }
+            parseOcr(document) {
+                return document.lines
+                    .map((line) => this.parseSpatialLine(line, document.imageWidth))
+                    .filter((item) => item !== null);
+            }
+            parseReceiptLines(document) {
+                return document.lines
+                    .map((line) => this.parseReceiptLine(line, document.imageWidth))
+                    .filter((line) => line !== null);
+            }
+            extractMetadata(document) {
+                const lines = document.lines.map((line) => this.getLineText(line));
+                const text = lines.join("\n");
+                const amountNear = (label) => {
+                    const line = lines.find((candidate) => label.test(candidate));
+                    const match = line?.match(this.amountPattern);
+                    return match ? this.parseAmount(match[1]) : null;
+                };
+                const dateMatch = text.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/);
+                const timeMatch = text.match(/\b(\d{1,2}:\d{2}\s?(?:AM|PM)?)\b/i);
+                const receiptMatch = text.match(/\b(?:receipt|trans|transaction|order|invoice|ref)[\s#:.-]*([A-Z0-9-]{4,})\b/i);
+                return {
+                    storeName: lines.find((line) => /[A-Za-z]{3,}/.test(line) && !this.ignoredLabel.test(line)) ?? "",
+                    date: dateMatch?.[1] ?? "",
+                    time: timeMatch?.[1] ?? "",
+                    receiptNumber: receiptMatch?.[1] ?? "",
+                    subtotal: amountNear(/^sub\s*total|subtotal/i),
+                    tax: amountNear(/^tax\b|sales tax/i),
+                    total: amountNear(/^total\b|amount due|balance due/i)
+                };
+            }
             parseLine(line) {
                 const match = line.match(this.amountPattern);
                 if (!match || match.index === undefined)
@@ -420,6 +490,99 @@ var ReceiptRing;
                     needsCategoryReview: categorization.shouldPrompt
                 };
             }
+            parseSpatialLine(line, imageWidth) {
+                const words = line.words.slice().sort((left, right) => left.x - right.x);
+                const priceSpan = this.findPriceSpan(words, imageWidth);
+                if (!priceSpan)
+                    return null;
+                const priceWord = words[priceSpan.startIndex];
+                const labelWords = words
+                    .slice(0, priceSpan.startIndex)
+                    .filter((word) => word.x < priceWord.x)
+                    .map((word) => word.text);
+                const label = labelWords.join(" ").replace(/[*#@]/g, "").replace(/\b\d{4,}\b/g, "").trim();
+                const amount = this.parseAmount(priceSpan.text);
+                if (!label || this.ignoredLabel.test(label) || !Number.isFinite(amount) || amount <= 0) {
+                    return null;
+                }
+                const categorization = this.categorizationService.categorize(label);
+                return {
+                    id: this.idService.create(),
+                    label: this.toTitleCase(label),
+                    amount: Number(amount.toFixed(2)),
+                    category: categorization.category,
+                    categorizationConfidence: categorization.confidence,
+                    categorizationSource: categorization.source,
+                    needsCategoryReview: categorization.shouldPrompt
+                };
+            }
+            parseReceiptLine(line, imageWidth) {
+                const words = line.words.slice().sort((left, right) => left.x - right.x);
+                const priceSpan = this.findPriceSpan(words, imageWidth);
+                if (!priceSpan)
+                    return null;
+                const priceWord = words[priceSpan.startIndex];
+                const label = words
+                    .slice(0, priceSpan.startIndex)
+                    .filter((word) => word.x < priceWord.x)
+                    .map((word) => word.text)
+                    .join(" ")
+                    .replace(/[*#@]/g, "")
+                    .replace(/\b\d{4,}\b/g, "")
+                    .trim();
+                const amount = this.parseAmount(priceSpan.text);
+                if (!label || this.ignoredLabel.test(label) || !Number.isFinite(amount) || amount <= 0) {
+                    return null;
+                }
+                const minX = Math.min(...line.words.map((word) => word.x));
+                const minY = Math.min(...line.words.map((word) => word.y));
+                const maxX = Math.max(...line.words.map((word) => word.x + word.width));
+                const maxY = Math.max(...line.words.map((word) => word.y + word.height));
+                return {
+                    id: line.id,
+                    label: this.toTitleCase(label),
+                    amount: Number(amount.toFixed(2)),
+                    confidence: line.confidence,
+                    ignored: false,
+                    ocrLineId: line.id,
+                    bounds: {
+                        x: minX,
+                        y: minY,
+                        width: maxX - minX,
+                        height: maxY - minY
+                    }
+                };
+            }
+            findPriceSpan(words, imageWidth) {
+                let bestSpan = null;
+                let bestScore = 0;
+                words.forEach((_word, index) => {
+                    for (let endIndex = index; endIndex < Math.min(words.length, index + 3); endIndex += 1) {
+                        const spanWords = words.slice(index, endIndex + 1);
+                        const text = spanWords.map((word) => word.text).join("");
+                        if (!this.amountPattern.test(text))
+                            continue;
+                        const rightMost = Math.max(...spanWords.map((word) => word.x + word.width));
+                        const confidence = spanWords.reduce((sum, word) => sum + word.confidence, 0) / Math.max(1, spanWords.length);
+                        const rightBias = rightMost / imageWidth;
+                        const score = confidence + rightBias * 35;
+                        if (score > bestScore && rightBias > 0.42) {
+                            bestScore = score;
+                            bestSpan = { startIndex: index, endIndex, text };
+                        }
+                    }
+                });
+                return bestSpan;
+            }
+            getLineText(line) {
+                return line.words
+                    .slice()
+                    .sort((left, right) => left.x - right.x)
+                    .map((word) => word.text)
+                    .join(" ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+            }
             toTitleCase(value) {
                 return value
                     .toLowerCase()
@@ -436,6 +599,64 @@ var ReceiptRing;
             }
         }
         Services.ReceiptParserService = ReceiptParserService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class SplitCalculatorService {
+            calculate(people, lines, assignments, tax) {
+                const itemTotals = new Map();
+                people.forEach((person) => itemTotals.set(person.id, 0));
+                lines
+                    .filter((line) => !line.ignored)
+                    .forEach((line) => {
+                    const lineAssignments = assignments.filter((assignment) => assignment.lineId === line.id);
+                    this.getLineShares(line, lineAssignments).forEach((amount, personId) => {
+                        itemTotals.set(personId, (itemTotals.get(personId) ?? 0) + amount);
+                    });
+                });
+                const subtotal = Array.from(itemTotals.values()).reduce((sum, value) => sum + value, 0);
+                return people.map((person) => {
+                    const itemTotal = itemTotals.get(person.id) ?? 0;
+                    const allocatedTax = subtotal > 0 ? (itemTotal / subtotal) * tax : 0;
+                    return {
+                        personId: person.id,
+                        personName: person.name,
+                        itemTotal,
+                        allocatedTax,
+                        finalTotal: itemTotal + allocatedTax
+                    };
+                });
+            }
+            getUnassignedCount(lines, assignments) {
+                return lines.filter((line) => !line.ignored && !assignments.some((assignment) => assignment.lineId === line.id)).length;
+            }
+            getLineShares(line, assignments) {
+                const shares = new Map();
+                if (assignments.length === 0)
+                    return shares;
+                if (assignments.every((assignment) => assignment.mode === "equal")) {
+                    const share = line.amount / assignments.length;
+                    assignments.forEach((assignment) => shares.set(assignment.personId, share));
+                    return shares;
+                }
+                assignments.forEach((assignment) => {
+                    if (assignment.mode === "percentage") {
+                        shares.set(assignment.personId, line.amount * (assignment.value / 100));
+                    }
+                    else if (assignment.mode === "amount") {
+                        shares.set(assignment.personId, assignment.value);
+                    }
+                    else {
+                        shares.set(assignment.personId, line.amount / assignments.length);
+                    }
+                });
+                return shares;
+            }
+        }
+        Services.SplitCalculatorService = SplitCalculatorService;
     })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
@@ -538,10 +759,11 @@ var ReceiptRing;
                         user_defined_dpi: "300"
                     });
                     const result = await worker.recognize(pass.image, {}, { text: true, blocks: true });
-                    const text = this.cleanExtractedText(this.getStructuredText(result.data));
-                    candidates.push(this.scoreCandidate(pass.name, text, result.data.confidence));
+                    const lines = this.normalizeLines(result.data, pass.transform);
+                    const text = this.getTextFromLines(lines);
+                    candidates.push(this.scoreCandidate(pass.name, text, lines, result.data.confidence));
                 }
-                const bestCandidate = candidates.sort((left, right) => right.score - left.score)[0];
+                const bestCandidate = this.buildConsensusCandidate(candidates);
                 if (!bestCandidate || bestCandidate.text.length < 8) {
                     throw new Error("I could not read enough text from this receipt. Try a flatter, brighter photo.");
                 }
@@ -549,7 +771,22 @@ var ReceiptRing;
                     label: `Best read found ${bestCandidate.itemLineCount} likely item lines`,
                     progress: 1
                 });
-                return bestCandidate.text;
+                const firstVariant = variants[0];
+                return {
+                    provider: "Tesseract consensus",
+                    text: bestCandidate.text,
+                    lines: bestCandidate.lines,
+                    confidence: bestCandidate.confidence,
+                    imageWidth: firstVariant.transform.originalWidth,
+                    imageHeight: firstVariant.transform.originalHeight,
+                    artifacts: variants.map((variant) => ({
+                        label: variant.name,
+                        dataUrl: variant.canvas.toDataURL("image/jpeg", 0.78),
+                        width: variant.canvas.width,
+                        height: variant.canvas.height
+                    })),
+                    quality: this.analyzeImageQuality(variants[0].canvas)
+                };
             }
             async getWorker(tesseract, onProgress) {
                 if (!this.workerPromise) {
@@ -572,25 +809,28 @@ var ReceiptRing;
             }
             async createReceiptImageVariants(file) {
                 const image = await this.loadImage(file);
-                const baseCanvas = this.createBaseCanvas(image);
+                const { canvas: baseCanvas, transform } = this.createBaseCanvas(image);
                 return [
                     {
                         name: "adaptive receipt",
-                        canvas: this.createAdaptiveThresholdCanvas(baseCanvas)
+                        canvas: this.createAdaptiveThresholdCanvas(baseCanvas),
+                        transform
                     },
                     {
                         name: "balanced receipt",
-                        canvas: this.createContrastCanvas(baseCanvas, 1.42, 112)
+                        canvas: this.createContrastCanvas(baseCanvas, 1.42, 112),
+                        transform
                     },
                     {
                         name: "sharp receipt",
-                        canvas: this.createBinaryCanvas(baseCanvas)
+                        canvas: this.createBinaryCanvas(baseCanvas),
+                        transform
                     }
                 ];
             }
             createBaseCanvas(image) {
                 const crop = this.detectReceiptCrop(image);
-                const targetWidth = Math.min(Math.max(crop.sw, 1500), 1900);
+                const targetWidth = Math.min(Math.max(crop.sw, 1800), 2400);
                 const scale = targetWidth / crop.sw;
                 const targetHeight = Math.round(crop.sh * scale);
                 const canvas = document.createElement("canvas");
@@ -600,7 +840,15 @@ var ReceiptRing;
                 context.imageSmoothingEnabled = true;
                 context.imageSmoothingQuality = "high";
                 context.drawImage(image, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, targetWidth, targetHeight);
-                return canvas;
+                return {
+                    canvas,
+                    transform: {
+                        originalWidth: image.naturalWidth,
+                        originalHeight: image.naturalHeight,
+                        crop,
+                        scale
+                    }
+                };
             }
             detectReceiptCrop(image) {
                 const probeWidth = 640;
@@ -726,36 +974,189 @@ var ReceiptRing;
                 const balanced = variants.find((variant) => variant.name === "balanced receipt") ?? variants[0];
                 const sharp = variants.find((variant) => variant.name === "sharp receipt") ?? variants[0];
                 return [
-                    { name: "adaptive receipt", image: adaptive.canvas, pageSegmentationMode: "4" },
-                    { name: "balanced receipt", image: balanced.canvas, pageSegmentationMode: "6" },
-                    { name: "sparse price scan", image: sharp.canvas, pageSegmentationMode: "11" },
-                    { name: "full receipt fallback", image: balanced.canvas, pageSegmentationMode: "3" }
+                    { name: "adaptive receipt", image: adaptive.canvas, transform: adaptive.transform, pageSegmentationMode: "4" },
+                    { name: "balanced receipt", image: balanced.canvas, transform: balanced.transform, pageSegmentationMode: "6" },
+                    { name: "sparse price scan", image: sharp.canvas, transform: sharp.transform, pageSegmentationMode: "11" },
+                    { name: "full receipt fallback", image: balanced.canvas, transform: balanced.transform, pageSegmentationMode: "3" }
                 ];
             }
-            getStructuredText(data) {
-                const lines = data.blocks
+            normalizeLines(data, transform) {
+                const rawLines = data.blocks
                     ?.flatMap((block) => block.paragraphs)
                     .flatMap((paragraph) => paragraph.lines)
-                    .filter((line) => line.text.trim().length > 0)
-                    .sort((left, right) => {
-                    const rowDistance = left.bbox.y0 - right.bbox.y0;
-                    return Math.abs(rowDistance) > 12 ? rowDistance : left.bbox.x0 - right.bbox.x0;
-                })
-                    .map((line) => line.text) ?? [];
-                return lines.length > 0 ? lines.join("\n") : data.text;
+                    .filter((line) => line.text.trim().length > 0) ?? [];
+                const words = rawLines.flatMap((line, lineIndex) => (line.words.length > 0 ? line.words : [this.createFallbackWord(line)]).map((word, wordIndex) => this.normalizeWord(word, transform, `ocr-${lineIndex}-${wordIndex}`)));
+                if (words.length === 0) {
+                    return this.createFallbackLines(data.text, transform);
+                }
+                return this.clusterWordsIntoReceiptLines(words);
             }
-            scoreCandidate(name, text, confidence) {
-                const lines = text.split("\n").filter(Boolean);
-                const itemLineCount = lines.filter((line) => this.receiptPricePattern.test(line)).length;
-                const amountDensity = itemLineCount / Math.max(1, lines.length);
+            clusterWordsIntoReceiptLines(words) {
+                const cleanWords = words
+                    .filter((word) => word.text.trim().length > 0)
+                    .sort((left, right) => this.getWordCenterY(left) - this.getWordCenterY(right));
+                const medianWordHeight = this.getMedian(cleanWords.map((word) => word.height));
+                const rowThreshold = Math.max(4, Math.min(10, medianWordHeight * 0.48));
+                const groups = [];
+                cleanWords.forEach((word) => {
+                    const centerY = this.getWordCenterY(word);
+                    const group = groups.find((candidate) => {
+                        const groupCenter = this.getMedian(candidate.map((candidateWord) => this.getWordCenterY(candidateWord)));
+                        const groupHeight = this.getMedian(candidate.map((candidateWord) => candidateWord.height));
+                        const adaptiveThreshold = Math.max(4, Math.min(10, Math.min(groupHeight, word.height) * 0.52));
+                        return Math.abs(groupCenter - centerY) <= Math.min(rowThreshold, adaptiveThreshold);
+                    });
+                    if (group) {
+                        group.push(word);
+                    }
+                    else {
+                        groups.push([word]);
+                    }
+                });
+                return groups
+                    .map((group, index) => this.createLineFromWords(group, index))
+                    .filter((line) => line.words.length > 0)
+                    .sort((left, right) => this.getLineY(left) - this.getLineY(right));
+            }
+            createLineFromWords(words, index) {
+                const sortedWords = words
+                    .slice()
+                    .sort((left, right) => left.x - right.x)
+                    .map((word, wordIndex) => ({
+                    ...word,
+                    id: `line-${index}-word-${wordIndex}`
+                }));
+                const confidence = sortedWords.reduce((sum, word) => sum + word.confidence, 0) / Math.max(1, sortedWords.length);
+                return {
+                    id: `line-${index}-${Math.round(this.getMedian(sortedWords.map((word) => this.getWordCenterY(word))))}`,
+                    words: sortedWords,
+                    confidence
+                };
+            }
+            normalizeWord(word, transform, id) {
+                return {
+                    id,
+                    text: this.repairReceiptLine(word.text),
+                    confidence: this.normalizeConfidence(word.confidence),
+                    x: transform.crop.sx + word.bbox.x0 / transform.scale,
+                    y: transform.crop.sy + word.bbox.y0 / transform.scale,
+                    width: Math.max(1, (word.bbox.x1 - word.bbox.x0) / transform.scale),
+                    height: Math.max(1, (word.bbox.y1 - word.bbox.y0) / transform.scale)
+                };
+            }
+            createFallbackWord(line) {
+                return {
+                    text: line.text,
+                    confidence: line.confidence,
+                    bbox: line.bbox
+                };
+            }
+            createFallbackLines(text, transform) {
+                return this.cleanExtractedText(text)
+                    .split("\n")
+                    .map((line, index) => ({
+                    id: `fallback-${index}`,
+                    confidence: 50,
+                    words: [
+                        {
+                            id: `fallback-word-${index}`,
+                            text: line,
+                            confidence: 50,
+                            x: transform.crop.sx,
+                            y: transform.crop.sy + index * 24,
+                            width: transform.crop.sw,
+                            height: 22
+                        }
+                    ]
+                }));
+            }
+            scoreCandidate(name, text, ocrLines, confidence) {
+                const textLines = text.split("\n").filter(Boolean);
+                const itemLineCount = textLines.filter((lineText) => this.receiptPricePattern.test(lineText)).length;
+                const amountDensity = itemLineCount / Math.max(1, textLines.length);
                 const score = confidence + itemLineCount * 28 + amountDensity * 26 + Math.min(text.length / 28, 24);
                 return {
                     name,
                     text,
+                    lines: ocrLines,
                     confidence,
                     itemLineCount,
                     score
                 };
+            }
+            buildConsensusCandidate(candidates) {
+                if (candidates.length === 0)
+                    return null;
+                const groupedLines = [];
+                const allLines = candidates
+                    .flatMap((candidate) => candidate.lines)
+                    .sort((left, right) => this.getLineY(left) - this.getLineY(right));
+                allLines.forEach((line) => {
+                    const y = this.getLineY(line);
+                    const group = groupedLines.find((candidateGroup) => {
+                        const lineHeight = this.getLineHeight(line);
+                        const groupHeight = this.getLineHeight(candidateGroup[0]);
+                        const threshold = Math.max(5, Math.min(12, Math.min(lineHeight, groupHeight) * 0.62));
+                        return Math.abs(this.getLineCenterY(candidateGroup[0]) - this.getLineCenterY(line)) <= threshold;
+                    });
+                    if (group) {
+                        group.push(line);
+                    }
+                    else {
+                        groupedLines.push([line]);
+                    }
+                });
+                const consensusLines = groupedLines
+                    .map((group, index) => this.getBestLineForGroup(group, index))
+                    .sort((left, right) => this.getLineY(left) - this.getLineY(right));
+                const text = this.getTextFromLines(consensusLines);
+                const confidence = consensusLines.reduce((sum, line) => sum + line.confidence, 0) / Math.max(1, consensusLines.length);
+                return this.scoreCandidate("consensus", text, consensusLines, confidence);
+            }
+            getBestLineForGroup(group, index) {
+                const best = group
+                    .slice()
+                    .sort((left, right) => this.scoreLine(right) - this.scoreLine(left))[0];
+                return {
+                    ...best,
+                    id: `consensus-line-${index}`,
+                    confidence: Math.min(99, group.reduce((sum, line) => sum + line.confidence, 0) / group.length + Math.min(group.length - 1, 3) * 2),
+                    words: best.words.map((word, wordIndex) => ({
+                        ...word,
+                        id: `consensus-${index}-${wordIndex}`
+                    }))
+                };
+            }
+            scoreLine(line) {
+                const text = this.getLineText(line);
+                return line.confidence + (this.receiptPricePattern.test(text) ? 36 : 0) + Math.min(text.length, 40);
+            }
+            getTextFromLines(lines) {
+                return lines.map((line) => this.getLineText(line)).filter(Boolean).join("\n");
+            }
+            getLineText(line) {
+                return this.cleanExtractedText(line.words.map((word) => word.text).join(" "));
+            }
+            getLineY(line) {
+                return Math.min(...line.words.map((word) => word.y));
+            }
+            getLineCenterY(line) {
+                return this.getMedian(line.words.map((word) => this.getWordCenterY(word)));
+            }
+            getLineHeight(line) {
+                return this.getMedian(line.words.map((word) => word.height));
+            }
+            getWordCenterY(word) {
+                return word.y + word.height / 2;
+            }
+            getMedian(values) {
+                if (values.length === 0)
+                    return 0;
+                const sortedValues = values.slice().sort((left, right) => left - right);
+                const middle = Math.floor(sortedValues.length / 2);
+                return sortedValues.length % 2 === 0
+                    ? (sortedValues[middle - 1] + sortedValues[middle]) / 2
+                    : sortedValues[middle];
             }
             cleanExtractedText(text) {
                 return text
@@ -822,6 +1223,41 @@ var ReceiptRing;
                 }
                 return threshold;
             }
+            analyzeImageQuality(canvas) {
+                const context = this.getContext(canvas);
+                const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+                const gray = new Float32Array(canvas.width * canvas.height);
+                let min = 255;
+                let max = 0;
+                for (let index = 0; index < gray.length; index += 1) {
+                    const dataIndex = index * 4;
+                    const value = pixels.data[dataIndex] * 0.299 + pixels.data[dataIndex + 1] * 0.587 + pixels.data[dataIndex + 2] * 0.114;
+                    gray[index] = value;
+                    min = Math.min(min, value);
+                    max = Math.max(max, value);
+                }
+                const laplacianValues = [];
+                for (let y = 1; y < canvas.height - 1; y += 1) {
+                    for (let x = 1; x < canvas.width - 1; x += 1) {
+                        const center = gray[y * canvas.width + x] * -4;
+                        const laplacian = center +
+                            gray[(y - 1) * canvas.width + x] +
+                            gray[(y + 1) * canvas.width + x] +
+                            gray[y * canvas.width + x - 1] +
+                            gray[y * canvas.width + x + 1];
+                        laplacianValues.push(laplacian);
+                    }
+                }
+                const mean = laplacianValues.reduce((sum, value) => sum + value, 0) / Math.max(1, laplacianValues.length);
+                const blurVariance = laplacianValues.reduce((sum, value) => sum + (value - mean) ** 2, 0) / Math.max(1, laplacianValues.length);
+                const contrast = max - min;
+                const warnings = [];
+                if (blurVariance < 95)
+                    warnings.push("Receipt image appears blurry. Consider retaking the photo.");
+                if (contrast < 70)
+                    warnings.push("Receipt image has low contrast. Try brighter, more even lighting.");
+                return { blurVariance, contrast, warnings };
+            }
             cloneCanvas(source) {
                 const canvas = document.createElement("canvas");
                 const context = this.getContext(canvas);
@@ -839,6 +1275,9 @@ var ReceiptRing;
             }
             clamp(value) {
                 return Math.max(0, Math.min(255, value));
+            }
+            normalizeConfidence(confidence) {
+                return confidence <= 1 ? confidence * 100 : confidence;
             }
             loadImage(file) {
                 return new Promise((resolve, reject) => {
@@ -865,6 +1304,161 @@ var ReceiptRing;
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
 (function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class GeminiService {
+            async loadDotEnv() {
+                try {
+                    const response = await fetch(".env");
+                    if (!response.ok)
+                        return {};
+                    const text = await response.text();
+                    const config = {};
+                    text.split(/\r?\n/).forEach((line) => {
+                        const cleanLine = line.trim();
+                        if (!cleanLine || cleanLine.startsWith("#"))
+                            return;
+                        const index = cleanLine.indexOf("=");
+                        if (index === -1)
+                            return;
+                        const key = cleanLine.slice(0, index).trim();
+                        const value = cleanLine.slice(index + 1).trim();
+                        config[key] = value;
+                    });
+                    return config;
+                }
+                catch {
+                    return {};
+                }
+            }
+            fileToBase64(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const result = reader.result;
+                        const base64 = result.split(",")[1];
+                        resolve(base64);
+                    };
+                    reader.onerror = (error) => reject(error);
+                    reader.readAsDataURL(file);
+                });
+            }
+            async parseReceiptImage(file, apiKey, model) {
+                const base64Data = await this.fileToBase64(file);
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+                const promptText = `You are an expert receipt parser.
+
+Your job is to analyze a receipt image and extract ONLY the purchasable items, their prices, and receipt totals.
+
+Rules:
+
+1. Extract every purchased item and its corresponding price.
+2. Preserve item order exactly as it appears on the receipt.
+3. Ignore:
+   - Store addresses
+   - Phone numbers
+   - Loyalty information
+   - Cashier information
+   - Payment methods
+   - Approval codes
+   - Card numbers
+   - Barcode values
+   - Receipt IDs unless needed for totals
+4. Do not invent items.
+5. If text is unclear, make the best reasonable interpretation.
+6. Return valid JSON only.
+7. Prices must be numeric values.
+8. Extract subtotal, tax, and total whenever available.
+9. If an item appears to be a discount or coupon, include it in a separate discounts array.
+10. If confidence is low for an item name, still include the item but add a lowConfidence flag.
+
+Return JSON in exactly this format:
+
+{
+  "storeName": string | null,
+  "subtotal": number | null,
+  "tax": number | null,
+  "total": number | null,
+  "items": [
+    {
+      "name": string,
+      "price": number,
+      "lowConfidence": boolean
+    }
+  ],
+  "discounts": [
+    {
+      "name": string,
+      "amount": number
+    }
+  ]
+}
+
+Important:
+
+Only include actual purchasable line items in the items array.
+
+Do not include:
+- SUBTOTAL
+- TAX
+- TOTAL
+- CHANGE
+- CASH
+- VISA
+- MASTERCARD
+- PAYMENT
+- BALANCE
+
+Return only JSON.`;
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        contents: [
+                            {
+                                parts: [
+                                    { text: promptText },
+                                    {
+                                        inlineData: {
+                                            mimeType: file.type,
+                                            data: base64Data
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        generationConfig: {
+                            responseMimeType: "application/json"
+                        }
+                    })
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Gemini API Error (${response.status}): ${errText}`);
+                }
+                const json = await response.json();
+                const textResult = json.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!textResult) {
+                    throw new Error("No response text returned from Gemini.");
+                }
+                try {
+                    const cleanedText = textResult.trim().replace(/^```json/, "").replace(/```$/, "").trim();
+                    const parsed = JSON.parse(cleanedText);
+                    return parsed;
+                }
+                catch (e) {
+                    console.error("Failed to parse Gemini JSON output. Raw text:", textResult);
+                    throw new Error("Failed to parse the structured receipt JSON from Gemini response.");
+                }
+            }
+        }
+        Services.GeminiService = GeminiService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
     var UI;
     (function (UI) {
         class DomRegistryFactory {
@@ -875,27 +1469,54 @@ var ReceiptRing;
                     dropzone: this.getElement("#dropzone", HTMLElement),
                     receiptPreviewWrap: this.getElement("#receiptPreviewWrap", HTMLElement),
                     receiptPreview: this.getElement("#receiptPreview", HTMLImageElement),
+                    ocrOverlay: this.getElement("#ocrOverlay", HTMLElement),
+                    ocrReviewTools: this.getElement("#ocrReviewTools", HTMLElement),
+                    ocrOverlayToggle: this.getElement("#ocrOverlayToggle", HTMLInputElement),
+                    diagnosticsToggle: this.getElement("#diagnosticsToggle", HTMLButtonElement),
+                    diagnosticsPanel: this.getElement("#diagnosticsPanel", HTMLElement),
+                    diagnosticsGrid: this.getElement("#diagnosticsGrid", HTMLElement),
+                    diagnosticsText: this.getElement("#diagnosticsText", HTMLElement),
+                    diagnosticsSummary: this.getElement("#diagnosticsSummary", HTMLElement),
                     clearImageButton: this.getElement("#clearImageButton", HTMLButtonElement),
                     ocrStatus: this.getElement("#ocrStatus", HTMLElement),
                     ocrStatusText: this.getElement("#ocrStatusText", HTMLElement),
                     ocrProgressBar: this.getElement("#ocrProgressBar", HTMLElement),
                     receiptText: this.getElement("#receiptText", HTMLTextAreaElement),
+                    openCameraButton: this.getElement("#openCameraButton", HTMLButtonElement),
+                    cameraModal: this.getElement("#cameraModal", HTMLElement),
+                    cameraVideo: this.getElement("#cameraVideo", HTMLVideoElement),
+                    cameraCanvas: this.getElement("#cameraCanvas", HTMLCanvasElement),
+                    closeCameraButton: this.getElement("#closeCameraButton", HTMLButtonElement),
+                    capturePhotoButton: this.getElement("#capturePhotoButton", HTMLButtonElement),
                     parseButton: this.getElement("#parseButton", HTMLButtonElement),
                     clearButton: this.getElement("#clearButton", HTMLButtonElement),
-                    addItemButton: this.getElement("#addItemButton", HTMLButtonElement),
-                    itemsList: this.getElement("#itemsList", HTMLElement),
+                    addItemButton: document.createElement("button"),
+                    receiptLinesList: this.getElement("#receiptLinesList", HTMLElement),
                     emptyState: this.getElement("#emptyState", HTMLElement),
+                    unassignedCount: this.getElement("#unassignedCount", HTMLElement),
+                    receiptCategory: this.getElement("#receiptCategory", HTMLSelectElement),
+                    personNameInput: this.getElement("#personNameInput", HTMLInputElement),
+                    addPersonButton: this.getElement("#addPersonButton", HTMLButtonElement),
+                    peopleList: this.getElement("#peopleList", HTMLElement),
+                    assignmentMode: this.getElement("#assignmentMode", HTMLSelectElement),
+                    assignmentValue: this.getElement("#assignmentValue", HTMLInputElement),
+                    assignLinesButton: this.getElement("#assignLinesButton", HTMLButtonElement),
+                    taxInput: this.getElement("#taxInput", HTMLInputElement),
+                    splitTotalsList: this.getElement("#splitTotalsList", HTMLElement),
                     itemCount: this.getElement("#itemCount", HTMLElement),
                     receiptTotal: this.getElement("#receiptTotal", HTMLElement),
-                    ringTotal: this.getElement("#ringTotal", HTMLElement),
-                    categoryRing: this.getElement("#categoryRing", SVGSVGElement),
-                    categoryList: this.getElement("#categoryList", HTMLElement),
                     categoryPrompt: this.getElement("#categoryPrompt", HTMLElement),
                     categoryPromptItem: this.getElement("#categoryPromptItem", HTMLElement),
                     categoryPromptSelect: this.getElement("#categoryPromptSelect", HTMLSelectElement),
                     categoryPromptRemember: this.getElement("#categoryPromptRemember", HTMLInputElement),
                     categoryPromptSkip: this.getElement("#categoryPromptSkip", HTMLButtonElement),
-                    categoryPromptSave: this.getElement("#categoryPromptSave", HTMLButtonElement)
+                    categoryPromptSave: this.getElement("#categoryPromptSave", HTMLButtonElement),
+                    settingsButton: this.getElement("#settingsButton", HTMLButtonElement),
+                    settingsModal: this.getElement("#settingsModal", HTMLElement),
+                    geminiApiKey: this.getElement("#geminiApiKey", HTMLInputElement),
+                    geminiModel: this.getElement("#geminiModel", HTMLSelectElement),
+                    closeSettingsButton: this.getElement("#closeSettingsButton", HTMLButtonElement),
+                    saveSettingsButton: this.getElement("#saveSettingsButton", HTMLButtonElement)
                 };
             }
             getElement(selector, constructorReference) {
@@ -979,6 +1600,202 @@ var ReceiptRing;
             }
         }
         UI.ItemListView = ItemListView;
+    })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var UI;
+    (function (UI) {
+        class SplitWorkspaceView {
+            constructor(currencyFormatService) {
+                this.currencyFormatService = currencyFormatService;
+            }
+            renderLines(container, lines, assignments, people, selectedLineIds, handlers) {
+                container.innerHTML = "";
+                lines.forEach((line) => {
+                    const row = document.createElement("div");
+                    row.className = "table-row";
+                    row.classList.toggle("is-selected", selectedLineIds.has(line.id));
+                    row.classList.toggle("is-ignored", line.ignored);
+                    const name = document.createElement("button");
+                    name.className = "line-select-button";
+                    name.type = "button";
+                    name.textContent = line.label;
+                    name.addEventListener("click", () => handlers.onLineToggle(line.id));
+                    const assigned = document.createElement("span");
+                    assigned.className = "assignment-summary";
+                    assigned.textContent = this.getAssignmentSummary(line.id, assignments, people);
+                    const amount = document.createElement("span");
+                    amount.className = "amount-cell";
+                    amount.textContent = this.currencyFormatService.format(line.amount);
+                    const ignore = document.createElement("button");
+                    ignore.className = "icon-button delete-row";
+                    ignore.type = "button";
+                    ignore.textContent = line.ignored ? "+" : "x";
+                    ignore.setAttribute("aria-label", line.ignored ? "Restore line" : "Ignore line");
+                    ignore.addEventListener("click", () => handlers.onLineIgnore(line.id));
+                    row.append(name, assigned, amount, ignore);
+                    container.append(row);
+                });
+            }
+            renderPeople(container, people, activePersonId, handlers) {
+                container.innerHTML = "";
+                people.forEach((person) => {
+                    const row = document.createElement("div");
+                    row.className = "person-chip";
+                    row.classList.toggle("is-active", person.id === activePersonId);
+                    const select = document.createElement("button");
+                    select.type = "button";
+                    select.textContent = person.name;
+                    select.addEventListener("click", () => handlers.onPersonSelect(person.id));
+                    const remove = document.createElement("button");
+                    remove.type = "button";
+                    remove.textContent = "x";
+                    remove.setAttribute("aria-label", `Remove ${person.name}`);
+                    remove.addEventListener("click", () => handlers.onPersonDelete(person.id));
+                    row.append(select, remove);
+                    container.append(row);
+                });
+            }
+            renderTotals(container, totals) {
+                container.innerHTML = "";
+                totals.forEach((total) => {
+                    const row = document.createElement("div");
+                    row.className = "split-total-row";
+                    row.innerHTML = `
+          <strong>${total.personName}</strong>
+          <span>Items ${this.currencyFormatService.format(total.itemTotal)}</span>
+          <span>Tax ${this.currencyFormatService.format(total.allocatedTax)}</span>
+          <b>${this.currencyFormatService.format(total.finalTotal)}</b>
+        `;
+                    container.append(row);
+                });
+            }
+            getAssignmentSummary(lineId, assignments, people) {
+                const names = assignments
+                    .filter((assignment) => assignment.lineId === lineId)
+                    .map((assignment) => people.find((person) => person.id === assignment.personId)?.name)
+                    .filter((name) => Boolean(name));
+                return names.length > 0 ? names.join(", ") : "Unassigned";
+            }
+        }
+        UI.SplitWorkspaceView = SplitWorkspaceView;
+    })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var UI;
+    (function (UI) {
+        class OcrOverlayView {
+            render(container, document, handlers) {
+                container.innerHTML = "";
+                if (!document)
+                    return;
+                document.lines.forEach((line) => {
+                    const lineElement = this.createLineElement(line, document, handlers);
+                    container.append(lineElement);
+                    line.words.forEach((word) => {
+                        container.append(this.createWordElement(word, line, document, handlers));
+                    });
+                });
+            }
+            setVisible(container, isVisible) {
+                container.classList.toggle("is-hidden", !isVisible);
+            }
+            highlightLine(container, lineId) {
+                container.querySelectorAll("[data-ocr-line-id]").forEach((element) => {
+                    element.classList.toggle("is-selected", element.getAttribute("data-ocr-line-id") === lineId);
+                });
+            }
+            highlightLines(container, lineIds) {
+                container.querySelectorAll("[data-ocr-line-id]").forEach((element) => {
+                    const lineId = element.getAttribute("data-ocr-line-id");
+                    element.classList.toggle("is-selected", Boolean(lineId && lineIds.has(lineId)));
+                });
+            }
+            createLineElement(line, document, handlers) {
+                const box = this.getLineBox(line);
+                const element = documentFragmentElement("button");
+                element.type = "button";
+                element.className = `ocr-line-box ${this.getConfidenceClass(line.confidence)}`;
+                element.title = `Line confidence: ${Math.round(line.confidence)}%`;
+                element.setAttribute("data-ocr-line-id", line.id);
+                this.positionElement(element, box, document);
+                element.addEventListener("click", () => handlers.onLineSelect(line.id));
+                return element;
+            }
+            createWordElement(word, line, document, handlers) {
+                const element = documentFragmentElement("button");
+                element.type = "button";
+                element.className = `ocr-word-box ${this.getConfidenceClass(word.confidence)}`;
+                element.textContent = word.text;
+                element.title = `${word.text} (${Math.round(word.confidence)}%)`;
+                element.setAttribute("data-ocr-line-id", line.id);
+                element.setAttribute("data-ocr-word-id", word.id);
+                this.positionElement(element, word, document);
+                element.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    handlers.onLineSelect(line.id);
+                    this.editWord(element, word, handlers);
+                });
+                return element;
+            }
+            editWord(element, word, handlers) {
+                const input = document.createElement("input");
+                input.className = "ocr-word-editor";
+                input.value = word.text;
+                element.replaceChildren(input);
+                input.focus();
+                input.select();
+                const save = () => {
+                    const nextText = input.value.trim();
+                    if (nextText && nextText !== word.text) {
+                        handlers.onWordUpdate(word.id, nextText);
+                    }
+                    else {
+                        element.textContent = word.text;
+                    }
+                };
+                input.addEventListener("change", save);
+                input.addEventListener("blur", save, { once: true });
+                input.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter")
+                        input.blur();
+                    if (event.key === "Escape") {
+                        element.textContent = word.text;
+                    }
+                });
+            }
+            getLineBox(line) {
+                const minX = Math.min(...line.words.map((word) => word.x));
+                const minY = Math.min(...line.words.map((word) => word.y));
+                const maxX = Math.max(...line.words.map((word) => word.x + word.width));
+                const maxY = Math.max(...line.words.map((word) => word.y + word.height));
+                return {
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY
+                };
+            }
+            positionElement(element, box, document) {
+                element.style.left = `${(box.x / document.imageWidth) * 100}%`;
+                element.style.top = `${(box.y / document.imageHeight) * 100}%`;
+                element.style.width = `${(box.width / document.imageWidth) * 100}%`;
+                element.style.height = `${(box.height / document.imageHeight) * 100}%`;
+            }
+            getConfidenceClass(confidence) {
+                if (confidence >= 95)
+                    return "is-high";
+                if (confidence >= 80)
+                    return "is-medium";
+                return "is-low";
+            }
+        }
+        UI.OcrOverlayView = OcrOverlayView;
+        function documentFragmentElement(tagName) {
+            return document.createElement(tagName);
+        }
     })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
@@ -1160,10 +1977,54 @@ var ReceiptRing;
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
 (function (ReceiptRing) {
+    var UI;
+    (function (UI) {
+        class DiagnosticsView {
+            render(grid, textOutput, summary, document, metadata, items) {
+                grid.innerHTML = "";
+                textOutput.textContent = "";
+                if (!document) {
+                    summary.textContent = "No OCR run";
+                    return;
+                }
+                summary.textContent = `${Math.round(document.confidence)}% confidence / ${items.length} items`;
+                document.artifacts.forEach((artifact) => grid.append(this.createArtifactCard(artifact)));
+                grid.append(this.createTextCard("Image quality", document.quality.warnings.join("\n") || "No warnings"));
+                grid.append(this.createTextCard("Metadata", JSON.stringify(metadata, null, 2)));
+                grid.append(this.createTextCard("Parsed items", JSON.stringify(items, null, 2)));
+                textOutput.textContent = document.text;
+            }
+            createArtifactCard(artifact) {
+                const card = document.createElement("article");
+                card.className = "diagnostics-card";
+                const title = document.createElement("strong");
+                title.textContent = artifact.label;
+                const image = document.createElement("img");
+                image.src = artifact.dataUrl;
+                image.alt = artifact.label;
+                card.append(title, image);
+                return card;
+            }
+            createTextCard(titleText, contentText) {
+                const card = document.createElement("article");
+                card.className = "diagnostics-card";
+                const title = document.createElement("strong");
+                title.textContent = titleText;
+                const content = document.createElement("pre");
+                content.textContent = contentText;
+                card.append(title, content);
+                return card;
+            }
+        }
+        UI.DiagnosticsView = DiagnosticsView;
+    })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
     var App;
     (function (App) {
         class AppController {
-            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, summaryService, currencyFormatService, imagePreviewService, receiptOcrService, itemListView, ringView, categorySummaryView, categoryPromptView, idService) {
+            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, summaryService, currencyFormatService, imagePreviewService, receiptOcrService, geminiService, itemListView, ringView, categorySummaryView, categoryPromptView, ocrOverlayView, diagnosticsView, splitWorkspaceView, splitCalculatorService, idService) {
                 this.elements = elements;
                 this.parserService = parserService;
                 this.categorizationService = categorizationService;
@@ -1173,11 +2034,25 @@ var ReceiptRing;
                 this.currencyFormatService = currencyFormatService;
                 this.imagePreviewService = imagePreviewService;
                 this.receiptOcrService = receiptOcrService;
+                this.geminiService = geminiService;
                 this.itemListView = itemListView;
                 this.ringView = ringView;
                 this.categorySummaryView = categorySummaryView;
                 this.categoryPromptView = categoryPromptView;
+                this.ocrOverlayView = ocrOverlayView;
+                this.diagnosticsView = diagnosticsView;
+                this.splitWorkspaceView = splitWorkspaceView;
+                this.splitCalculatorService = splitCalculatorService;
                 this.idService = idService;
+                this.receiptLines = [];
+                this.people = [];
+                this.assignments = [];
+                this.selectedLineIds = new Set();
+                this.activePersonId = null;
+                this.receiptCategory = "Dining";
+                this.ocrDocument = null;
+                this.metadata = null;
+                this.cameraStream = null;
                 this.isPromptingForCategories = false;
                 this.reviewTimer = null;
                 this.items = this.storageService.load();
@@ -1185,14 +2060,40 @@ var ReceiptRing;
             start() {
                 this.bindEvents();
                 this.render();
+                void this.initGeminiSettings();
             }
             bindEvents() {
                 this.elements.sampleButton.addEventListener("click", () => this.loadSample());
+                this.elements.dropzone.addEventListener("click", (event) => {
+                    if (event.target === this.elements.receiptImage)
+                        return;
+                    event.preventDefault();
+                    this.elements.receiptImage.click();
+                });
                 this.elements.receiptImage.addEventListener("change", () => this.handleImageInput());
                 this.elements.clearImageButton.addEventListener("click", () => this.clearImage());
                 this.elements.parseButton.addEventListener("click", () => this.itemizeReceiptText());
                 this.elements.clearButton.addEventListener("click", () => this.clearReceipt());
-                this.elements.addItemButton.addEventListener("click", () => this.addItem());
+                this.elements.openCameraButton.addEventListener("click", () => void this.openCamera());
+                this.elements.closeCameraButton.addEventListener("click", () => this.closeCamera());
+                this.elements.capturePhotoButton.addEventListener("click", () => void this.captureCameraPhoto());
+                this.elements.addPersonButton.addEventListener("click", () => this.addPerson());
+                this.elements.personNameInput.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter")
+                        this.addPerson();
+                });
+                this.elements.assignLinesButton.addEventListener("click", () => this.assignSelectedLines());
+                this.elements.taxInput.addEventListener("input", () => this.render());
+                this.elements.receiptCategory.addEventListener("change", () => {
+                    this.receiptCategory = this.elements.receiptCategory.value;
+                });
+                this.elements.ocrOverlayToggle.addEventListener("change", () => this.ocrOverlayView.setVisible(this.elements.ocrOverlay, this.elements.ocrOverlayToggle.checked));
+                this.elements.diagnosticsToggle.addEventListener("click", () => {
+                    this.elements.diagnosticsPanel.classList.toggle("hidden");
+                });
+                this.elements.settingsButton.addEventListener("click", () => this.openSettings());
+                this.elements.closeSettingsButton.addEventListener("click", () => this.closeSettings());
+                this.elements.saveSettingsButton.addEventListener("click", () => this.saveSettings());
                 ["dragenter", "dragover"].forEach((eventName) => {
                     this.elements.dropzone.addEventListener(eventName, (event) => {
                         event.preventDefault();
@@ -1216,29 +2117,48 @@ var ReceiptRing;
             handleImageInput() {
                 const file = this.elements.receiptImage.files?.[0];
                 if (file) {
-                    this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
-                    void this.extractAndItemizeReceipt(file);
+                    this.processReceiptImage(file);
                 }
             }
             handleImageDrop(event) {
                 const file = event.dataTransfer?.files?.[0];
                 if (file) {
-                    this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
-                    void this.extractAndItemizeReceipt(file);
+                    this.processReceiptImage(file);
                 }
             }
             clearImage() {
                 this.imagePreviewService.clear(this.elements.receiptImage, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
+                this.ocrDocument = null;
+                this.metadata = null;
+                this.receiptLines = [];
+                this.assignments = [];
+                this.selectedLineIds.clear();
+                this.elements.ocrOverlay.innerHTML = "";
+                this.elements.ocrReviewTools.classList.add("hidden");
                 this.hideOcrStatus();
             }
             itemizeReceiptText() {
                 this.items = this.parserService.parse(this.elements.receiptText.value);
+                this.receiptLines = this.items.map((item) => ({
+                    id: item.id,
+                    label: item.label,
+                    amount: item.amount,
+                    confidence: item.categorizationConfidence * 100,
+                    ignored: false
+                }));
+                this.metadata = null;
                 this.render();
-                void this.reviewAmbiguousItems();
             }
             clearReceipt() {
                 this.elements.receiptText.value = "";
                 this.items = [];
+                this.receiptLines = [];
+                this.assignments = [];
+                this.selectedLineIds.clear();
+                this.ocrDocument = null;
+                this.metadata = null;
+                this.elements.ocrOverlay.innerHTML = "";
+                this.elements.ocrReviewTools.classList.add("hidden");
                 this.render();
             }
             addItem() {
@@ -1279,7 +2199,7 @@ var ReceiptRing;
                 });
                 this.storageService.save(this.items);
                 if (shouldRenderItems) {
-                    this.renderItems();
+                    this.renderSplitWorkspace();
                 }
                 this.renderSummary();
             }
@@ -1289,50 +2209,171 @@ var ReceiptRing;
             }
             render() {
                 this.storageService.save(this.items);
-                this.renderItems();
+                this.renderSplitWorkspace();
                 this.renderSummary();
+                this.renderDiagnostics();
             }
-            renderItems() {
-                this.elements.emptyState.classList.toggle("hidden", this.items.length > 0);
-                this.elements.itemCount.textContent = `${this.items.length} ${this.items.length === 1 ? "item" : "items"}`;
-                this.itemListView.render(this.elements.itemsList, this.items, {
-                    onUpdate: (id, patch) => this.updateItem(id, patch),
-                    onDelete: (id) => this.deleteItem(id)
+            renderSplitWorkspace() {
+                this.elements.emptyState.classList.toggle("hidden", this.receiptLines.length > 0);
+                this.elements.itemCount.textContent = `${this.receiptLines.length} ${this.receiptLines.length === 1 ? "line" : "lines"}`;
+                const unassignedCount = this.splitCalculatorService.getUnassignedCount(this.receiptLines, this.assignments);
+                this.elements.unassignedCount.textContent = `${unassignedCount} unassigned`;
+                this.elements.unassignedCount.classList.toggle("is-warning", unassignedCount > 0);
+                this.splitWorkspaceView.renderLines(this.elements.receiptLinesList, this.receiptLines, this.assignments, this.people, this.selectedLineIds, {
+                    onLineToggle: (lineId) => this.toggleLineSelection(lineId),
+                    onLineIgnore: (lineId) => this.toggleIgnoredLine(lineId),
+                    onPersonSelect: (personId) => this.selectPerson(personId),
+                    onPersonDelete: (personId) => this.deletePerson(personId)
                 });
+                this.splitWorkspaceView.renderPeople(this.elements.peopleList, this.people, this.activePersonId, {
+                    onLineToggle: (lineId) => this.toggleLineSelection(lineId),
+                    onLineIgnore: (lineId) => this.toggleIgnoredLine(lineId),
+                    onPersonSelect: (personId) => this.selectPerson(personId),
+                    onPersonDelete: (personId) => this.deletePerson(personId)
+                });
+                this.splitWorkspaceView.renderTotals(this.elements.splitTotalsList, this.splitCalculatorService.calculate(this.people, this.receiptLines, this.assignments, this.getTaxAmount()));
             }
             renderSummary() {
-                const totals = this.summaryService.getTotals(this.items);
-                const grandTotal = this.summaryService.getGrandTotal(totals);
+                const grandTotal = this.receiptLines.filter((line) => !line.ignored).reduce((sum, line) => sum + line.amount, 0) + this.getTaxAmount();
                 this.elements.receiptTotal.textContent = this.currencyFormatService.format(grandTotal);
-                this.elements.ringTotal.textContent = this.currencyFormatService.format(grandTotal);
-                this.ringView.render(this.elements.categoryRing, totals, grandTotal);
-                this.categorySummaryView.render(this.elements.categoryList, totals, grandTotal);
             }
             async extractAndItemizeReceipt(file) {
-                this.setOcrStatus("Starting OCR", 0.04);
+                const apiKey = localStorage.getItem("gemini_api_key") || "";
+                const model = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
+                if (!apiKey) {
+                    this.setOcrStatus("Please configure your Gemini API Key in Settings first.", 1);
+                    this.openSettings();
+                    return;
+                }
+                this.setOcrStatus("Analyzing receipt with Gemini...", 0.15);
                 this.elements.parseButton.setAttribute("disabled", "true");
                 try {
-                    const text = await this.receiptOcrService.recognize(file, (progress) => {
-                        this.setOcrStatus(progress.label, progress.progress);
-                    });
-                    this.elements.receiptText.value = text;
-                    this.items = this.parserService.parse(text);
-                    this.render();
-                    if (this.items.length === 0) {
-                        this.setOcrStatus("Text found, but no item prices were detected. You can edit the text and itemize it.", 1);
-                        return;
+                    const result = await this.geminiService.parseReceiptImage(file, apiKey, model);
+                    console.log("Gemini parsed receipt output:", result);
+                    const storeName = result.storeName || "";
+                    const subtotal = typeof result.subtotal === "number" ? result.subtotal : null;
+                    const tax = typeof result.tax === "number" ? result.tax : null;
+                    const total = typeof result.total === "number" ? result.total : null;
+                    this.metadata = {
+                        storeName,
+                        date: "",
+                        time: "",
+                        receiptNumber: "",
+                        subtotal,
+                        tax,
+                        total
+                    };
+                    this.elements.taxInput.value = String(tax ?? 0);
+                    let formattedText = `Store: ${storeName}\n\nItems:\n`;
+                    const purchaseItems = [];
+                    if (Array.isArray(result.items)) {
+                        result.items.forEach((item) => {
+                            const label = this.toTitleCase(item.name || "Unknown Item");
+                            const amount = typeof item.price === "number" ? item.price : Number(item.price) || 0;
+                            const lowConfidence = !!item.lowConfidence;
+                            formattedText += `- ${label}: $${amount.toFixed(2)}${lowConfidence ? " (low confidence)" : ""}\n`;
+                            const categorization = this.categorizationService.categorize(label);
+                            purchaseItems.push({
+                                id: this.idService.create(),
+                                label,
+                                amount: Number(amount.toFixed(2)),
+                                category: categorization.category,
+                                categorizationConfidence: lowConfidence ? 0.3 : categorization.confidence,
+                                categorizationSource: categorization.source,
+                                needsCategoryReview: lowConfidence || categorization.shouldPrompt
+                            });
+                        });
                     }
-                    this.setOcrStatus(`Found ${this.items.length} ${this.items.length === 1 ? "item" : "items"}`, 1);
+                    if (Array.isArray(result.discounts) && result.discounts.length > 0) {
+                        formattedText += `\nDiscounts:\n`;
+                        result.discounts.forEach((discount) => {
+                            const label = this.toTitleCase(discount.name || "Discount") + " (Discount)";
+                            const amount = typeof discount.amount === "number" ? discount.amount : Number(discount.amount) || 0;
+                            const negativeAmount = -Math.abs(amount);
+                            formattedText += `- ${label}: -$${Math.abs(negativeAmount).toFixed(2)}\n`;
+                            purchaseItems.push({
+                                id: this.idService.create(),
+                                label,
+                                amount: Number(negativeAmount.toFixed(2)),
+                                category: "Other",
+                                categorizationConfidence: 1.0,
+                                categorizationSource: "saved-rule",
+                                needsCategoryReview: false
+                            });
+                        });
+                    }
+                    formattedText += `\nSubtotal: $${(subtotal ?? 0).toFixed(2)}\nTax: $${(tax ?? 0).toFixed(2)}\nTotal: $${(total ?? 0).toFixed(2)}`;
+                    this.elements.receiptText.value = formattedText;
+                    this.items = purchaseItems;
+                    this.receiptLines = this.items.map((item) => ({
+                        id: item.id,
+                        label: item.label,
+                        amount: item.amount,
+                        confidence: item.categorizationConfidence * 100,
+                        ignored: false
+                    }));
+                    this.ocrDocument = {
+                        provider: `Gemini (${model})`,
+                        text: formattedText,
+                        lines: [],
+                        confidence: 100,
+                        imageWidth: 800,
+                        imageHeight: 600,
+                        artifacts: [],
+                        quality: {
+                            blurVariance: 100,
+                            contrast: 100,
+                            warnings: []
+                        }
+                    };
+                    this.assignments = [];
+                    this.selectedLineIds.clear();
+                    this.renderOcrOverlay();
+                    this.render();
+                    this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`, 1);
                     window.setTimeout(() => this.hideOcrStatus(), 1600);
-                    void this.reviewAmbiguousItems();
                 }
                 catch (error) {
+                    console.error("Gemini receipt parsing failed:", error);
                     const message = error instanceof Error ? error.message : "Could not extract text from this receipt.";
                     this.setOcrStatus(message, 1);
                 }
                 finally {
                     this.elements.parseButton.removeAttribute("disabled");
                 }
+            }
+            async initGeminiSettings() {
+                const env = await this.geminiService.loadDotEnv();
+                if (env.GEMINI_API_KEY) {
+                    localStorage.setItem("gemini_api_key", env.GEMINI_API_KEY);
+                }
+                if (env.GEMINI_MODEL) {
+                    localStorage.setItem("gemini_model", env.GEMINI_MODEL);
+                }
+                this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
+                this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
+            }
+            openSettings() {
+                this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
+                this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
+                this.elements.settingsModal.classList.remove("hidden");
+            }
+            closeSettings() {
+                this.elements.settingsModal.classList.add("hidden");
+            }
+            saveSettings() {
+                const key = this.elements.geminiApiKey.value.trim();
+                const model = this.elements.geminiModel.value;
+                localStorage.setItem("gemini_api_key", key);
+                localStorage.setItem("gemini_model", model);
+                this.closeSettings();
+            }
+            toTitleCase(value) {
+                return value
+                    .toLowerCase()
+                    .split(" ")
+                    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(" ");
             }
             setOcrStatus(label, progress) {
                 this.elements.ocrStatus.classList.remove("hidden");
@@ -1342,6 +2383,159 @@ var ReceiptRing;
             hideOcrStatus() {
                 this.elements.ocrStatus.classList.add("hidden");
                 this.elements.ocrProgressBar.style.width = "0%";
+            }
+            async openCamera() {
+                if (!navigator.mediaDevices?.getUserMedia) {
+                    this.setOcrStatus("Camera is not available here. Opening file upload instead.", 1);
+                    this.elements.receiptImage.click();
+                    return;
+                }
+                try {
+                    this.cameraStream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: { ideal: "environment" },
+                            width: { ideal: 1920 },
+                            height: { ideal: 2560 }
+                        },
+                        audio: false
+                    });
+                    this.elements.cameraVideo.srcObject = this.cameraStream;
+                    this.elements.cameraModal.classList.remove("hidden");
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : "Camera permission was denied.";
+                    this.setOcrStatus(`Camera unavailable: ${message}. Opening file upload instead.`, 1);
+                    this.elements.receiptImage.click();
+                }
+            }
+            closeCamera() {
+                this.cameraStream?.getTracks().forEach((track) => track.stop());
+                this.cameraStream = null;
+                this.elements.cameraVideo.srcObject = null;
+                this.elements.cameraModal.classList.add("hidden");
+            }
+            async captureCameraPhoto() {
+                const video = this.elements.cameraVideo;
+                const canvas = this.elements.cameraCanvas;
+                const context = canvas.getContext("2d");
+                if (!context || video.videoWidth === 0 || video.videoHeight === 0)
+                    return;
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+                if (!blob)
+                    return;
+                const file = new File([blob], `receipt-${Date.now()}.jpg`, { type: "image/jpeg" });
+                this.closeCamera();
+                this.processReceiptImage(file);
+            }
+            processReceiptImage(file) {
+                this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
+                this.setOcrStatus(`Loaded ${file.name || "receipt image"}`, 0.02);
+                void this.extractAndItemizeReceipt(file);
+            }
+            renderOcrOverlay() {
+                this.elements.ocrReviewTools.classList.toggle("hidden", !this.ocrDocument);
+                this.ocrOverlayView.render(this.elements.ocrOverlay, this.ocrDocument, {
+                    onLineSelect: (lineId) => this.toggleLineSelection(lineId),
+                    onWordUpdate: (wordId, text) => this.updateOcrWord(wordId, text)
+                });
+                this.ocrOverlayView.setVisible(this.elements.ocrOverlay, this.elements.ocrOverlayToggle.checked);
+            }
+            updateOcrWord(wordId, text) {
+                if (!this.ocrDocument)
+                    return;
+                this.ocrDocument = {
+                    ...this.ocrDocument,
+                    lines: this.ocrDocument.lines.map((line) => ({
+                        ...line,
+                        words: line.words.map((word) => word.id === wordId ? { ...word, text, confidence: 100 } : word)
+                    }))
+                };
+                this.ocrDocument = {
+                    ...this.ocrDocument,
+                    text: this.ocrDocument.lines.map((line) => line.words.map((word) => word.text).join(" ")).join("\n")
+                };
+                this.metadata = this.parserService.extractMetadata(this.ocrDocument);
+                this.receiptLines = this.parserService.parseReceiptLines(this.ocrDocument);
+                this.items = this.parserService.parseOcr(this.ocrDocument);
+                this.elements.receiptText.value = this.ocrDocument.text;
+                this.renderOcrOverlay();
+                this.render();
+            }
+            renderDiagnostics() {
+                this.diagnosticsView.render(this.elements.diagnosticsGrid, this.elements.diagnosticsText, this.elements.diagnosticsSummary, this.ocrDocument, this.metadata, this.receiptLines.map((line) => ({
+                    id: line.id,
+                    label: line.label,
+                    amount: line.amount,
+                    category: "Other",
+                    categorizationConfidence: line.confidence / 100,
+                    categorizationSource: "uncertain",
+                    needsCategoryReview: false
+                })));
+            }
+            addPerson() {
+                const name = this.elements.personNameInput.value.trim();
+                if (!name)
+                    return;
+                const person = { id: this.idService.create(), name };
+                this.people = [...this.people, person];
+                this.activePersonId = person.id;
+                this.elements.personNameInput.value = "";
+                this.render();
+            }
+            selectPerson(personId) {
+                this.activePersonId = personId;
+                this.render();
+            }
+            deletePerson(personId) {
+                this.people = this.people.filter((person) => person.id !== personId);
+                this.assignments = this.assignments.filter((assignment) => assignment.personId !== personId);
+                if (this.activePersonId === personId)
+                    this.activePersonId = this.people[0]?.id ?? null;
+                this.render();
+            }
+            toggleLineSelection(lineId) {
+                if (this.selectedLineIds.has(lineId)) {
+                    this.selectedLineIds.delete(lineId);
+                }
+                else {
+                    this.selectedLineIds.add(lineId);
+                }
+                this.ocrOverlayView.highlightLines(this.elements.ocrOverlay, this.selectedLineIds);
+                this.render();
+            }
+            toggleIgnoredLine(lineId) {
+                this.receiptLines = this.receiptLines.map((line) => line.id === lineId ? { ...line, ignored: !line.ignored } : line);
+                this.assignments = this.assignments.filter((assignment) => assignment.lineId !== lineId);
+                this.selectedLineIds.delete(lineId);
+                this.render();
+            }
+            assignSelectedLines() {
+                if (!this.activePersonId || this.selectedLineIds.size === 0)
+                    return;
+                const mode = this.elements.assignmentMode.value;
+                const rawValue = Number(this.elements.assignmentValue.value);
+                const value = mode === "equal" ? 0 : Number.isFinite(rawValue) ? rawValue : 0;
+                const nextAssignments = this.assignments.filter((assignment) => !this.selectedLineIds.has(assignment.lineId) || assignment.personId !== this.activePersonId);
+                this.selectedLineIds.forEach((lineId) => {
+                    nextAssignments.push({
+                        id: this.idService.create(),
+                        lineId,
+                        personId: this.activePersonId,
+                        mode,
+                        value
+                    });
+                });
+                this.assignments = nextAssignments;
+                this.selectedLineIds.clear();
+                this.renderOcrOverlay();
+                this.render();
+            }
+            getTaxAmount() {
+                const value = Number(this.elements.taxInput.value);
+                return Number.isFinite(value) ? value : 0;
             }
             scheduleCategoryReview() {
                 if (this.reviewTimer !== null) {
@@ -1408,12 +2602,17 @@ var ReceiptRing;
     const parserService = new ReceiptRing.Services.ReceiptParserService(categorizationService, idService);
     const storageService = new ReceiptRing.Services.StorageService("receipt-ring-items");
     const summaryService = new ReceiptRing.Services.SpendingSummaryService(categories);
+    const splitCalculatorService = new ReceiptRing.Services.SplitCalculatorService();
     const imagePreviewService = new ReceiptRing.Services.ImagePreviewService();
     const receiptOcrService = new ReceiptRing.Services.ReceiptOcrService();
+    const geminiService = new ReceiptRing.Services.GeminiService();
     const ringView = new ReceiptRing.UI.CategoryRingView(categories);
     const categorySummaryView = new ReceiptRing.UI.CategorySummaryView(categories, currencyFormatService, ringView);
     const itemListView = new ReceiptRing.UI.ItemListView(categories);
     const elements = new ReceiptRing.UI.DomRegistryFactory().create();
     const categoryPromptView = new ReceiptRing.UI.CategoryPromptView(categories, elements);
-    new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, summaryService, currencyFormatService, imagePreviewService, receiptOcrService, itemListView, ringView, categorySummaryView, categoryPromptView, idService).start();
+    const ocrOverlayView = new ReceiptRing.UI.OcrOverlayView();
+    const diagnosticsView = new ReceiptRing.UI.DiagnosticsView();
+    const splitWorkspaceView = new ReceiptRing.UI.SplitWorkspaceView(currencyFormatService);
+    new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, summaryService, currencyFormatService, imagePreviewService, receiptOcrService, geminiService, itemListView, ringView, categorySummaryView, categoryPromptView, ocrOverlayView, diagnosticsView, splitWorkspaceView, splitCalculatorService, idService).start();
 })(ReceiptRing || (ReceiptRing = {}));
