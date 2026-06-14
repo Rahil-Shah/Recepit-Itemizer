@@ -1,6 +1,6 @@
-# Receipt Ring 🧾✨
+# Receipt Itemizer 🧾✨
 
-Receipt Ring is a modern, responsive web application for splitting receipt costs from a photo, line by line. Using Tesseract OCR and the Gemini API, it extracts line items, assigns costs to different people, and handles tax adjustments automatically.
+Receipt Itemizer is a modern, responsive web application for splitting receipt costs from a photo, line by line. Using Tesseract OCR and the Gemini API, it extracts line items, assigns costs to different people, and handles tax adjustments automatically.
 
 ---
 
