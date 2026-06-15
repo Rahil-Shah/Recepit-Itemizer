@@ -3,50 +3,72 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Receipt Ring</title>
+    <meta name="theme-color" content="#f3f1e9" />
+    <title>Receipt Ring — split receipts, line by line</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Hanken+Grotesk:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <div class="grain" aria-hidden="true"></div>
+
     <main class="app-shell">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Receipt tracker</p>
-          <h1>Split a receipt from the photo, line by line.</h1>
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+          </span>
+          <div class="brand-text">
+            <p class="eyebrow">Receipt Ring</p>
+            <h1>Split a receipt<br />from the photo,<br /><em>line by line.</em></h1>
+          </div>
         </div>
-        <div class="button-row" style="margin-top: 0; align-items: center;">
-          <button class="secondary-button" id="settingsButton" type="button">⚙️ Settings</button>
-          <button class="ghost-button" id="sampleButton" type="button">Load sample</button>
+        <div class="topbar-actions">
+          <button class="btn btn-ghost" id="sampleButton" type="button">Load sample</button>
+          <button class="btn btn-dark" id="settingsButton" type="button">
+            <span class="btn-gear" aria-hidden="true">⚙</span> Settings
+          </button>
         </div>
       </header>
 
       <nav class="tab-nav" aria-label="Sections">
-        <button class="tab-button is-active" id="tabReceipts" type="button" data-tab="receipts">Receipts</button>
-        <button class="tab-button" id="tabHistory" type="button" data-tab="history">History</button>
-        <button class="tab-button" id="tabBudgeting" type="button" data-tab="budgeting">Budgeting</button>
+        <button class="tab-button is-active" id="tabReceipts" type="button" data-tab="receipts">
+          <span class="tab-dot" style="--dot: var(--blue)"></span>Receipts
+        </button>
+        <button class="tab-button" id="tabHistory" type="button" data-tab="history">
+          <span class="tab-dot" style="--dot: var(--green)"></span>History
+        </button>
+        <button class="tab-button" id="tabBudgeting" type="button" data-tab="budgeting">
+          <span class="tab-dot" style="--dot: var(--orange)"></span>Budgeting
+        </button>
       </nav>
 
       <div class="tab-view" id="receiptsView">
         <section class="workspace" aria-label="Receipt workspace">
-          <section class="panel scanner-panel" aria-label="Scan receipt">
+          <section class="panel scanner-panel" data-accent="blue" aria-label="Scan receipt">
             <div class="panel-heading">
-              <h2>Scan</h2>
+              <h2><span class="panel-tag">01</span>Scan</h2>
               <span class="pill" id="itemCount">0 items</span>
             </div>
 
             <label class="dropzone" id="dropzone">
               <input id="receiptImage" type="file" accept="image/*" capture="environment" />
               <span class="dropzone-icon" aria-hidden="true"></span>
-              <span class="dropzone-title">Upload receipt</span>
-              <span class="dropzone-note">Camera or image file</span>
+              <span class="dropzone-title">Drop a receipt here</span>
+              <span class="dropzone-note">Camera roll or image file — we read it for you</span>
             </label>
 
             <figure class="receipt-preview hidden" id="receiptPreviewWrap">
               <img id="receiptPreview" alt="Uploaded receipt preview" />
-              <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">x</button>
+              <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">×</button>
             </figure>
 
             <div class="ocr-status hidden" id="ocrStatus" aria-live="polite">
-              <span id="ocrStatusText">Reading receipt...</span>
+              <span id="ocrStatusText">Reading receipt…</span>
               <div class="ocr-progress">
                 <span id="ocrProgressBar"></span>
               </div>
@@ -57,19 +79,19 @@
               id="receiptText"
               rows="9"
               spellcheck="false"
-              placeholder="Paste detected receipt text here..."
+              placeholder="Paste detected receipt text here…"
             ></textarea>
 
             <div class="button-row">
-              <button class="secondary-button" id="openCameraButton" type="button">Camera</button>
-              <button class="primary-button" id="parseButton" type="button">Itemize receipt</button>
-              <button class="secondary-button" id="clearButton" type="button">Clear</button>
+              <button class="btn btn-light" id="openCameraButton" type="button">📷 Camera</button>
+              <button class="btn btn-primary" id="parseButton" type="button">Itemize receipt →</button>
+              <button class="btn btn-light" id="clearButton" type="button">Clear</button>
             </div>
           </section>
 
-          <section class="panel items-panel" aria-label="Receipt split">
+          <section class="panel items-panel" data-accent="orange" aria-label="Receipt split">
             <div class="panel-heading">
-              <h2>Receipt lines</h2>
+              <h2><span class="panel-tag">02</span>Receipt lines</h2>
               <span class="pill" id="unassignedCount">0 unassigned</span>
             </div>
 
@@ -101,24 +123,25 @@
             </div>
 
             <div class="empty-state" id="emptyState">
+              <span class="empty-glyph" aria-hidden="true">🧾</span>
               <strong>No receipt lines yet</strong>
-              <span>Take or upload a receipt photo to detect purchasable rows.</span>
+              <span>Snap or upload a receipt photo to detect purchasable rows.</span>
             </div>
           </section>
 
-          <aside class="panel summary-panel" aria-label="Spending summary">
+          <aside class="panel summary-panel" data-accent="green" aria-label="Spending summary">
             <div class="panel-heading">
-              <h2>Split</h2>
-              <span class="pill" id="receiptTotal">$0.00</span>
+              <h2><span class="panel-tag">03</span>Split</h2>
+              <span class="pill pill-total" id="receiptTotal">$0.00</span>
             </div>
 
             <div class="people-panel">
               <div class="person-form">
                 <input class="table-input" id="personNameInput" placeholder="Add person" />
-                <button class="primary-button compact" id="addPersonButton" type="button">Add</button>
+                <button class="btn btn-primary compact" id="addPersonButton" type="button">Add</button>
               </div>
               <div class="people-list" id="peopleList"></div>
-              <p class="people-hint">Tip: add people, then check them off in each receipt line's <strong>Assigned</strong> dropdown.</p>
+              <p class="people-hint">Add people, then check them off in each line's <strong>Assigned</strong> dropdown.</p>
             </div>
 
             <div class="tax-panel">
@@ -129,7 +152,7 @@
             <div class="split-total-list" id="splitTotalsList"></div>
 
             <div class="save-panel">
-              <button class="primary-button" id="saveReceiptButton" type="button">Save to history</button>
+              <button class="btn btn-dark btn-block" id="saveReceiptButton" type="button">Save to history</button>
               <span class="save-status" id="saveStatus" aria-live="polite"></span>
             </div>
           </aside>
@@ -137,13 +160,14 @@
       </div>
 
       <div class="tab-view hidden" id="historyView">
-        <section class="panel history-panel" aria-label="Saved receipts">
+        <section class="panel history-panel" data-accent="green" aria-label="Saved receipts">
           <div class="panel-heading">
-            <h2>Saved receipts</h2>
-            <button class="secondary-button compact" id="refreshHistoryButton" type="button">Refresh</button>
+            <h2><span class="panel-tag">★</span>Saved receipts</h2>
+            <button class="btn btn-light compact" id="refreshHistoryButton" type="button">↻ Refresh</button>
           </div>
           <div class="history-list" id="historyList"></div>
           <div class="empty-state" id="historyEmpty">
+            <span class="empty-glyph" aria-hidden="true">📂</span>
             <strong>No saved receipts yet</strong>
             <span>Save a split from the Receipts tab to see it here.</span>
           </div>
@@ -151,7 +175,7 @@
       </div>
 
       <div class="tab-view hidden" id="budgetingView">
-        <section class="panel coming-soon-panel" aria-label="Budgeting">
+        <section class="panel coming-soon-panel" data-accent="orange" aria-label="Budgeting">
           <div class="coming-soon">
             <span class="coming-soon-badge">Coming soon</span>
             <h2>Budgeting</h2>
@@ -178,8 +202,8 @@
           <span>Always categorize this item this way</span>
         </label>
         <div class="modal-actions">
-          <button class="secondary-button" id="categoryPromptSkip" type="button">Skip</button>
-          <button class="primary-button" id="categoryPromptSave" type="button">Save category</button>
+          <button class="btn btn-light" id="categoryPromptSkip" type="button">Skip</button>
+          <button class="btn btn-primary" id="categoryPromptSave" type="button">Save category</button>
         </div>
       </section>
     </div>
@@ -193,8 +217,8 @@
         <video id="cameraVideo" autoplay playsinline muted></video>
         <canvas id="cameraCanvas" class="hidden"></canvas>
         <div class="modal-actions">
-          <button class="secondary-button" id="closeCameraButton" type="button">Close</button>
-          <button class="primary-button" id="capturePhotoButton" type="button">Capture</button>
+          <button class="btn btn-light" id="closeCameraButton" type="button">Close</button>
+          <button class="btn btn-primary" id="capturePhotoButton" type="button">Capture</button>
         </div>
       </section>
     </div>
@@ -206,23 +230,23 @@
           <h2 id="settingsTitle">Gemini API Settings</h2>
         </div>
         <div class="settings-form">
-          <label class="field-label" style="margin-top: 0;" for="geminiApiKey">Gemini API Key</label>
+          <label class="field-label" for="geminiApiKey">Gemini API Key</label>
           <input class="table-input" id="geminiApiKey" type="password" placeholder="Enter Gemini API key" />
 
-          <label class="field-label" style="margin-top: 14px;" for="geminiModel">Model</label>
+          <label class="field-label" for="geminiModel">Model</label>
           <select class="table-select" id="geminiModel">
             <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
             <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image</option>
             <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
             <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
           </select>
-          <p class="settings-note" style="font-size: 0.76rem; color: var(--muted); margin-top: 8px; line-height: 1.35;">
-            API key is saved locally in your browser's storage and can be loaded from `.env` automatically on startup.
+          <p class="settings-note">
+            API key is saved locally in your browser's storage and can be loaded from <code>.env</code> automatically on startup.
           </p>
         </div>
-        <div class="modal-actions" style="margin-top: 20px;">
-          <button class="secondary-button" id="closeSettingsButton" type="button">Cancel</button>
-          <button class="primary-button" id="saveSettingsButton" type="button">Save Settings</button>
+        <div class="modal-actions">
+          <button class="btn btn-light" id="closeSettingsButton" type="button">Cancel</button>
+          <button class="btn btn-primary" id="saveSettingsButton" type="button">Save Settings</button>
         </div>
       </section>
     </div>
