@@ -765,13 +765,13 @@ textarea:focus,
 }
 
 .assign-panel-pop {
-  position: absolute;
-  z-index: 12;
-  top: calc(100% + 8px);
-  left: 0;
+  /* Positioned (top/left/width/max-height) in JS on open via position: fixed
+     so the popup escapes the .items-table overflow clip and viewport edges. */
+  position: fixed;
+  z-index: 50;
+  min-width: 230px;
   display: grid;
   gap: 9px;
-  width: max(230px, 100%);
   padding: 13px;
   border: 2.5px solid var(--ink);
   border-radius: var(--radius-sm);

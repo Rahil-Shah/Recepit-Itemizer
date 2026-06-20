@@ -75,6 +75,28 @@ namespace ReceiptRing.UI {
       const panel = document.createElement("div");
       panel.className = "assign-panel-pop";
 
+      // The panel is rendered with position: fixed (computed on open) so it
+      // escapes the `.items-table` overflow:hidden clip and the viewport edge.
+      // Without this, the popup for the last row in a long list gets cut off.
+      const reposition = (): void => {
+        if (!details.isConnected) {
+          this.teardownPanelPositioning(reposition);
+          return;
+        }
+        this.positionPanel(summary, panel);
+      };
+      details.addEventListener("toggle", () => {
+        if (details.open) {
+          this.closeOtherDropdowns(details);
+          this.positionPanel(summary, panel);
+          window.addEventListener("scroll", reposition, true);
+          window.addEventListener("resize", reposition);
+        } else {
+          this.teardownPanelPositioning(reposition);
+          this.resetPanelPosition(panel);
+        }
+      });
+
       if (people.length === 0) {
         const hint = document.createElement("p");
         hint.className = "assign-hint";
@@ -236,6 +258,64 @@ namespace ReceiptRing.UI {
         card.append(body);
         container.append(card);
       });
+    }
+
+    private positionPanel(summary: HTMLElement, panel: HTMLElement): void {
+      const margin = 8;
+      const summaryRect = summary.getBoundingClientRect();
+
+      // Measure the panel at its natural size before committing a position.
+      panel.style.position = "fixed";
+      panel.style.maxHeight = "";
+      panel.style.width = `${Math.max(230, summaryRect.width)}px`;
+      const panelHeight = panel.scrollHeight;
+
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      const spaceBelow = viewportHeight - summaryRect.bottom - margin;
+      const spaceAbove = summaryRect.top - margin;
+
+      let top: number;
+      if (panelHeight <= spaceBelow || spaceBelow >= spaceAbove) {
+        // Drop down.
+        top = summaryRect.bottom + margin;
+        panel.style.maxHeight = `${Math.max(0, spaceBelow)}px`;
+      } else {
+        // Flip up when there isn't enough room below (e.g. the last row).
+        panel.style.maxHeight = `${Math.max(0, spaceAbove)}px`;
+        top = Math.max(margin, summaryRect.top - margin - Math.min(panelHeight, spaceAbove));
+      }
+
+      const panelWidth = panel.getBoundingClientRect().width;
+      const left = Math.max(margin, Math.min(summaryRect.left, viewportWidth - margin - panelWidth));
+
+      panel.style.top = `${top}px`;
+      panel.style.left = `${left}px`;
+      panel.style.overflowY = "auto";
+    }
+
+    private resetPanelPosition(panel: HTMLElement): void {
+      panel.style.position = "";
+      panel.style.top = "";
+      panel.style.left = "";
+      panel.style.width = "";
+      panel.style.maxHeight = "";
+      panel.style.overflowY = "";
+    }
+
+    private teardownPanelPositioning(reposition: () => void): void {
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    }
+
+    private closeOtherDropdowns(current: HTMLDetailsElement): void {
+      document
+        .querySelectorAll<HTMLDetailsElement>("details.assign-dropdown[open]")
+        .forEach((dropdown) => {
+          if (dropdown !== current) {
+            dropdown.open = false;
+          }
+        });
     }
 
     private getAssignmentSummary(

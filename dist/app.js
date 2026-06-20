@@ -856,6 +856,25 @@ var ReceiptRing;
                 details.append(summary);
                 const panel = document.createElement("div");
                 panel.className = "assign-panel-pop";
+                const reposition = () => {
+                    if (!details.isConnected) {
+                        this.teardownPanelPositioning(reposition);
+                        return;
+                    }
+                    this.positionPanel(summary, panel);
+                };
+                details.addEventListener("toggle", () => {
+                    if (details.open) {
+                        this.closeOtherDropdowns(details);
+                        this.positionPanel(summary, panel);
+                        window.addEventListener("scroll", reposition, true);
+                        window.addEventListener("resize", reposition);
+                    }
+                    else {
+                        this.teardownPanelPositioning(reposition);
+                        this.resetPanelPosition(panel);
+                    }
+                });
                 if (people.length === 0) {
                     const hint = document.createElement("p");
                     hint.className = "assign-hint";
@@ -983,6 +1002,53 @@ var ReceiptRing;
                     }
                     card.append(body);
                     container.append(card);
+                });
+            }
+            positionPanel(summary, panel) {
+                const margin = 8;
+                const summaryRect = summary.getBoundingClientRect();
+                panel.style.position = "fixed";
+                panel.style.maxHeight = "";
+                panel.style.width = `${Math.max(230, summaryRect.width)}px`;
+                const panelHeight = panel.scrollHeight;
+                const viewportHeight = window.innerHeight;
+                const viewportWidth = window.innerWidth;
+                const spaceBelow = viewportHeight - summaryRect.bottom - margin;
+                const spaceAbove = summaryRect.top - margin;
+                let top;
+                if (panelHeight <= spaceBelow || spaceBelow >= spaceAbove) {
+                    top = summaryRect.bottom + margin;
+                    panel.style.maxHeight = `${Math.max(0, spaceBelow)}px`;
+                }
+                else {
+                    panel.style.maxHeight = `${Math.max(0, spaceAbove)}px`;
+                    top = Math.max(margin, summaryRect.top - margin - Math.min(panelHeight, spaceAbove));
+                }
+                const panelWidth = panel.getBoundingClientRect().width;
+                const left = Math.max(margin, Math.min(summaryRect.left, viewportWidth - margin - panelWidth));
+                panel.style.top = `${top}px`;
+                panel.style.left = `${left}px`;
+                panel.style.overflowY = "auto";
+            }
+            resetPanelPosition(panel) {
+                panel.style.position = "";
+                panel.style.top = "";
+                panel.style.left = "";
+                panel.style.width = "";
+                panel.style.maxHeight = "";
+                panel.style.overflowY = "";
+            }
+            teardownPanelPositioning(reposition) {
+                window.removeEventListener("scroll", reposition, true);
+                window.removeEventListener("resize", reposition);
+            }
+            closeOtherDropdowns(current) {
+                document
+                    .querySelectorAll("details.assign-dropdown[open]")
+                    .forEach((dropdown) => {
+                    if (dropdown !== current) {
+                        dropdown.open = false;
+                    }
                 });
             }
             getAssignmentSummary(lineAssignments, people) {
