@@ -76,7 +76,7 @@ const receiptInclude = {
   }
 };
 
-app.post("/api/receipts", async (req, res) => {
+app.post("/api/receipts", requireAuth, async (req, res) => {
   const body = req.body ?? {};
   if (!Array.isArray(body.lines) || body.lines.length === 0) {
     return res.status(400).json({ error: "At least one receipt line is required." });
@@ -86,6 +86,7 @@ app.post("/api/receipts", async (req, res) => {
     const result = await prisma.$transaction(async (tx) => {
       const receipt = await tx.receipt.create({
         data: {
+          userId: req.userId,
           storeName: body.storeName ?? null,
           category: body.category ?? "Other",
           subtotal: body.subtotal ?? null,
@@ -140,9 +141,10 @@ app.post("/api/receipts", async (req, res) => {
   }
 });
 
-app.get("/api/receipts", async (_req, res) => {
+app.get("/api/receipts", requireAuth, async (req, res) => {
   try {
     const receipts = await prisma.receipt.findMany({
+      where: { userId: req.userId },
       orderBy: { createdAt: "desc" },
       include: receiptInclude
     });
