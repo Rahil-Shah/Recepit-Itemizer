@@ -840,6 +840,102 @@ var ReceiptRing;
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
 (function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        const FALLBACK_COLORS = ["#7cc4ff", "#f0a6ca", "#c3b1e1", "#ffd6a5", "#9ee7c0", "#e8998d"];
+        const CATEGORY_ALIASES = {
+            dining: "Dining",
+            restaurants: "Dining",
+            bar: "Dining",
+            coffee: "Dining",
+            groceries: "Groceries",
+            grocery: "Groceries",
+            supermarket: "Groceries",
+            transport: "Transport",
+            transportation: "Transport",
+            fuel: "Transport",
+            gas: "Transport",
+            travel: "Transport",
+            entertainment: "Entertainment",
+            health: "Health",
+            healthcare: "Health",
+            medical: "Health",
+            home: "Home",
+            utilities: "Home",
+            shopping: "Personal",
+            clothing: "Personal",
+            personal: "Personal",
+            general: "Other"
+        };
+        class SpendingAggregatorService {
+            constructor(categories) {
+                this.colorByName = new Map();
+                for (const category of categories) {
+                    this.colorByName.set(category.name, category.color);
+                }
+            }
+            aggregate(receipts, transactions) {
+                const byMonth = new Map();
+                const add = (dateStr, rawCategory, amount) => {
+                    if (!(amount > 0))
+                        return;
+                    const month = this.monthKey(dateStr);
+                    if (!month)
+                        return;
+                    const category = this.normalize(rawCategory);
+                    const bucket = byMonth.get(month) ?? new Map();
+                    bucket.set(category, (bucket.get(category) ?? 0) + amount);
+                    byMonth.set(month, bucket);
+                };
+                for (const receipt of receipts) {
+                    add(receipt.createdAt, receipt.category, receipt.total ?? 0);
+                }
+                for (const txn of transactions) {
+                    add(txn.date, txn.category, txn.amount < 0 ? -txn.amount : 0);
+                }
+                return [...byMonth.entries()]
+                    .map(([month, bucket]) => ({
+                    month,
+                    total: [...bucket.values()].reduce((sum, value) => sum + value, 0),
+                    categories: [...bucket.entries()]
+                        .map(([category, amount]) => ({ category, amount, color: this.color(category) }))
+                        .sort((a, b) => b.amount - a.amount)
+                }))
+                    .sort((a, b) => (a.month < b.month ? 1 : -1));
+            }
+            monthKey(dateStr) {
+                if (typeof dateStr === "string" && /^\d{4}-\d{2}/.test(dateStr)) {
+                    return dateStr.slice(0, 7);
+                }
+                const date = new Date(dateStr);
+                if (Number.isNaN(date.getTime()))
+                    return null;
+                return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+            }
+            normalize(raw) {
+                if (!raw)
+                    return "Other";
+                const key = raw.trim().toLowerCase();
+                if (CATEGORY_ALIASES[key])
+                    return CATEGORY_ALIASES[key];
+                return key.charAt(0).toUpperCase() + key.slice(1);
+            }
+            color(name) {
+                const known = this.colorByName.get(name);
+                if (known)
+                    return known;
+                let hash = 0;
+                for (let i = 0; i < name.length; i += 1) {
+                    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+                }
+                return FALLBACK_COLORS[hash % FALLBACK_COLORS.length];
+            }
+        }
+        Services.SpendingAggregatorService = SpendingAggregatorService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
     var UI;
     (function (UI) {
         class DomRegistryFactory {
@@ -994,6 +1090,110 @@ var ReceiptRing;
             }
         }
         UI.AuthView = AuthView;
+    })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var UI;
+    (function (UI) {
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        class BudgetRingView {
+            constructor(currencyFormatService) {
+                this.currencyFormatService = currencyFormatService;
+            }
+            render(ringEl, legendEl, month) {
+                ringEl.replaceChildren();
+                legendEl.replaceChildren();
+                if (!month || month.total <= 0) {
+                    const empty = document.createElement("p");
+                    empty.className = "budget-ring-empty";
+                    empty.textContent = "No spending recorded for this month.";
+                    ringEl.append(empty);
+                    return;
+                }
+                ringEl.append(this.buildSvg(month));
+                legendEl.append(this.buildLegend(month));
+            }
+            buildSvg(month) {
+                const size = 220;
+                const stroke = 30;
+                const radius = (size - stroke) / 2;
+                const cx = size / 2;
+                const cy = size / 2;
+                const circumference = 2 * Math.PI * radius;
+                const svg = document.createElementNS(SVG_NS, "svg");
+                svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+                svg.setAttribute("width", String(size));
+                svg.setAttribute("height", String(size));
+                svg.setAttribute("class", "budget-ring-svg");
+                svg.setAttribute("role", "img");
+                svg.setAttribute("aria-label", `Spending by category, total ${this.currencyFormatService.format(month.total)}`);
+                const track = document.createElementNS(SVG_NS, "circle");
+                track.setAttribute("cx", String(cx));
+                track.setAttribute("cy", String(cy));
+                track.setAttribute("r", String(radius));
+                track.setAttribute("fill", "none");
+                track.setAttribute("stroke", "rgba(0,0,0,0.06)");
+                track.setAttribute("stroke-width", String(stroke));
+                svg.append(track);
+                let offset = 0;
+                for (const slice of month.categories) {
+                    const fraction = slice.amount / month.total;
+                    const segment = document.createElementNS(SVG_NS, "circle");
+                    segment.setAttribute("cx", String(cx));
+                    segment.setAttribute("cy", String(cy));
+                    segment.setAttribute("r", String(radius));
+                    segment.setAttribute("fill", "none");
+                    segment.setAttribute("stroke", slice.color);
+                    segment.setAttribute("stroke-width", String(stroke));
+                    segment.setAttribute("stroke-dasharray", `${fraction * circumference} ${circumference}`);
+                    segment.setAttribute("stroke-dashoffset", String(-offset * circumference));
+                    segment.setAttribute("transform", `rotate(-90 ${cx} ${cy})`);
+                    const title = document.createElementNS(SVG_NS, "title");
+                    title.textContent = `${slice.category}: ${this.currencyFormatService.format(slice.amount)}`;
+                    segment.append(title);
+                    svg.append(segment);
+                    offset += fraction;
+                }
+                const totalText = document.createElementNS(SVG_NS, "text");
+                totalText.setAttribute("x", String(cx));
+                totalText.setAttribute("y", String(cy - 2));
+                totalText.setAttribute("text-anchor", "middle");
+                totalText.setAttribute("class", "budget-ring-total");
+                totalText.textContent = this.currencyFormatService.format(month.total);
+                svg.append(totalText);
+                const caption = document.createElementNS(SVG_NS, "text");
+                caption.setAttribute("x", String(cx));
+                caption.setAttribute("y", String(cy + 18));
+                caption.setAttribute("text-anchor", "middle");
+                caption.setAttribute("class", "budget-ring-caption");
+                caption.textContent = "spent";
+                svg.append(caption);
+                return svg;
+            }
+            buildLegend(month) {
+                const list = document.createElement("ul");
+                list.className = "budget-legend-list";
+                for (const slice of month.categories) {
+                    const item = document.createElement("li");
+                    item.className = "budget-legend-item";
+                    const swatch = document.createElement("span");
+                    swatch.className = "budget-legend-swatch";
+                    swatch.style.backgroundColor = slice.color;
+                    const label = document.createElement("span");
+                    label.className = "budget-legend-label";
+                    label.textContent = slice.category;
+                    const value = document.createElement("span");
+                    value.className = "budget-legend-value";
+                    const percent = Math.round((slice.amount / month.total) * 100);
+                    value.textContent = `${this.currencyFormatService.format(slice.amount)} · ${percent}%`;
+                    item.append(swatch, label, value);
+                    list.append(item);
+                }
+                return list;
+            }
+        }
+        UI.BudgetRingView = BudgetRingView;
     })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
@@ -1311,7 +1511,7 @@ var ReceiptRing;
     var App;
     (function (App) {
         class AppController {
-            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService, bankApiService) {
+            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService, bankApiService, spendingAggregatorService, budgetRingView) {
                 this.elements = elements;
                 this.parserService = parserService;
                 this.categorizationService = categorizationService;
@@ -1326,6 +1526,8 @@ var ReceiptRing;
                 this.idService = idService;
                 this.receiptApiService = receiptApiService;
                 this.bankApiService = bankApiService;
+                this.spendingAggregatorService = spendingAggregatorService;
+                this.budgetRingView = budgetRingView;
                 this.receiptLines = [];
                 this.people = [];
                 this.assignments = [];
@@ -1335,6 +1537,8 @@ var ReceiptRing;
                 this.isPromptingForCategories = false;
                 this.reviewTimer = null;
                 this.bankTransactions = [];
+                this.monthlySpend = [];
+                this.selectedMonth = null;
                 this.items = this.storageService.load();
             }
             start() {
@@ -1372,6 +1576,10 @@ var ReceiptRing;
                 this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
                 this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
                 this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
+                this.elements.budgetMonth.addEventListener("change", () => {
+                    this.selectedMonth = this.elements.budgetMonth.value || null;
+                    this.renderRing();
+                });
                 this.elements.tabButtons.forEach((button) => {
                     button.addEventListener("click", () => this.switchTab(button.dataset.tab));
                 });
@@ -1805,13 +2013,55 @@ var ReceiptRing;
                 }
             }
             async loadBudgeting() {
+                let receipts = [];
+                try {
+                    receipts = await this.receiptApiService.list();
+                }
+                catch {
+                    receipts = [];
+                }
                 try {
                     this.bankTransactions = await this.bankApiService.listTransactions();
                 }
                 catch {
                     this.bankTransactions = [];
                 }
+                this.monthlySpend = this.spendingAggregatorService.aggregate(receipts, this.bankTransactions);
+                this.populateMonths();
                 this.renderTransactions();
+                this.renderRing();
+            }
+            populateMonths() {
+                const select = this.elements.budgetMonth;
+                const previous = this.selectedMonth;
+                select.replaceChildren();
+                for (const entry of this.monthlySpend) {
+                    const option = document.createElement("option");
+                    option.value = entry.month;
+                    option.textContent = this.formatMonthLabel(entry.month);
+                    select.append(option);
+                }
+                if (this.monthlySpend.length === 0) {
+                    this.selectedMonth = null;
+                    return;
+                }
+                this.selectedMonth = this.monthlySpend.some((entry) => entry.month === previous)
+                    ? previous
+                    : this.monthlySpend[0].month;
+                select.value = this.selectedMonth ?? "";
+            }
+            renderRing() {
+                const month = this.monthlySpend.find((entry) => entry.month === this.selectedMonth) ?? null;
+                this.budgetRingView.render(this.elements.budgetRing, this.elements.budgetLegend, month);
+            }
+            formatMonthLabel(key) {
+                const [year, month] = key.split("-").map(Number);
+                if (!year || !month)
+                    return key;
+                return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+                    month: "long",
+                    year: "numeric"
+                });
             }
             renderTransactions() {
                 const list = this.elements.transactionsList;
@@ -1908,11 +2158,13 @@ var ReceiptRing;
     const receiptApiService = new ReceiptRing.Services.ReceiptApiService();
     const authApiService = new ReceiptRing.Services.AuthApiService();
     const bankApiService = new ReceiptRing.Services.BankApiService();
+    const spendingAggregatorService = new ReceiptRing.Services.SpendingAggregatorService(categories);
     const elements = new ReceiptRing.UI.DomRegistryFactory().create();
     const categoryPromptView = new ReceiptRing.UI.CategoryPromptView(categories, elements);
     const splitWorkspaceView = new ReceiptRing.UI.SplitWorkspaceView(currencyFormatService);
+    const budgetRingView = new ReceiptRing.UI.BudgetRingView(currencyFormatService);
     const authView = new ReceiptRing.UI.AuthView(elements, authApiService);
-    const controller = new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService, bankApiService);
+    const controller = new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService, bankApiService, spendingAggregatorService, budgetRingView);
     let started = false;
     const startApp = () => {
         if (started)

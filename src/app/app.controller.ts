@@ -12,6 +12,8 @@ namespace ReceiptRing.App {
     private isPromptingForCategories = false;
     private reviewTimer: number | null = null;
     private bankTransactions: Services.BankTransaction[] = [];
+    private monthlySpend: Services.MonthlySpend[] = [];
+    private selectedMonth: string | null = null;
 
     constructor(
       private readonly elements: UI.DomRegistry,
@@ -27,7 +29,9 @@ namespace ReceiptRing.App {
       private readonly splitCalculatorService: Services.SplitCalculatorService,
       private readonly idService: Services.IdService,
       private readonly receiptApiService: Services.ReceiptApiService,
-      private readonly bankApiService: Services.BankApiService
+      private readonly bankApiService: Services.BankApiService,
+      private readonly spendingAggregatorService: Services.SpendingAggregatorService,
+      private readonly budgetRingView: UI.BudgetRingView
     ) {
       this.items = this.storageService.load();
     }
@@ -66,6 +70,10 @@ namespace ReceiptRing.App {
       this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
       this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
       this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
+      this.elements.budgetMonth.addEventListener("change", () => {
+        this.selectedMonth = this.elements.budgetMonth.value || null;
+        this.renderRing();
+      });
 
       this.elements.tabButtons.forEach((button) => {
         button.addEventListener("click", () => this.switchTab(button.dataset.tab as TabName));
@@ -587,12 +595,57 @@ namespace ReceiptRing.App {
     }
 
     private async loadBudgeting(): Promise<void> {
+      let receipts: Services.SavedReceiptSummary[] = [];
+      try {
+        receipts = await this.receiptApiService.list();
+      } catch {
+        receipts = [];
+      }
       try {
         this.bankTransactions = await this.bankApiService.listTransactions();
       } catch {
         this.bankTransactions = [];
       }
+      this.monthlySpend = this.spendingAggregatorService.aggregate(receipts, this.bankTransactions);
+      this.populateMonths();
       this.renderTransactions();
+      this.renderRing();
+    }
+
+    private populateMonths(): void {
+      const select = this.elements.budgetMonth;
+      const previous = this.selectedMonth;
+      select.replaceChildren();
+
+      for (const entry of this.monthlySpend) {
+        const option = document.createElement("option");
+        option.value = entry.month;
+        option.textContent = this.formatMonthLabel(entry.month);
+        select.append(option);
+      }
+
+      if (this.monthlySpend.length === 0) {
+        this.selectedMonth = null;
+        return;
+      }
+      this.selectedMonth = this.monthlySpend.some((entry) => entry.month === previous)
+        ? previous
+        : this.monthlySpend[0].month;
+      select.value = this.selectedMonth ?? "";
+    }
+
+    private renderRing(): void {
+      const month = this.monthlySpend.find((entry) => entry.month === this.selectedMonth) ?? null;
+      this.budgetRingView.render(this.elements.budgetRing, this.elements.budgetLegend, month);
+    }
+
+    private formatMonthLabel(key: string): string {
+      const [year, month] = key.split("-").map(Number);
+      if (!year || !month) return key;
+      return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+        month: "long",
+        year: "numeric"
+      });
     }
 
     private renderTransactions(): void {
