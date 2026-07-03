@@ -4,11 +4,21 @@ import path from "node:path";
 import express from "express";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { assertCryptoEnv } from "./server/crypto.mjs";
+import { createAuth } from "./server/auth.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL is not set. Copy .env.example to .env and start Postgres (npm run db:up).");
+  process.exit(1);
+}
+
+// Fail fast if the auth/encryption secrets are missing or malformed.
+try {
+  assertCryptoEnv();
+} catch (error) {
+  console.error(error.message);
   process.exit(1);
 }
 
@@ -19,6 +29,10 @@ const app = express();
 const PORT = Number(process.env.PORT) || 4173;
 
 app.use(express.json({ limit: "2mb" }));
+
+const auth = createAuth(prisma);
+auth.register(app);
+const { requireAuth } = auth;
 
 // --- API -------------------------------------------------------------------
 
@@ -144,6 +158,7 @@ app.get("/api/receipts", async (_req, res) => {
 // Never expose source, config, or dependency files over HTTP.
 const BLOCKED = [
   /^\/src\//,
+  /^\/server\//,
   /^\/server\.mjs$/,
   /^\/package(-lock)?\.json$/,
   /^\/tsconfig\.json$/,
