@@ -10,11 +10,13 @@ namespace ReceiptRing {
   const imagePreviewService = new Services.ImagePreviewService();
   const geminiService = new Services.GeminiService();
   const receiptApiService = new Services.ReceiptApiService();
+  const authApiService = new Services.AuthApiService();
   const elements = new UI.DomRegistryFactory().create();
   const categoryPromptView = new UI.CategoryPromptView(categories, elements);
   const splitWorkspaceView = new UI.SplitWorkspaceView(currencyFormatService);
+  const authView = new UI.AuthView(elements, authApiService);
 
-  new App.AppController(
+  const controller = new App.AppController(
     elements,
     parserService,
     categorizationService,
@@ -28,5 +30,32 @@ namespace ReceiptRing {
     splitCalculatorService,
     idService,
     receiptApiService
-  ).start();
+  );
+
+  // Gate the app behind authentication: nothing starts until a session exists.
+  let started = false;
+  const startApp = (): void => {
+    if (started) return;
+    started = true;
+    controller.start();
+  };
+
+  authView.init();
+  authView.onAuthenticated = () => {
+    authView.hide();
+    startApp();
+  };
+  elements.logoutButton.addEventListener("click", () => {
+    void authApiService.logout().finally(() => window.location.reload());
+  });
+
+  void (async () => {
+    try {
+      await authApiService.me();
+      authView.hide();
+      startApp();
+    } catch {
+      authView.show();
+    }
+  })();
 }

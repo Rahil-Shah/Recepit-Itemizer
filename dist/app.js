@@ -738,6 +738,56 @@ var ReceiptRing;
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
 (function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class AuthApiService {
+            async request(path, init) {
+                return fetch(path, { credentials: "same-origin", ...init });
+            }
+            async parseError(response) {
+                try {
+                    const data = (await response.json());
+                    return data.error ?? `Request failed (${response.status}).`;
+                }
+                catch {
+                    return `Request failed (${response.status}).`;
+                }
+            }
+            async me() {
+                const response = await this.request("/api/auth/me");
+                if (!response.ok)
+                    throw new Error(await this.parseError(response));
+                return (await response.json());
+            }
+            async login(email, password) {
+                const response = await this.request("/api/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password })
+                });
+                if (!response.ok)
+                    throw new Error(await this.parseError(response));
+                return (await response.json());
+            }
+            async register(email, password, name) {
+                const response = await this.request("/api/auth/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password, name })
+                });
+                if (!response.ok)
+                    throw new Error(await this.parseError(response));
+                return (await response.json());
+            }
+            async logout() {
+                await this.request("/api/auth/logout", { method: "POST" });
+            }
+        }
+        Services.AuthApiService = AuthApiService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
     var UI;
     (function (UI) {
         class DomRegistryFactory {
@@ -793,7 +843,19 @@ var ReceiptRing;
                     geminiApiKey: this.getElement("#geminiApiKey", HTMLInputElement),
                     geminiModel: this.getElement("#geminiModel", HTMLSelectElement),
                     closeSettingsButton: this.getElement("#closeSettingsButton", HTMLButtonElement),
-                    saveSettingsButton: this.getElement("#saveSettingsButton", HTMLButtonElement)
+                    saveSettingsButton: this.getElement("#saveSettingsButton", HTMLButtonElement),
+                    authOverlay: this.getElement("#authOverlay", HTMLElement),
+                    authForm: this.getElement("#authForm", HTMLFormElement),
+                    authTitle: this.getElement("#authTitle", HTMLElement),
+                    authNameField: this.getElement("#authNameField", HTMLElement),
+                    authName: this.getElement("#authName", HTMLInputElement),
+                    authEmail: this.getElement("#authEmail", HTMLInputElement),
+                    authPassword: this.getElement("#authPassword", HTMLInputElement),
+                    authSubmit: this.getElement("#authSubmit", HTMLButtonElement),
+                    authError: this.getElement("#authError", HTMLElement),
+                    authSwitchText: this.getElement("#authSwitchText", HTMLElement),
+                    authToggle: this.getElement("#authToggle", HTMLButtonElement),
+                    logoutButton: this.getElement("#logoutButton", HTMLButtonElement)
                 };
             }
             getElement(selector, constructorReference) {
@@ -805,6 +867,74 @@ var ReceiptRing;
             }
         }
         UI.DomRegistryFactory = DomRegistryFactory;
+    })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var UI;
+    (function (UI) {
+        class AuthView {
+            constructor(elements, authApi) {
+                this.elements = elements;
+                this.authApi = authApi;
+                this.mode = "login";
+                this.onAuthenticated = null;
+            }
+            init() {
+                this.elements.authForm.addEventListener("submit", (event) => {
+                    event.preventDefault();
+                    void this.submit();
+                });
+                this.elements.authToggle.addEventListener("click", () => {
+                    this.setMode(this.mode === "login" ? "register" : "login");
+                });
+                this.setMode("login");
+            }
+            show() {
+                this.elements.authOverlay.classList.remove("hidden");
+            }
+            hide() {
+                this.elements.authOverlay.classList.add("hidden");
+            }
+            setMode(mode) {
+                this.mode = mode;
+                const registering = mode === "register";
+                this.elements.authTitle.textContent = registering ? "Create account" : "Log in";
+                this.elements.authSubmit.textContent = registering ? "Sign up" : "Log in";
+                this.elements.authSwitchText.textContent = registering
+                    ? "Already have an account?"
+                    : "Need an account?";
+                this.elements.authToggle.textContent = registering ? "Log in" : "Sign up";
+                this.elements.authNameField.classList.toggle("hidden", !registering);
+                this.elements.authPassword.setAttribute("autocomplete", registering ? "new-password" : "current-password");
+                this.setError("");
+            }
+            setError(message) {
+                this.elements.authError.textContent = message;
+                this.elements.authError.classList.toggle("hidden", message === "");
+            }
+            async submit() {
+                const email = this.elements.authEmail.value.trim();
+                const password = this.elements.authPassword.value;
+                const name = this.elements.authName.value.trim() || null;
+                this.setError("");
+                this.elements.authSubmit.disabled = true;
+                try {
+                    const user = this.mode === "register"
+                        ? await this.authApi.register(email, password, name)
+                        : await this.authApi.login(email, password);
+                    this.elements.authForm.reset();
+                    this.onAuthenticated?.(user);
+                }
+                catch (error) {
+                    this.setError(error instanceof Error ? error.message : "Something went wrong.");
+                }
+                finally {
+                    this.elements.authSubmit.disabled = false;
+                }
+            }
+        }
+        UI.AuthView = AuthView;
     })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
@@ -1635,8 +1765,35 @@ var ReceiptRing;
     const imagePreviewService = new ReceiptRing.Services.ImagePreviewService();
     const geminiService = new ReceiptRing.Services.GeminiService();
     const receiptApiService = new ReceiptRing.Services.ReceiptApiService();
+    const authApiService = new ReceiptRing.Services.AuthApiService();
     const elements = new ReceiptRing.UI.DomRegistryFactory().create();
     const categoryPromptView = new ReceiptRing.UI.CategoryPromptView(categories, elements);
     const splitWorkspaceView = new ReceiptRing.UI.SplitWorkspaceView(currencyFormatService);
-    new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService).start();
+    const authView = new ReceiptRing.UI.AuthView(elements, authApiService);
+    const controller = new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService);
+    let started = false;
+    const startApp = () => {
+        if (started)
+            return;
+        started = true;
+        controller.start();
+    };
+    authView.init();
+    authView.onAuthenticated = () => {
+        authView.hide();
+        startApp();
+    };
+    elements.logoutButton.addEventListener("click", () => {
+        void authApiService.logout().finally(() => window.location.reload());
+    });
+    void (async () => {
+        try {
+            await authApiService.me();
+            authView.hide();
+            startApp();
+        }
+        catch {
+            authView.show();
+        }
+    })();
 })(ReceiptRing || (ReceiptRing = {}));
