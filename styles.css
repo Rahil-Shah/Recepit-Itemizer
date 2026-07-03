@@ -1323,7 +1323,10 @@ input[type="number"] {
 
 .auth-error {
   margin: 0;
-  color: #b3261e;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--red-soft);
+  color: var(--red);
   font-size: 0.9rem;
 }
 
@@ -1334,5 +1337,130 @@ input[type="number"] {
   justify-content: center;
   gap: 6px;
   font-size: 0.9rem;
-  color: var(--ink-soft, var(--ink));
+  color: var(--ink-2);
+}
+
+/* --- Budgeting: ring, legend, transactions -------------------------------- */
+.budget-ring-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 28px;
+}
+
+.budget-ring {
+  display: grid;
+  place-items: center;
+  min-width: 220px;
+}
+
+.budget-ring-svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.budget-ring-total {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.budget-ring-caption {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  fill: var(--ink-3);
+}
+
+.budget-ring-empty {
+  margin: 0;
+  padding: 40px 12px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.budget-legend {
+  flex: 1 1 220px;
+}
+
+.budget-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.budget-legend-item {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+}
+
+.budget-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.budget-legend-label {
+  color: var(--ink);
+}
+
+.budget-legend-value {
+  font-family: var(--font-mono);
+  color: var(--ink-2);
+}
+
+.bank-status {
+  margin: 0 0 12px;
+  min-height: 1.2em;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+}
+
+.transactions-list {
+  display: grid;
+  gap: 2px;
+}
+
+.transaction-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.transaction-row:last-child {
+  border-bottom: none;
+}
+
+.transaction-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.transaction-desc {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-meta {
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+
+.transaction-amount {
+  font-family: var(--font-mono);
+  color: var(--ink);
+  white-space: nowrap;
 }
