@@ -6,6 +6,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { assertCryptoEnv } from "./server/crypto.mjs";
 import { createAuth } from "./server/auth.mjs";
+import { createBank } from "./server/bank.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -33,6 +34,9 @@ app.use(express.json({ limit: "2mb" }));
 const auth = createAuth(prisma);
 auth.register(app);
 const { requireAuth } = auth;
+
+const bank = createBank(prisma);
+bank.register(app, requireAuth);
 
 // --- API -------------------------------------------------------------------
 
