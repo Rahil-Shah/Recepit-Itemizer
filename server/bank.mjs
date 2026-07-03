@@ -2,8 +2,8 @@
 // endpoint requires authentication and only ever touches the current user's
 // own connections, accounts, and transactions.
 
-import { tellerConfig, listAccounts } from "./teller.mjs";
-import { encryptSecret } from "./crypto.mjs";
+import { tellerConfig, listAccounts, listTransactions } from "./teller.mjs";
+import { encryptSecret, decryptSecret } from "./crypto.mjs";
 
 export function createBank(prisma) {
   // Persist (or refresh) the accounts Teller returns for a connection.
@@ -65,6 +65,73 @@ export function createBank(prisma) {
       } catch (error) {
         console.error("Teller enroll failed:", error);
         res.status(502).json({ error: "Could not connect the bank account." });
+      }
+    });
+
+    // Pull transactions for all of the user's connected accounts and upsert
+    // them (deduped by Teller's transaction id). Read-only.
+    app.post("/api/teller/sync", requireAuth, async (req, res) => {
+      try {
+        const connections = await prisma.bankConnection.findMany({
+          where: { userId: req.userId },
+          include: { accounts: true }
+        });
+
+        let imported = 0;
+        for (const connection of connections) {
+          const token = decryptSecret({
+            ciphertext: connection.encryptedToken,
+            iv: connection.tokenIv,
+            authTag: connection.tokenAuthTag
+          });
+          for (const account of connection.accounts) {
+            const transactions = await listTransactions(token, account.tellerAccountId);
+            for (const txn of transactions ?? []) {
+              if (!txn?.id) continue;
+              const data = {
+                accountId: account.id,
+                date: new Date(txn.date),
+                description: txn.description ?? null,
+                amount: txn.amount ?? 0,
+                category: txn.details?.category ?? null
+              };
+              await prisma.bankTransaction.upsert({
+                where: { tellerTxnId: txn.id },
+                update: data,
+                create: { tellerTxnId: txn.id, ...data }
+              });
+              imported += 1;
+            }
+          }
+        }
+        res.json({ imported });
+      } catch (error) {
+        console.error("Teller sync failed:", error);
+        res.status(502).json({ error: "Could not sync transactions." });
+      }
+    });
+
+    // Return the user's stored transactions (sanitized — no tokens/ids leaked).
+    app.get("/api/transactions", requireAuth, async (req, res) => {
+      try {
+        const transactions = await prisma.bankTransaction.findMany({
+          where: { account: { connection: { userId: req.userId } } },
+          orderBy: { date: "desc" },
+          include: { account: { select: { name: true, lastFour: true } } }
+        });
+        res.json(
+          transactions.map((txn) => ({
+            id: txn.id,
+            date: txn.date,
+            description: txn.description,
+            amount: Number(txn.amount),
+            category: txn.category,
+            account: txn.account?.name ?? null
+          }))
+        );
+      } catch (error) {
+        console.error("Failed to list transactions:", error);
+        res.status(500).json({ error: "Could not load transactions." });
       }
     });
   }
