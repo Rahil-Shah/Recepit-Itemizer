@@ -788,6 +788,58 @@ var ReceiptRing;
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
 (function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class BankApiService {
+            async request(path, init) {
+                return fetch(path, { credentials: "same-origin", ...init });
+            }
+            async parseError(response) {
+                try {
+                    const data = (await response.json());
+                    return data.error ?? `Request failed (${response.status}).`;
+                }
+                catch {
+                    return `Request failed (${response.status}).`;
+                }
+            }
+            async config() {
+                const response = await this.request("/api/teller/config");
+                if (!response.ok)
+                    throw new Error(await this.parseError(response));
+                return (await response.json());
+            }
+            async enroll(enrollment) {
+                const response = await this.request("/api/teller/enroll", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        accessToken: enrollment.accessToken,
+                        enrollment: enrollment.enrollment ?? null
+                    })
+                });
+                if (!response.ok)
+                    throw new Error(await this.parseError(response));
+                return (await response.json());
+            }
+            async sync() {
+                const response = await this.request("/api/teller/sync", { method: "POST" });
+                if (!response.ok)
+                    throw new Error(await this.parseError(response));
+                return (await response.json());
+            }
+            async listTransactions() {
+                const response = await this.request("/api/transactions");
+                if (!response.ok)
+                    throw new Error(await this.parseError(response));
+                return (await response.json());
+            }
+        }
+        Services.BankApiService = BankApiService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
     var UI;
     (function (UI) {
         class DomRegistryFactory {
@@ -855,7 +907,14 @@ var ReceiptRing;
                     authError: this.getElement("#authError", HTMLElement),
                     authSwitchText: this.getElement("#authSwitchText", HTMLElement),
                     authToggle: this.getElement("#authToggle", HTMLButtonElement),
-                    logoutButton: this.getElement("#logoutButton", HTMLButtonElement)
+                    logoutButton: this.getElement("#logoutButton", HTMLButtonElement),
+                    budgetMonth: this.getElement("#budgetMonth", HTMLSelectElement),
+                    budgetRing: this.getElement("#budgetRing", HTMLElement),
+                    budgetLegend: this.getElement("#budgetLegend", HTMLElement),
+                    connectBankButton: this.getElement("#connectBankButton", HTMLButtonElement),
+                    bankStatus: this.getElement("#bankStatus", HTMLElement),
+                    transactionsList: this.getElement("#transactionsList", HTMLElement),
+                    transactionsEmpty: this.getElement("#transactionsEmpty", HTMLElement)
                 };
             }
             getElement(selector, constructorReference) {

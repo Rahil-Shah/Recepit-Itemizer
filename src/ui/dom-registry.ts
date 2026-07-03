@@ -63,6 +63,13 @@ namespace ReceiptRing.UI {
     authSwitchText: HTMLElement;
     authToggle: HTMLButtonElement;
     logoutButton: HTMLButtonElement;
+    budgetMonth: HTMLSelectElement;
+    budgetRing: HTMLElement;
+    budgetLegend: HTMLElement;
+    connectBankButton: HTMLButtonElement;
+    bankStatus: HTMLElement;
+    transactionsList: HTMLElement;
+    transactionsEmpty: HTMLElement;
   }
 
   export class DomRegistryFactory {
@@ -132,7 +139,14 @@ namespace ReceiptRing.UI {
         authError: this.getElement("#authError", HTMLElement),
         authSwitchText: this.getElement("#authSwitchText", HTMLElement),
         authToggle: this.getElement("#authToggle", HTMLButtonElement),
-        logoutButton: this.getElement("#logoutButton", HTMLButtonElement)
+        logoutButton: this.getElement("#logoutButton", HTMLButtonElement),
+        budgetMonth: this.getElement("#budgetMonth", HTMLSelectElement),
+        budgetRing: this.getElement("#budgetRing", HTMLElement),
+        budgetLegend: this.getElement("#budgetLegend", HTMLElement),
+        connectBankButton: this.getElement("#connectBankButton", HTMLButtonElement),
+        bankStatus: this.getElement("#bankStatus", HTMLElement),
+        transactionsList: this.getElement("#transactionsList", HTMLElement),
+        transactionsEmpty: this.getElement("#transactionsEmpty", HTMLElement)
       };
     }
 

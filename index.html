@@ -222,13 +222,35 @@
       </div>
 
       <div class="tab-view hidden" id="budgetingView">
-        <section class="panel" aria-label="Budgeting">
-          <div class="coming-soon">
-            <span class="coming-soon-badge">Coming soon</span>
-            <h2>Budgets</h2>
-            <p>Monthly budgets, category limits, and spending trends across your saved receipts.</p>
-          </div>
-        </section>
+        <div class="workspace" aria-label="Budgeting workspace">
+          <section class="panel" aria-label="Monthly spending">
+            <header class="panel-header">
+              <h2>Monthly spending</h2>
+              <select class="table-select" id="budgetMonth" aria-label="Select month"></select>
+            </header>
+            <div class="panel-body">
+              <div class="budget-ring-wrap">
+                <div class="budget-ring" id="budgetRing"></div>
+                <div class="budget-legend" id="budgetLegend"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" aria-label="Bank transactions">
+            <header class="panel-header">
+              <h2>Bank transactions</h2>
+              <button class="btn btn-primary" id="connectBankButton" type="button">Connect bank</button>
+            </header>
+            <div class="panel-body">
+              <p class="bank-status" id="bankStatus"></p>
+              <div class="transactions-list" id="transactionsList"></div>
+              <div class="empty-state hidden" id="transactionsEmpty">
+                <strong>No transactions yet</strong>
+                <span>Connect a bank to import read-only transactions.</span>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
 
@@ -334,6 +356,7 @@
       </section>
     </div>
 
+    <script src="https://cdn.teller.io/connect/connect.js"></script>
     <script src="dist/app.js"></script>
   </body>
 </html>

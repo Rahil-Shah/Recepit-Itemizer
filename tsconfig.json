@@ -26,6 +26,7 @@
     "src/services/gemini.service.ts",
     "src/services/receipt-api.service.ts",
     "src/services/auth-api.service.ts",
+    "src/services/bank-api.service.ts",
     "src/ui/dom-registry.ts",
     "src/ui/auth.view.ts",
     "src/ui/split-workspace.view.ts",
