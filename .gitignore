@@ -3,3 +3,11 @@ node_modules/
 .env
 .env.*
 !.env.example
+
+# Secrets & TLS material — never commit certificates or private keys.
+certs/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
