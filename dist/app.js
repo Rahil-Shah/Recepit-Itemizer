@@ -1311,7 +1311,7 @@ var ReceiptRing;
     var App;
     (function (App) {
         class AppController {
-            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService) {
+            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService, bankApiService) {
                 this.elements = elements;
                 this.parserService = parserService;
                 this.categorizationService = categorizationService;
@@ -1325,6 +1325,7 @@ var ReceiptRing;
                 this.splitCalculatorService = splitCalculatorService;
                 this.idService = idService;
                 this.receiptApiService = receiptApiService;
+                this.bankApiService = bankApiService;
                 this.receiptLines = [];
                 this.people = [];
                 this.assignments = [];
@@ -1333,6 +1334,7 @@ var ReceiptRing;
                 this.cameraStream = null;
                 this.isPromptingForCategories = false;
                 this.reviewTimer = null;
+                this.bankTransactions = [];
                 this.items = this.storageService.load();
             }
             start() {
@@ -1369,6 +1371,7 @@ var ReceiptRing;
                 this.elements.saveSettingsButton.addEventListener("click", () => this.saveSettings());
                 this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
                 this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
+                this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
                 this.elements.tabButtons.forEach((button) => {
                     button.addEventListener("click", () => this.switchTab(button.dataset.tab));
                 });
@@ -1395,6 +1398,9 @@ var ReceiptRing;
                 this.elements.budgetingView.classList.toggle("hidden", tab !== "budgeting");
                 if (tab === "history") {
                     void this.loadHistory();
+                }
+                if (tab === "budgeting") {
+                    void this.loadBudgeting();
                 }
             }
             loadSample() {
@@ -1756,6 +1762,82 @@ var ReceiptRing;
                     this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
                 }
             }
+            setBankStatus(message) {
+                this.elements.bankStatus.textContent = message;
+            }
+            async connectBank() {
+                try {
+                    this.setBankStatus("Opening Teller…");
+                    const config = await this.bankApiService.config();
+                    if (!config.applicationId) {
+                        this.setBankStatus("Set TELLER_APPLICATION_ID in .env to connect a bank.");
+                        return;
+                    }
+                    if (typeof TellerConnect === "undefined") {
+                        this.setBankStatus("Teller Connect failed to load. Check your connection.");
+                        return;
+                    }
+                    const teller = TellerConnect.setup({
+                        applicationId: config.applicationId,
+                        environment: config.environment,
+                        products: ["transactions"],
+                        onSuccess: (enrollment) => void this.handleEnrollment(enrollment),
+                        onFailure: () => this.setBankStatus("Bank connection failed."),
+                        onExit: () => this.setBankStatus("")
+                    });
+                    teller.open();
+                }
+                catch (error) {
+                    this.setBankStatus(error instanceof Error ? error.message : "Could not start Teller.");
+                }
+            }
+            async handleEnrollment(enrollment) {
+                try {
+                    this.setBankStatus("Linking account…");
+                    const result = await this.bankApiService.enroll(enrollment);
+                    this.setBankStatus(`Connected ${result.institutionName ?? "bank"}. Syncing…`);
+                    const { imported } = await this.bankApiService.sync();
+                    this.setBankStatus(`Imported ${imported} transaction${imported === 1 ? "" : "s"}.`);
+                    await this.loadBudgeting();
+                }
+                catch (error) {
+                    this.setBankStatus(error instanceof Error ? error.message : "Enrollment failed.");
+                }
+            }
+            async loadBudgeting() {
+                try {
+                    this.bankTransactions = await this.bankApiService.listTransactions();
+                }
+                catch {
+                    this.bankTransactions = [];
+                }
+                this.renderTransactions();
+            }
+            renderTransactions() {
+                const list = this.elements.transactionsList;
+                const transactions = this.bankTransactions;
+                this.elements.transactionsEmpty.classList.toggle("hidden", transactions.length > 0);
+                list.replaceChildren();
+                for (const txn of transactions.slice(0, 100)) {
+                    const row = document.createElement("div");
+                    row.className = "transaction-row";
+                    const main = document.createElement("div");
+                    main.className = "transaction-main";
+                    const desc = document.createElement("span");
+                    desc.className = "transaction-desc";
+                    desc.textContent = txn.description ?? "Transaction";
+                    const meta = document.createElement("span");
+                    meta.className = "transaction-meta";
+                    const date = new Date(txn.date).toLocaleDateString();
+                    meta.textContent = txn.category ? `${date} · ${txn.category}` : date;
+                    main.append(desc, meta);
+                    const amount = document.createElement("span");
+                    amount.className = "transaction-amount";
+                    amount.textContent = this.currencyFormatService.format(txn.amount);
+                    row.append(main, amount);
+                    list.append(row);
+                }
+            }
             scheduleCategoryReview() {
                 if (this.reviewTimer !== null) {
                     window.clearTimeout(this.reviewTimer);
@@ -1825,11 +1907,12 @@ var ReceiptRing;
     const geminiService = new ReceiptRing.Services.GeminiService();
     const receiptApiService = new ReceiptRing.Services.ReceiptApiService();
     const authApiService = new ReceiptRing.Services.AuthApiService();
+    const bankApiService = new ReceiptRing.Services.BankApiService();
     const elements = new ReceiptRing.UI.DomRegistryFactory().create();
     const categoryPromptView = new ReceiptRing.UI.CategoryPromptView(categories, elements);
     const splitWorkspaceView = new ReceiptRing.UI.SplitWorkspaceView(currencyFormatService);
     const authView = new ReceiptRing.UI.AuthView(elements, authApiService);
-    const controller = new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService);
+    const controller = new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, idService, receiptApiService, bankApiService);
     let started = false;
     const startApp = () => {
         if (started)

@@ -11,6 +11,7 @@ namespace ReceiptRing.App {
     private cameraStream: MediaStream | null = null;
     private isPromptingForCategories = false;
     private reviewTimer: number | null = null;
+    private bankTransactions: Services.BankTransaction[] = [];
 
     constructor(
       private readonly elements: UI.DomRegistry,
@@ -25,7 +26,8 @@ namespace ReceiptRing.App {
       private readonly splitWorkspaceView: UI.SplitWorkspaceView,
       private readonly splitCalculatorService: Services.SplitCalculatorService,
       private readonly idService: Services.IdService,
-      private readonly receiptApiService: Services.ReceiptApiService
+      private readonly receiptApiService: Services.ReceiptApiService,
+      private readonly bankApiService: Services.BankApiService
     ) {
       this.items = this.storageService.load();
     }
@@ -63,6 +65,7 @@ namespace ReceiptRing.App {
       this.elements.saveSettingsButton.addEventListener("click", () => this.saveSettings());
       this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
       this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
+      this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
 
       this.elements.tabButtons.forEach((button) => {
         button.addEventListener("click", () => this.switchTab(button.dataset.tab as TabName));
@@ -95,6 +98,9 @@ namespace ReceiptRing.App {
 
       if (tab === "history") {
         void this.loadHistory();
+      }
+      if (tab === "budgeting") {
+        void this.loadBudgeting();
       }
     }
 
@@ -534,6 +540,88 @@ namespace ReceiptRing.App {
           error instanceof Error ? error.message : "Is the server running?"
         }</span>`;
         this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
+      }
+    }
+
+    private setBankStatus(message: string): void {
+      this.elements.bankStatus.textContent = message;
+    }
+
+    private async connectBank(): Promise<void> {
+      try {
+        this.setBankStatus("Opening Teller…");
+        const config = await this.bankApiService.config();
+        if (!config.applicationId) {
+          this.setBankStatus("Set TELLER_APPLICATION_ID in .env to connect a bank.");
+          return;
+        }
+        if (typeof TellerConnect === "undefined") {
+          this.setBankStatus("Teller Connect failed to load. Check your connection.");
+          return;
+        }
+        const teller = TellerConnect.setup({
+          applicationId: config.applicationId,
+          environment: config.environment,
+          products: ["transactions"],
+          onSuccess: (enrollment) => void this.handleEnrollment(enrollment),
+          onFailure: () => this.setBankStatus("Bank connection failed."),
+          onExit: () => this.setBankStatus("")
+        });
+        teller.open();
+      } catch (error) {
+        this.setBankStatus(error instanceof Error ? error.message : "Could not start Teller.");
+      }
+    }
+
+    private async handleEnrollment(enrollment: TellerConnectEnrollment): Promise<void> {
+      try {
+        this.setBankStatus("Linking account…");
+        const result = await this.bankApiService.enroll(enrollment);
+        this.setBankStatus(`Connected ${result.institutionName ?? "bank"}. Syncing…`);
+        const { imported } = await this.bankApiService.sync();
+        this.setBankStatus(`Imported ${imported} transaction${imported === 1 ? "" : "s"}.`);
+        await this.loadBudgeting();
+      } catch (error) {
+        this.setBankStatus(error instanceof Error ? error.message : "Enrollment failed.");
+      }
+    }
+
+    private async loadBudgeting(): Promise<void> {
+      try {
+        this.bankTransactions = await this.bankApiService.listTransactions();
+      } catch {
+        this.bankTransactions = [];
+      }
+      this.renderTransactions();
+    }
+
+    private renderTransactions(): void {
+      const list = this.elements.transactionsList;
+      const transactions = this.bankTransactions;
+      this.elements.transactionsEmpty.classList.toggle("hidden", transactions.length > 0);
+      list.replaceChildren();
+
+      for (const txn of transactions.slice(0, 100)) {
+        const row = document.createElement("div");
+        row.className = "transaction-row";
+
+        const main = document.createElement("div");
+        main.className = "transaction-main";
+        const desc = document.createElement("span");
+        desc.className = "transaction-desc";
+        desc.textContent = txn.description ?? "Transaction";
+        const meta = document.createElement("span");
+        meta.className = "transaction-meta";
+        const date = new Date(txn.date).toLocaleDateString();
+        meta.textContent = txn.category ? `${date} · ${txn.category}` : date;
+        main.append(desc, meta);
+
+        const amount = document.createElement("span");
+        amount.className = "transaction-amount";
+        amount.textContent = this.currencyFormatService.format(txn.amount);
+
+        row.append(main, amount);
+        list.append(row);
       }
     }
 

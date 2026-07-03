@@ -11,6 +11,7 @@ namespace ReceiptRing {
   const geminiService = new Services.GeminiService();
   const receiptApiService = new Services.ReceiptApiService();
   const authApiService = new Services.AuthApiService();
+  const bankApiService = new Services.BankApiService();
   const elements = new UI.DomRegistryFactory().create();
   const categoryPromptView = new UI.CategoryPromptView(categories, elements);
   const splitWorkspaceView = new UI.SplitWorkspaceView(currencyFormatService);
@@ -29,7 +30,8 @@ namespace ReceiptRing {
     splitWorkspaceView,
     splitCalculatorService,
     idService,
-    receiptApiService
+    receiptApiService,
+    bankApiService
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.
