@@ -3,254 +3,360 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f3f1e9" />
-    <title>Receipt Ring — split receipts, line by line</title>
+    <meta name="theme-color" content="#f4f4f2" />
+    <title>Receipt Ring</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Hanken+Grotesk:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:ital,wght@0,400..900;1,400..900&family=Spline+Sans+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="grain" aria-hidden="true"></div>
-
-    <main class="app-shell">
-      <header class="topbar">
+    <header class="appbar">
+      <div class="appbar-inner">
         <div class="brand">
-          <span class="brand-mark" aria-hidden="true">
-            <span></span><span></span><span></span><span></span><span></span>
+          <span class="brand-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M6 3.5h12a1 1 0 0 1 1 1v15l-2.4-1.6-2.4 1.6-2.2-1.6-2.2 1.6-2.4-1.6L5 20.5v-16a1 1 0 0 1 1-1Z"
+                stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"
+              />
+              <path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
           </span>
-          <div class="brand-text">
-            <p class="eyebrow">Receipt Ring</p>
-            <h1>Split a receipt<br />from the photo,<br /><em>line by line.</em></h1>
-          </div>
+          <span class="brand-name">Receipt Ring</span>
         </div>
-        <div class="topbar-actions">
-          <button class="btn btn-ghost" id="sampleButton" type="button">Load sample</button>
-          <button class="btn btn-dark" id="settingsButton" type="button">
-            <span class="btn-gear" aria-hidden="true">⚙</span> Settings
+
+        <nav class="tab-nav" aria-label="Sections">
+          <button class="tab-button is-active" id="tabReceipts" type="button" data-tab="receipts">Split</button>
+          <button class="tab-button" id="tabHistory" type="button" data-tab="history">History</button>
+          <button class="tab-button" id="tabBudgeting" type="button" data-tab="budgeting">Budgets</button>
+        </nav>
+
+        <div class="appbar-actions">
+          <button class="btn btn-secondary" id="sampleButton" type="button">Load sample</button>
+          <button class="btn btn-ghost" id="logoutButton" type="button">Log out</button>
+          <button class="btn btn-ghost" id="settingsButton" type="button">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+                stroke="currentColor" stroke-width="1.6"
+              />
+              <path
+                d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V19.6a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.12-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H2.9a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.12 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V2.9a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03h.17a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.03Z"
+                stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+              />
+            </svg>
+            Settings
           </button>
         </div>
-      </header>
+      </div>
+    </header>
 
-      <nav class="tab-nav" aria-label="Sections">
-        <button class="tab-button is-active" id="tabReceipts" type="button" data-tab="receipts">
-          <span class="tab-dot" style="--dot: var(--blue)"></span>Receipts
-        </button>
-        <button class="tab-button" id="tabHistory" type="button" data-tab="history">
-          <span class="tab-dot" style="--dot: var(--green)"></span>History
-        </button>
-        <button class="tab-button" id="tabBudgeting" type="button" data-tab="budgeting">
-          <span class="tab-dot" style="--dot: var(--orange)"></span>Budgeting
-        </button>
-      </nav>
-
+    <main class="app-main">
       <div class="tab-view" id="receiptsView">
-        <section class="workspace" aria-label="Receipt workspace">
-          <section class="panel scanner-panel" data-accent="blue" aria-label="Scan receipt">
-            <div class="panel-heading">
-              <h2><span class="panel-tag">01</span>Scan</h2>
-              <span class="pill" id="itemCount">0 items</span>
-            </div>
+        <div class="workspace" aria-label="Receipt workspace">
+          <section class="panel" aria-label="Scan receipt">
+            <header class="panel-header">
+              <h2>Scan receipt</h2>
+              <span class="badge" id="itemCount">0 items</span>
+            </header>
+            <div class="panel-body">
+              <label class="dropzone" id="dropzone">
+                <input id="receiptImage" type="file" accept="image/*" capture="environment" />
+                <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M12 16V5m0 0-4 4m4-4 4 4"
+                    stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+                  />
+                  <path
+                    d="M4 15.5v2A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5v-2"
+                    stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                  />
+                </svg>
+                <span class="dropzone-title">Drop a receipt image</span>
+                <span class="dropzone-note">or click to browse — the items are read for you</span>
+              </label>
 
-            <label class="dropzone" id="dropzone">
-              <input id="receiptImage" type="file" accept="image/*" capture="environment" />
-              <span class="dropzone-icon" aria-hidden="true"></span>
-              <span class="dropzone-title">Drop a receipt here</span>
-              <span class="dropzone-note">Camera roll or image file — we read it for you</span>
-            </label>
+              <figure class="receipt-preview hidden" id="receiptPreviewWrap">
+                <img id="receiptPreview" alt="Uploaded receipt preview" />
+                <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">×</button>
+              </figure>
 
-            <figure class="receipt-preview hidden" id="receiptPreviewWrap">
-              <img id="receiptPreview" alt="Uploaded receipt preview" />
-              <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">×</button>
-            </figure>
-
-            <div class="ocr-status hidden" id="ocrStatus" aria-live="polite">
-              <span id="ocrStatusText">Reading receipt…</span>
-              <div class="ocr-progress">
-                <span id="ocrProgressBar"></span>
+              <div class="ocr-status hidden" id="ocrStatus" aria-live="polite">
+                <span id="ocrStatusText">Reading receipt…</span>
+                <div class="ocr-progress">
+                  <span id="ocrProgressBar"></span>
+                </div>
               </div>
-            </div>
 
-            <label class="field-label" for="receiptText">Receipt text</label>
-            <textarea
-              id="receiptText"
-              rows="9"
-              spellcheck="false"
-              placeholder="Paste detected receipt text here…"
-            ></textarea>
+              <div class="field">
+                <label class="field-label" for="receiptText">Receipt text</label>
+                <textarea
+                  id="receiptText"
+                  rows="9"
+                  spellcheck="false"
+                  placeholder="Or paste raw receipt text here…"
+                ></textarea>
+              </div>
 
-            <div class="button-row">
-              <button class="btn btn-light" id="openCameraButton" type="button">📷 Camera</button>
-              <button class="btn btn-primary" id="parseButton" type="button">Itemize receipt →</button>
-              <button class="btn btn-light" id="clearButton" type="button">Clear</button>
+              <div class="button-row">
+                <button class="btn btn-secondary" id="openCameraButton" type="button">
+                  <svg class="btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.2-1.8a1.5 1.5 0 0 1 1.25-.7h4.1a1.5 1.5 0 0 1 1.25.7L16.5 7h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-9Z"
+                      stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"
+                    />
+                    <circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.6" />
+                  </svg>
+                  Camera
+                </button>
+                <button class="btn btn-primary" id="parseButton" type="button">Itemize receipt</button>
+                <button class="btn btn-ghost" id="clearButton" type="button">Clear</button>
+              </div>
             </div>
           </section>
 
-          <section class="panel items-panel" data-accent="orange" aria-label="Receipt split">
-            <div class="panel-heading">
-              <h2><span class="panel-tag">02</span>Receipt lines</h2>
-              <span class="pill" id="unassignedCount">0 unassigned</span>
-            </div>
-
-            <div class="split-toolbar">
-              <div class="toolbar-field">
-                <label class="field-label compact-label" for="storeNameInput">Store</label>
-                <input class="table-input" id="storeNameInput" placeholder="Store name" />
+          <section class="panel" aria-label="Line items">
+            <header class="panel-header">
+              <h2>Line items</h2>
+              <span class="badge" id="unassignedCount">0 unassigned</span>
+            </header>
+            <div class="panel-body">
+              <div class="split-toolbar">
+                <div class="field">
+                  <label class="field-label" for="storeNameInput">Store</label>
+                  <input class="table-input" id="storeNameInput" placeholder="Store name" />
+                </div>
+                <div class="field">
+                  <label class="field-label" for="receiptCategory">Category</label>
+                  <select class="table-select" id="receiptCategory">
+                    <option>Groceries</option>
+                    <option>Dining</option>
+                    <option>Entertainment</option>
+                    <option>Travel</option>
+                    <option>Other</option>
+                  </select>
+                </div>
               </div>
-              <div class="toolbar-field">
-                <label class="field-label compact-label" for="receiptCategory">Receipt category</label>
-                <select class="table-select" id="receiptCategory">
-                  <option>Groceries</option>
-                  <option>Dining</option>
-                  <option>Entertainment</option>
-                  <option>Travel</option>
-                  <option>Other</option>
-                </select>
-              </div>
-            </div>
 
-            <div class="items-table" role="table" aria-label="Receipt lines">
-              <div class="table-row table-head" role="row">
-                <span role="columnheader">Item</span>
-                <span role="columnheader">Assigned</span>
-                <span role="columnheader">Amount</span>
-                <span role="columnheader" aria-label="Actions"></span>
+              <div class="items-table" role="table" aria-label="Receipt lines">
+                <div class="table-row table-head" role="row">
+                  <span role="columnheader">Item</span>
+                  <span role="columnheader">Assigned to</span>
+                  <span role="columnheader" class="amount-head">Amount</span>
+                  <span role="columnheader" aria-label="Actions"></span>
+                </div>
+                <div id="receiptLinesList"></div>
               </div>
-              <div id="receiptLinesList"></div>
-            </div>
 
-            <div class="empty-state" id="emptyState">
-              <span class="empty-glyph" aria-hidden="true">🧾</span>
-              <strong>No receipt lines yet</strong>
-              <span>Snap or upload a receipt photo to detect purchasable rows.</span>
+              <div class="empty-state" id="emptyState">
+                <svg class="empty-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M6 3.5h12a1 1 0 0 1 1 1v15l-2.4-1.6-2.4 1.6-2.2-1.6-2.2 1.6-2.4-1.6L5 20.5v-16a1 1 0 0 1 1-1Z"
+                    stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"
+                  />
+                  <path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+                <strong>No line items yet</strong>
+                <span>Upload a receipt photo or paste its text, then itemize it.</span>
+              </div>
             </div>
           </section>
 
-          <aside class="panel summary-panel" data-accent="green" aria-label="Spending summary">
-            <div class="panel-heading">
-              <h2><span class="panel-tag">03</span>Split</h2>
-              <span class="pill pill-total" id="receiptTotal">$0.00</span>
-            </div>
-
-            <div class="people-panel">
-              <div class="person-form">
-                <input class="table-input" id="personNameInput" placeholder="Add person" />
-                <button class="btn btn-primary compact" id="addPersonButton" type="button">Add</button>
+          <aside class="panel summary-panel" aria-label="Split summary">
+            <header class="panel-header">
+              <h2>Split summary</h2>
+              <span class="badge badge-total" id="receiptTotal">$0.00</span>
+            </header>
+            <div class="panel-body">
+              <div class="people-panel">
+                <div class="person-form">
+                  <input class="table-input" id="personNameInput" placeholder="Add a person" />
+                  <button class="btn btn-primary" id="addPersonButton" type="button">Add</button>
+                </div>
+                <div class="people-list" id="peopleList"></div>
+                <p class="people-hint">
+                  Add everyone splitting the bill, then assign them per line under <strong>Assigned to</strong>.
+                </p>
               </div>
-              <div class="people-list" id="peopleList"></div>
-              <p class="people-hint">Add people, then check them off in each line's <strong>Assigned</strong> dropdown.</p>
-            </div>
 
-            <div class="tax-panel">
-              <label class="field-label" for="taxInput">Tax</label>
-              <input class="table-input" id="taxInput" type="number" min="0" step="0.01" value="0" />
-            </div>
+              <div class="field tax-panel">
+                <label class="field-label" for="taxInput">Tax</label>
+                <input class="table-input" id="taxInput" type="number" min="0" step="0.01" value="0" />
+              </div>
 
-            <div class="split-total-list" id="splitTotalsList"></div>
+              <div class="split-total-list" id="splitTotalsList"></div>
 
-            <div class="save-panel">
-              <button class="btn btn-dark btn-block" id="saveReceiptButton" type="button">Save to history</button>
-              <span class="save-status" id="saveStatus" aria-live="polite"></span>
+              <div class="save-panel">
+                <button class="btn btn-primary btn-block" id="saveReceiptButton" type="button">Save to history</button>
+                <span class="save-status" id="saveStatus" aria-live="polite"></span>
+              </div>
             </div>
           </aside>
-        </section>
+        </div>
       </div>
 
       <div class="tab-view hidden" id="historyView">
-        <section class="panel history-panel" data-accent="green" aria-label="Saved receipts">
-          <div class="panel-heading">
-            <h2><span class="panel-tag">★</span>Saved receipts</h2>
-            <button class="btn btn-light compact" id="refreshHistoryButton" type="button">↻ Refresh</button>
-          </div>
-          <div class="history-list" id="historyList"></div>
-          <div class="empty-state" id="historyEmpty">
-            <span class="empty-glyph" aria-hidden="true">📂</span>
-            <strong>No saved receipts yet</strong>
-            <span>Save a split from the Receipts tab to see it here.</span>
+        <section class="panel history-panel" aria-label="Saved receipts">
+          <header class="panel-header">
+            <h2>Saved receipts</h2>
+            <button class="btn btn-secondary" id="refreshHistoryButton" type="button">Refresh</button>
+          </header>
+          <div class="panel-body">
+            <div class="history-list" id="historyList"></div>
+            <div class="empty-state" id="historyEmpty">
+              <svg class="empty-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M4 7.5A1.5 1.5 0 0 1 5.5 6h4l1.6 2h7.4A1.5 1.5 0 0 1 20 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-10Z"
+                  stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"
+                />
+              </svg>
+              <strong>No saved receipts</strong>
+              <span>Save a split from the Split tab and it will show up here.</span>
+            </div>
           </div>
         </section>
       </div>
 
       <div class="tab-view hidden" id="budgetingView">
-        <section class="panel coming-soon-panel" data-accent="orange" aria-label="Budgeting">
-          <div class="coming-soon">
-            <span class="coming-soon-badge">Coming soon</span>
-            <h2>Budgeting</h2>
-            <p>Monthly budgets, category limits, and spending trends across your saved receipts are on the way.</p>
-          </div>
-        </section>
+        <div class="workspace" aria-label="Budgeting workspace">
+          <section class="panel" aria-label="Monthly spending">
+            <header class="panel-header">
+              <h2>Monthly spending</h2>
+              <select class="table-select" id="budgetMonth" aria-label="Select month"></select>
+            </header>
+            <div class="panel-body">
+              <div class="budget-ring-wrap">
+                <div class="budget-ring" id="budgetRing"></div>
+                <div class="budget-legend" id="budgetLegend"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" aria-label="Bank transactions">
+            <header class="panel-header">
+              <h2>Bank transactions</h2>
+              <button class="btn btn-primary" id="connectBankButton" type="button">Connect bank</button>
+            </header>
+            <div class="panel-body">
+              <p class="bank-status" id="bankStatus"></p>
+              <div class="transactions-list" id="transactionsList"></div>
+              <div class="empty-state hidden" id="transactionsEmpty">
+                <strong>No transactions yet</strong>
+                <span>Connect a bank to import read-only transactions.</span>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
 
     <div class="modal-backdrop hidden" id="categoryPrompt" role="dialog" aria-modal="true" aria-labelledby="categoryPromptTitle">
-      <section class="category-modal">
-        <div class="modal-heading">
-          <p class="eyebrow">Review category</p>
-          <h2 id="categoryPromptTitle">Choose a category for this item</h2>
-        </div>
+      <section class="modal-card">
+        <header class="modal-heading">
+          <h2 id="categoryPromptTitle">Categorize item</h2>
+          <p>Choose a category for this receipt line.</p>
+        </header>
         <div class="prompt-item">
           <span>Item</span>
           <strong id="categoryPromptItem">Unknown item</strong>
         </div>
-        <label class="field-label" for="categoryPromptSelect">Category</label>
-        <select class="table-select" id="categoryPromptSelect"></select>
+        <div class="field">
+          <label class="field-label" for="categoryPromptSelect">Category</label>
+          <select class="table-select" id="categoryPromptSelect"></select>
+        </div>
         <label class="checkbox-row">
           <input id="categoryPromptRemember" type="checkbox" />
           <span>Always categorize this item this way</span>
         </label>
         <div class="modal-actions">
-          <button class="btn btn-light" id="categoryPromptSkip" type="button">Skip</button>
+          <button class="btn btn-secondary" id="categoryPromptSkip" type="button">Skip</button>
           <button class="btn btn-primary" id="categoryPromptSave" type="button">Save category</button>
         </div>
       </section>
     </div>
 
     <div class="modal-backdrop hidden" id="cameraModal" role="dialog" aria-modal="true" aria-labelledby="cameraTitle">
-      <section class="camera-modal">
-        <div class="modal-heading">
-          <p class="eyebrow">Camera</p>
+      <section class="modal-card modal-card-wide">
+        <header class="modal-heading">
           <h2 id="cameraTitle">Capture receipt</h2>
-        </div>
+          <p>Line the receipt up in the frame and capture.</p>
+        </header>
         <video id="cameraVideo" autoplay playsinline muted></video>
         <canvas id="cameraCanvas" class="hidden"></canvas>
         <div class="modal-actions">
-          <button class="btn btn-light" id="closeCameraButton" type="button">Close</button>
+          <button class="btn btn-secondary" id="closeCameraButton" type="button">Close</button>
           <button class="btn btn-primary" id="capturePhotoButton" type="button">Capture</button>
         </div>
       </section>
     </div>
 
     <div class="modal-backdrop hidden" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-      <section class="category-modal">
-        <div class="modal-heading">
-          <p class="eyebrow">Configuration</p>
-          <h2 id="settingsTitle">Gemini API Settings</h2>
-        </div>
+      <section class="modal-card">
+        <header class="modal-heading">
+          <h2 id="settingsTitle">Settings</h2>
+          <p>Configure the Gemini API used to parse receipts.</p>
+        </header>
         <div class="settings-form">
-          <label class="field-label" for="geminiApiKey">Gemini API Key</label>
-          <input class="table-input" id="geminiApiKey" type="password" placeholder="Enter Gemini API key" />
-
-          <label class="field-label" for="geminiModel">Model</label>
-          <select class="table-select" id="geminiModel">
-            <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-            <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-          </select>
+          <div class="field">
+            <label class="field-label" for="geminiApiKey">Gemini API key</label>
+            <input class="table-input" id="geminiApiKey" type="password" placeholder="Enter Gemini API key" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="geminiModel">Model</label>
+            <select class="table-select" id="geminiModel">
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+              <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+              <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+            </select>
+          </div>
           <p class="settings-note">
-            API key is saved locally in your browser's storage and can be loaded from <code>.env</code> automatically on startup.
+            The key is stored locally in your browser and can be loaded from <code>.env</code> on startup.
           </p>
         </div>
         <div class="modal-actions">
-          <button class="btn btn-light" id="closeSettingsButton" type="button">Cancel</button>
-          <button class="btn btn-primary" id="saveSettingsButton" type="button">Save Settings</button>
+          <button class="btn btn-secondary" id="closeSettingsButton" type="button">Cancel</button>
+          <button class="btn btn-primary" id="saveSettingsButton" type="button">Save settings</button>
         </div>
       </section>
     </div>
 
+    <div class="auth-overlay" id="authOverlay">
+      <section class="panel auth-card">
+        <header class="panel-header">
+          <h2 id="authTitle">Log in</h2>
+          <span class="badge">Receipt Ring</span>
+        </header>
+        <div class="panel-body">
+          <form id="authForm" class="auth-form">
+            <div class="field hidden" id="authNameField">
+              <label class="field-label" for="authName">Name</label>
+              <input class="table-input" id="authName" type="text" autocomplete="name" placeholder="Your name" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="authEmail">Email</label>
+              <input class="table-input" id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" required />
+            </div>
+            <div class="field">
+              <label class="field-label" for="authPassword">Password</label>
+              <input class="table-input" id="authPassword" type="password" autocomplete="current-password" placeholder="At least 8 characters" minlength="8" required />
+            </div>
+            <p class="auth-error hidden" id="authError"></p>
+            <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Log in</button>
+          </form>
+          <p class="auth-switch">
+            <span id="authSwitchText">Need an account?</span>
+            <button class="btn btn-ghost" id="authToggle" type="button">Sign up</button>
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <script src="https://cdn.teller.io/connect/connect.js"></script>
     <script src="dist/app.js"></script>
   </body>
 </html>

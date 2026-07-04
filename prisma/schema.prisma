@@ -7,14 +7,81 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  name      String?
-  receipts  Receipt[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  passwordHash    String?
+  receipts        Receipt[]
+  sessions        Session[]
+  bankConnections BankConnection[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// A linked bank enrollment. The Teller access token is stored encrypted at rest
+// (AES-256-GCM: ciphertext + iv + auth tag) and never leaves the server.
+model BankConnection {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider        String        @default("teller")
+  institutionName String?
+  enrollmentId    String?
+  encryptedToken  String
+  tokenIv         String
+  tokenAuthTag    String
+  accounts        BankAccount[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+  @@map("bank_connections")
+}
+
+model BankAccount {
+  id             String           @id @default(cuid())
+  connectionId   String
+  connection     BankConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  tellerAccountId String          @unique
+  name           String?
+  type           String?
+  lastFour       String?
+  transactions   BankTransaction[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([connectionId])
+  @@map("bank_accounts")
+}
+
+model BankTransaction {
+  id          String      @id @default(cuid())
+  accountId   String
+  account     BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tellerTxnId String      @unique
+  date        DateTime
+  description String?
+  amount      Decimal     @db.Decimal(10, 2)
+  category    String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([accountId])
+  @@map("bank_transactions")
 }
 
 model Receipt {

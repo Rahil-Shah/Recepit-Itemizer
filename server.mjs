@@ -4,11 +4,22 @@ import path from "node:path";
 import express from "express";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { assertCryptoEnv } from "./server/crypto.mjs";
+import { createAuth } from "./server/auth.mjs";
+import { createBank } from "./server/bank.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL is not set. Copy .env.example to .env and start Postgres (npm run db:up).");
+  process.exit(1);
+}
+
+// Fail fast if the auth/encryption secrets are missing or malformed.
+try {
+  assertCryptoEnv();
+} catch (error) {
+  console.error(error.message);
   process.exit(1);
 }
 
@@ -19,6 +30,13 @@ const app = express();
 const PORT = Number(process.env.PORT) || 4173;
 
 app.use(express.json({ limit: "2mb" }));
+
+const auth = createAuth(prisma);
+auth.register(app);
+const { requireAuth } = auth;
+
+const bank = createBank(prisma);
+bank.register(app, requireAuth);
 
 // --- API -------------------------------------------------------------------
 
@@ -62,7 +80,7 @@ const receiptInclude = {
   }
 };
 
-app.post("/api/receipts", async (req, res) => {
+app.post("/api/receipts", requireAuth, async (req, res) => {
   const body = req.body ?? {};
   if (!Array.isArray(body.lines) || body.lines.length === 0) {
     return res.status(400).json({ error: "At least one receipt line is required." });
@@ -72,6 +90,7 @@ app.post("/api/receipts", async (req, res) => {
     const result = await prisma.$transaction(async (tx) => {
       const receipt = await tx.receipt.create({
         data: {
+          userId: req.userId,
           storeName: body.storeName ?? null,
           category: body.category ?? "Other",
           subtotal: body.subtotal ?? null,
@@ -126,9 +145,10 @@ app.post("/api/receipts", async (req, res) => {
   }
 });
 
-app.get("/api/receipts", async (_req, res) => {
+app.get("/api/receipts", requireAuth, async (req, res) => {
   try {
     const receipts = await prisma.receipt.findMany({
+      where: { userId: req.userId },
       orderBy: { createdAt: "desc" },
       include: receiptInclude
     });
@@ -144,6 +164,7 @@ app.get("/api/receipts", async (_req, res) => {
 // Never expose source, config, or dependency files over HTTP.
 const BLOCKED = [
   /^\/src\//,
+  /^\/server\//,
   /^\/server\.mjs$/,
   /^\/package(-lock)?\.json$/,
   /^\/tsconfig\.json$/,

@@ -51,6 +51,25 @@ namespace ReceiptRing.UI {
     geminiModel: HTMLSelectElement;
     closeSettingsButton: HTMLButtonElement;
     saveSettingsButton: HTMLButtonElement;
+    authOverlay: HTMLElement;
+    authForm: HTMLFormElement;
+    authTitle: HTMLElement;
+    authNameField: HTMLElement;
+    authName: HTMLInputElement;
+    authEmail: HTMLInputElement;
+    authPassword: HTMLInputElement;
+    authSubmit: HTMLButtonElement;
+    authError: HTMLElement;
+    authSwitchText: HTMLElement;
+    authToggle: HTMLButtonElement;
+    logoutButton: HTMLButtonElement;
+    budgetMonth: HTMLSelectElement;
+    budgetRing: HTMLElement;
+    budgetLegend: HTMLElement;
+    connectBankButton: HTMLButtonElement;
+    bankStatus: HTMLElement;
+    transactionsList: HTMLElement;
+    transactionsEmpty: HTMLElement;
   }
 
   export class DomRegistryFactory {
@@ -108,7 +127,26 @@ namespace ReceiptRing.UI {
         geminiApiKey: this.getElement("#geminiApiKey", HTMLInputElement),
         geminiModel: this.getElement("#geminiModel", HTMLSelectElement),
         closeSettingsButton: this.getElement("#closeSettingsButton", HTMLButtonElement),
-        saveSettingsButton: this.getElement("#saveSettingsButton", HTMLButtonElement)
+        saveSettingsButton: this.getElement("#saveSettingsButton", HTMLButtonElement),
+        authOverlay: this.getElement("#authOverlay", HTMLElement),
+        authForm: this.getElement("#authForm", HTMLFormElement),
+        authTitle: this.getElement("#authTitle", HTMLElement),
+        authNameField: this.getElement("#authNameField", HTMLElement),
+        authName: this.getElement("#authName", HTMLInputElement),
+        authEmail: this.getElement("#authEmail", HTMLInputElement),
+        authPassword: this.getElement("#authPassword", HTMLInputElement),
+        authSubmit: this.getElement("#authSubmit", HTMLButtonElement),
+        authError: this.getElement("#authError", HTMLElement),
+        authSwitchText: this.getElement("#authSwitchText", HTMLElement),
+        authToggle: this.getElement("#authToggle", HTMLButtonElement),
+        logoutButton: this.getElement("#logoutButton", HTMLButtonElement),
+        budgetMonth: this.getElement("#budgetMonth", HTMLSelectElement),
+        budgetRing: this.getElement("#budgetRing", HTMLElement),
+        budgetLegend: this.getElement("#budgetLegend", HTMLElement),
+        connectBankButton: this.getElement("#connectBankButton", HTMLButtonElement),
+        bankStatus: this.getElement("#bankStatus", HTMLElement),
+        transactionsList: this.getElement("#transactionsList", HTMLElement),
+        transactionsEmpty: this.getElement("#transactionsEmpty", HTMLElement)
       };
     }
 
