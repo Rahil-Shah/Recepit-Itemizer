@@ -8,6 +8,7 @@ import { assertCryptoEnv } from "./server/crypto.mjs";
 import { createAuth } from "./server/auth.mjs";
 import { createBank } from "./server/bank.mjs";
 import { registerGemini } from "./server/gemini.mjs";
+import { createRateLimiter } from "./server/rate-limit.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,7 +31,30 @@ const prisma = new PrismaClient({ adapter });
 const app = express();
 const PORT = Number(process.env.PORT) || 4173;
 
+// Behind a reverse proxy, req.ip (used by rate limiting and the login throttle)
+// only reflects the real client when Express is told to trust the proxy. Opt in
+// explicitly via env so forwarded headers aren't trusted by default (they are
+// spoofable when directly exposed). TRUST_PROXY=true, or a hop count / subnet.
+if (process.env.TRUST_PROXY) {
+  const value = process.env.TRUST_PROXY;
+  app.set("trust proxy", value === "true" ? 1 : /^\d+$/.test(value) ? Number(value) : value);
+}
+
+// Don't advertise the framework.
+app.disable("x-powered-by");
+
 app.use(express.json({ limit: "2mb" }));
+
+// Broad limit across the whole API, plus a much stricter limit on the auth
+// endpoints to slow credential stuffing and mass account creation.
+app.use("/api", createRateLimiter({ windowMs: 15 * 60 * 1000, max: 300 }));
+const authLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: "Too many authentication attempts. Try again later."
+});
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
 
 const auth = createAuth(prisma);
 auth.register(app);
