@@ -14,6 +14,7 @@ namespace ReceiptRing.App {
     private bankTransactions: Services.BankTransaction[] = [];
     private monthlySpend: Services.MonthlySpend[] = [];
     private selectedMonth: string | null = null;
+    private serverHasGeminiKey = false;
 
     constructor(
       private readonly elements: UI.DomRegistry,
@@ -221,7 +222,9 @@ namespace ReceiptRing.App {
       const apiKey = localStorage.getItem("gemini_api_key") || "";
       const model = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
 
-      if (!apiKey) {
+      // Either the user supplies their own key, or the server holds one and
+      // parses on our behalf through the proxy. Only block when neither exists.
+      if (!apiKey && !this.serverHasGeminiKey) {
         this.setOcrStatus("Please configure your Gemini API Key in Settings first.", 1);
         this.openSettings();
         return;
@@ -309,12 +312,10 @@ namespace ReceiptRing.App {
     }
 
     private async initGeminiSettings(): Promise<void> {
-      const env = await this.geminiService.loadDotEnv();
-      if (env.GEMINI_API_KEY) {
-        localStorage.setItem("gemini_api_key", env.GEMINI_API_KEY);
-      }
-      if (env.GEMINI_MODEL) {
-        localStorage.setItem("gemini_model", env.GEMINI_MODEL);
+      const config = await this.geminiService.loadConfig();
+      this.serverHasGeminiKey = config.hasServerKey;
+      if (config.model) {
+        localStorage.setItem("gemini_model", config.model);
       }
 
       this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";

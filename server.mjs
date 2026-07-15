@@ -7,6 +7,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { assertCryptoEnv } from "./server/crypto.mjs";
 import { createAuth } from "./server/auth.mjs";
 import { createBank } from "./server/bank.mjs";
+import { registerGemini } from "./server/gemini.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,15 +39,11 @@ const { requireAuth } = auth;
 const bank = createBank(prisma);
 bank.register(app, requireAuth);
 
-// --- API -------------------------------------------------------------------
+// Gemini config + image-parsing proxy. The API key stays server-side and is
+// never returned to the browser (see server/gemini.mjs).
+registerGemini(app, requireAuth);
 
-// Public Gemini config so the frontend never has to fetch the raw .env file.
-app.get("/api/gemini-config", (_req, res) => {
-  res.json({
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
-    GEMINI_MODEL: process.env.GEMINI_MODEL || ""
-  });
-});
+// --- API -------------------------------------------------------------------
 
 const toNumber = (value) => (value === null || value === undefined ? null : Number(value));
 
