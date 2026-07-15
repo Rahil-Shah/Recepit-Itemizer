@@ -101,10 +101,22 @@ const receiptInclude = {
   }
 };
 
+// Upper bounds so a single request can't spawn an unbounded number of rows.
+const MAX_LINES = 500;
+const MAX_PEOPLE = 100;
+const MAX_ASSIGNMENTS = 5000;
+
 app.post("/api/receipts", requireAuth, async (req, res) => {
   const body = req.body ?? {};
   if (!Array.isArray(body.lines) || body.lines.length === 0) {
     return res.status(400).json({ error: "At least one receipt line is required." });
+  }
+  if (
+    body.lines.length > MAX_LINES ||
+    (Array.isArray(body.people) && body.people.length > MAX_PEOPLE) ||
+    (Array.isArray(body.assignments) && body.assignments.length > MAX_ASSIGNMENTS)
+  ) {
+    return res.status(413).json({ error: "Receipt is too large." });
   }
 
   try {
