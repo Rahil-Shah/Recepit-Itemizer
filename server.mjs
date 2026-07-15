@@ -213,7 +213,11 @@ const BLOCKED = [
   /^\/tsconfig\.json$/,
   /^\/prisma(\/|\.config\.ts$)/,
   /^\/node_modules\//,
-  /^\/docker-compose\.yml$/
+  /^\/docker-compose\.yml$/,
+  // Teller mTLS client certificate/key live under ./certs (see .env.example).
+  // Serving them would hand out the bank-API private key.
+  /^\/certs\//,
+  /\.(pem|key|crt|p12|pfx)$/i
 ];
 
 app.use((req, res, next) => {
