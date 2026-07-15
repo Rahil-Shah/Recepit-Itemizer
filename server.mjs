@@ -53,6 +53,11 @@ app.use((_req, res, next) => {
   next();
 });
 
+// Receipt photos arrive as base64 JSON on the Gemini proxy route, so it needs
+// a larger body cap than the rest of the API (body-parser skips re-parsing, so
+// mounting the bigger limit first scopes it to this path only). The route is
+// auth-gated and rate-limited, bounding abuse.
+app.use("/api/gemini/parse", express.json({ limit: "16mb" }));
 app.use(express.json({ limit: "2mb" }));
 
 // Broad limit across the whole API, plus a much stricter limit on the auth
