@@ -8,8 +8,11 @@ services:
       POSTGRES_PASSWORD: receipt
       POSTGRES_DB: receipt_ring
     # Host port 5433 avoids clashing with a Postgres already running on 5432.
+    # Bind to loopback only — without the 127.0.0.1 prefix Docker publishes the
+    # port on every interface, exposing the database (weak dev credentials) to
+    # the local network.
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - receipt_pgdata:/var/lib/postgresql/data
 
