@@ -43,6 +43,16 @@ if (process.env.TRUST_PROXY) {
 // Don't advertise the framework.
 app.disable("x-powered-by");
 
+// Baseline security headers (conservative — no CSP, to avoid breaking the
+// Teller Connect script and Google Fonts the frontend loads).
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  next();
+});
+
 app.use(express.json({ limit: "2mb" }));
 
 // Broad limit across the whole API, plus a much stricter limit on the auth
