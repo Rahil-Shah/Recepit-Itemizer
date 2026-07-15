@@ -1327,12 +1327,15 @@ var ReceiptRing;
                 totals.forEach((total) => {
                     const row = document.createElement("div");
                     row.className = "split-total-row";
-                    row.innerHTML = `
-          <strong>${total.personName}</strong>
-          <span>Items ${this.currencyFormatService.format(total.itemTotal)}</span>
-          <span>Tax ${this.currencyFormatService.format(total.allocatedTax)}</span>
-          <b>${this.currencyFormatService.format(total.finalTotal)}</b>
-        `;
+                    const name = document.createElement("strong");
+                    name.textContent = total.personName;
+                    const items = document.createElement("span");
+                    items.textContent = `Items ${this.currencyFormatService.format(total.itemTotal)}`;
+                    const tax = document.createElement("span");
+                    tax.textContent = `Tax ${this.currencyFormatService.format(total.allocatedTax)}`;
+                    const final = document.createElement("b");
+                    final.textContent = this.currencyFormatService.format(total.finalTotal);
+                    row.append(name, items, tax, final);
                     container.append(row);
                 });
             }
@@ -1368,11 +1371,14 @@ var ReceiptRing;
                             const names = line.assignments
                                 .map((assignment) => assignment.personName)
                                 .filter((value) => Boolean(value));
-                            lineRow.innerHTML = `
-              <span>${line.label}</span>
-              <span class="history-line-people">${names.length ? names.join(", ") : "Unassigned"}</span>
-              <b>${this.currencyFormatService.format(Number(line.amount))}</b>
-            `;
+                            const label = document.createElement("span");
+                            label.textContent = line.label;
+                            const peopleSpan = document.createElement("span");
+                            peopleSpan.className = "history-line-people";
+                            peopleSpan.textContent = names.length ? names.join(", ") : "Unassigned";
+                            const amountEl = document.createElement("b");
+                            amountEl.textContent = this.currencyFormatService.format(Number(line.amount));
+                            lineRow.append(label, peopleSpan, amountEl);
                             linesWrap.append(lineRow);
                         });
                         body.append(linesWrap);
@@ -1959,7 +1965,11 @@ var ReceiptRing;
                 }
                 catch (error) {
                     this.elements.historyEmpty.classList.remove("hidden");
-                    this.elements.historyEmpty.innerHTML = `<strong>Couldn't load history</strong><span>${error instanceof Error ? error.message : "Is the server running?"}</span>`;
+                    const title = document.createElement("strong");
+                    title.textContent = "Couldn't load history";
+                    const detail = document.createElement("span");
+                    detail.textContent = error instanceof Error ? error.message : "Is the server running?";
+                    this.elements.historyEmpty.replaceChildren(title, detail);
                     this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
                 }
             }

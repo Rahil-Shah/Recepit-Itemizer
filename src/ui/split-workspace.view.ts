@@ -187,12 +187,19 @@ namespace ReceiptRing.UI {
       totals.forEach((total) => {
         const row = document.createElement("div");
         row.className = "split-total-row";
-        row.innerHTML = `
-          <strong>${total.personName}</strong>
-          <span>Items ${this.currencyFormatService.format(total.itemTotal)}</span>
-          <span>Tax ${this.currencyFormatService.format(total.allocatedTax)}</span>
-          <b>${this.currencyFormatService.format(total.finalTotal)}</b>
-        `;
+
+        // Build with textContent (never innerHTML) — person names are
+        // attacker-influenced data and must not be parsed as HTML.
+        const name = document.createElement("strong");
+        name.textContent = total.personName;
+        const items = document.createElement("span");
+        items.textContent = `Items ${this.currencyFormatService.format(total.itemTotal)}`;
+        const tax = document.createElement("span");
+        tax.textContent = `Tax ${this.currencyFormatService.format(total.allocatedTax)}`;
+        const final = document.createElement("b");
+        final.textContent = this.currencyFormatService.format(total.finalTotal);
+
+        row.append(name, items, tax, final);
         container.append(row);
       });
     }
@@ -238,11 +245,17 @@ namespace ReceiptRing.UI {
             const names = line.assignments
               .map((assignment) => assignment.personName)
               .filter((value): value is string => Boolean(value));
-            lineRow.innerHTML = `
-              <span>${line.label}</span>
-              <span class="history-line-people">${names.length ? names.join(", ") : "Unassigned"}</span>
-              <b>${this.currencyFormatService.format(Number(line.amount))}</b>
-            `;
+
+            // line.label comes from OCR of arbitrary receipt images and from
+            // the server; render as text, never HTML, to prevent stored XSS.
+            const label = document.createElement("span");
+            label.textContent = line.label;
+            const peopleSpan = document.createElement("span");
+            peopleSpan.className = "history-line-people";
+            peopleSpan.textContent = names.length ? names.join(", ") : "Unassigned";
+            const amountEl = document.createElement("b");
+            amountEl.textContent = this.currencyFormatService.format(Number(line.amount));
+            lineRow.append(label, peopleSpan, amountEl);
             linesWrap.append(lineRow);
           });
           body.append(linesWrap);

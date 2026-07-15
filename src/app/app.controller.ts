@@ -545,9 +545,13 @@ namespace ReceiptRing.App {
         this.splitWorkspaceView.renderHistory(this.elements.historyList, receipts);
       } catch (error) {
         this.elements.historyEmpty.classList.remove("hidden");
-        this.elements.historyEmpty.innerHTML = `<strong>Couldn't load history</strong><span>${
-          error instanceof Error ? error.message : "Is the server running?"
-        }</span>`;
+        // Error messages can echo server/network response text; render as
+        // text nodes, never HTML.
+        const title = document.createElement("strong");
+        title.textContent = "Couldn't load history";
+        const detail = document.createElement("span");
+        detail.textContent = error instanceof Error ? error.message : "Is the server running?";
+        this.elements.historyEmpty.replaceChildren(title, detail);
         this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
       }
     }
