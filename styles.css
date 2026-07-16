@@ -444,8 +444,8 @@ input[type="number"] {
   min-height: 148px;
   padding: 24px;
   border: 1.5px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  border-radius: 12px;
+  background: var(--well);
   text-align: center;
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease;
@@ -453,7 +453,7 @@ input[type="number"] {
 
 .dropzone:hover,
 .dropzone.is-dragging {
-  border-color: var(--accent);
+  border-color: var(--accent-border);
   background: var(--accent-soft);
 }
 
@@ -496,7 +496,7 @@ input[type="number"] {
   margin: 14px 0 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: var(--well);
 }
 
 .receipt-preview img {
@@ -530,7 +530,7 @@ input[type="number"] {
   border: 1px solid var(--accent-border);
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent);
   font-size: 12.5px;
   font-weight: 600;
 }
@@ -543,7 +543,7 @@ input[type="number"] {
   overflow: hidden;
   height: 4px;
   border-radius: 999px;
-  background: rgba(22, 111, 71, 0.18);
+  background: rgba(201, 241, 88, 0.16);
 }
 
 .ocr-progress span {
@@ -566,7 +566,7 @@ input[type="number"] {
 .items-table {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   background: var(--surface);
 }
 
@@ -582,6 +582,11 @@ input[type="number"] {
   min-height: 48px;
   padding: 8px 12px;
   border-top: 1px solid var(--border);
+  transition: background 100ms ease;
+}
+
+.table-row:not(.table-head):hover {
+  background: var(--surface-2);
 }
 
 .table-row:first-child {
@@ -593,10 +598,10 @@ input[type="number"] {
   padding-top: 0;
   padding-bottom: 0;
   background: var(--surface-2);
-  color: var(--ink-2);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -639,10 +644,10 @@ input[type="number"] {
   align-items: center;
   max-width: 100%;
   min-height: 28px;
-  padding: 0 10px;
+  padding: 0 11px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--well);
   color: var(--ink-2);
   font-size: 12.5px;
   font-weight: 500;
@@ -659,14 +664,14 @@ input[type="number"] {
 }
 
 .assign-summary:hover {
-  border-color: var(--accent);
+  border-color: var(--accent-border);
   color: var(--ink);
 }
 
 .assign-dropdown[open] .assign-summary {
-  border-color: var(--accent);
+  border-color: var(--accent-border);
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent);
 }
 
 .assign-panel-pop {
@@ -678,9 +683,9 @@ input[type="number"] {
   display: grid;
   gap: 8px;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-2);
   box-shadow: var(--shadow-pop);
 }
 
@@ -762,9 +767,9 @@ input[type="number"] {
   gap: 3px;
   min-height: 200px;
   padding: 24px;
-  border: 1.5px dashed var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--well);
   text-align: center;
 }
 
@@ -788,7 +793,33 @@ input[type="number"] {
 /* ---------------- Summary / people ---------------- */
 .summary-panel {
   position: sticky;
-  top: 72px;
+  top: 76px;
+}
+
+.stat-hero {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stat-label {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.stat-value {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 34px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .people-panel {
@@ -816,7 +847,7 @@ input[type="number"] {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 3px 4px 3px 10px;
+  padding: 4px 5px 4px 11px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--surface-2);
@@ -870,9 +901,9 @@ input[type="number"] {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0 12px;
-  padding: 10px 13px;
+  padding: 11px 14px;
   border-top: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-2);
 }
 
 .split-total-row:first-child {
@@ -887,7 +918,7 @@ input[type="number"] {
 
 .split-total-row span {
   grid-column: 1;
-  color: var(--ink-2);
+  color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -898,10 +929,10 @@ input[type="number"] {
   grid-row: 1 / span 3;
   align-self: center;
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--accent-strong);
+  color: var(--accent);
 }
 
 /* ---------------- Save panel ---------------- */
@@ -915,7 +946,7 @@ input[type="number"] {
 
 .save-status {
   min-height: 1.1em;
-  color: var(--accent-strong);
+  color: var(--accent);
   font-size: 12.5px;
   font-weight: 600;
   text-align: center;
