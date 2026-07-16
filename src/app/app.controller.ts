@@ -14,6 +14,7 @@ namespace ReceiptRing.App {
     private bankTransactions: Services.BankTransaction[] = [];
     private monthlySpend: Services.MonthlySpend[] = [];
     private selectedMonth: string | null = null;
+    private serverHasGeminiKey = false;
 
     constructor(
       private readonly elements: UI.DomRegistry,
@@ -221,7 +222,9 @@ namespace ReceiptRing.App {
       const apiKey = localStorage.getItem("gemini_api_key") || "";
       const model = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
 
-      if (!apiKey) {
+      // Either the user supplies their own key, or the server holds one and
+      // parses on our behalf through the proxy. Only block when neither exists.
+      if (!apiKey && !this.serverHasGeminiKey) {
         this.setOcrStatus("Please configure your Gemini API Key in Settings first.", 1);
         this.openSettings();
         return;
@@ -309,12 +312,10 @@ namespace ReceiptRing.App {
     }
 
     private async initGeminiSettings(): Promise<void> {
-      const env = await this.geminiService.loadDotEnv();
-      if (env.GEMINI_API_KEY) {
-        localStorage.setItem("gemini_api_key", env.GEMINI_API_KEY);
-      }
-      if (env.GEMINI_MODEL) {
-        localStorage.setItem("gemini_model", env.GEMINI_MODEL);
+      const config = await this.geminiService.loadConfig();
+      this.serverHasGeminiKey = config.hasServerKey;
+      if (config.model) {
+        localStorage.setItem("gemini_model", config.model);
       }
 
       this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
@@ -544,9 +545,13 @@ namespace ReceiptRing.App {
         this.splitWorkspaceView.renderHistory(this.elements.historyList, receipts);
       } catch (error) {
         this.elements.historyEmpty.classList.remove("hidden");
-        this.elements.historyEmpty.innerHTML = `<strong>Couldn't load history</strong><span>${
-          error instanceof Error ? error.message : "Is the server running?"
-        }</span>`;
+        // Error messages can echo server/network response text; render as
+        // text nodes, never HTML.
+        const title = document.createElement("strong");
+        title.textContent = "Couldn't load history";
+        const detail = document.createElement("span");
+        detail.textContent = error instanceof Error ? error.message : "Is the server running?";
+        this.elements.historyEmpty.replaceChildren(title, detail);
         this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
       }
     }

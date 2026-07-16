@@ -547,40 +547,20 @@ var ReceiptRing;
     var Services;
     (function (Services) {
         class GeminiService {
-            async loadDotEnv() {
+            async loadConfig() {
                 try {
-                    const apiResponse = await fetch("/api/gemini-config");
-                    if (apiResponse.ok) {
-                        const config = (await apiResponse.json());
-                        if (config && (config.GEMINI_API_KEY || config.GEMINI_MODEL)) {
-                            return config;
-                        }
+                    const response = await fetch("/api/gemini-config", { credentials: "same-origin" });
+                    if (response.ok) {
+                        const config = (await response.json());
+                        return {
+                            model: config.GEMINI_MODEL || "",
+                            hasServerKey: Boolean(config.hasServerKey)
+                        };
                     }
                 }
                 catch {
                 }
-                try {
-                    const response = await fetch(".env");
-                    if (!response.ok)
-                        return {};
-                    const text = await response.text();
-                    const config = {};
-                    text.split(/\r?\n/).forEach((line) => {
-                        const cleanLine = line.trim();
-                        if (!cleanLine || cleanLine.startsWith("#"))
-                            return;
-                        const index = cleanLine.indexOf("=");
-                        if (index === -1)
-                            return;
-                        const key = cleanLine.slice(0, index).trim();
-                        const value = cleanLine.slice(index + 1).trim();
-                        config[key] = value;
-                    });
-                    return config;
-                }
-                catch {
-                    return {};
-                }
+                return { model: "", hasServerKey: false };
             }
             fileToBase64(file) {
                 return new Promise((resolve, reject) => {
@@ -596,7 +576,20 @@ var ReceiptRing;
             }
             async parseReceiptImage(file, apiKey, model) {
                 const base64Data = await this.fileToBase64(file);
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+                if (!apiKey) {
+                    const proxyResponse = await fetch("/api/gemini/parse", {
+                        method: "POST",
+                        credentials: "same-origin",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ model, mimeType: file.type, imageBase64: base64Data })
+                    });
+                    if (!proxyResponse.ok) {
+                        const errText = await proxyResponse.text();
+                        throw new Error(`Receipt parsing failed (${proxyResponse.status}): ${errText}`);
+                    }
+                    return this.extractParsedJson(await proxyResponse.json());
+                }
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
                 const promptText = `You are an expert receipt parser.
 
 Your job is to analyze a receipt image and extract ONLY the purchasable items, their prices, and receipt totals.
@@ -689,15 +682,16 @@ Return only JSON.`;
                     const errText = await response.text();
                     throw new Error(`Gemini API Error (${response.status}): ${errText}`);
                 }
-                const json = await response.json();
-                const textResult = json.candidates?.[0]?.content?.parts?.[0]?.text;
+                return this.extractParsedJson(await response.json());
+            }
+            extractParsedJson(json) {
+                const textResult = json?.candidates?.[0]?.content?.parts?.[0]?.text;
                 if (!textResult) {
                     throw new Error("No response text returned from Gemini.");
                 }
                 try {
                     const cleanedText = textResult.trim().replace(/^```json/, "").replace(/```$/, "").trim();
-                    const parsed = JSON.parse(cleanedText);
-                    return parsed;
+                    return JSON.parse(cleanedText);
                 }
                 catch (e) {
                     console.error("Failed to parse Gemini JSON output. Raw text:", textResult);
@@ -1333,12 +1327,15 @@ var ReceiptRing;
                 totals.forEach((total) => {
                     const row = document.createElement("div");
                     row.className = "split-total-row";
-                    row.innerHTML = `
-          <strong>${total.personName}</strong>
-          <span>Items ${this.currencyFormatService.format(total.itemTotal)}</span>
-          <span>Tax ${this.currencyFormatService.format(total.allocatedTax)}</span>
-          <b>${this.currencyFormatService.format(total.finalTotal)}</b>
-        `;
+                    const name = document.createElement("strong");
+                    name.textContent = total.personName;
+                    const items = document.createElement("span");
+                    items.textContent = `Items ${this.currencyFormatService.format(total.itemTotal)}`;
+                    const tax = document.createElement("span");
+                    tax.textContent = `Tax ${this.currencyFormatService.format(total.allocatedTax)}`;
+                    const final = document.createElement("b");
+                    final.textContent = this.currencyFormatService.format(total.finalTotal);
+                    row.append(name, items, tax, final);
                     container.append(row);
                 });
             }
@@ -1374,11 +1371,14 @@ var ReceiptRing;
                             const names = line.assignments
                                 .map((assignment) => assignment.personName)
                                 .filter((value) => Boolean(value));
-                            lineRow.innerHTML = `
-              <span>${line.label}</span>
-              <span class="history-line-people">${names.length ? names.join(", ") : "Unassigned"}</span>
-              <b>${this.currencyFormatService.format(Number(line.amount))}</b>
-            `;
+                            const label = document.createElement("span");
+                            label.textContent = line.label;
+                            const peopleSpan = document.createElement("span");
+                            peopleSpan.className = "history-line-people";
+                            peopleSpan.textContent = names.length ? names.join(", ") : "Unassigned";
+                            const amountEl = document.createElement("b");
+                            amountEl.textContent = this.currencyFormatService.format(Number(line.amount));
+                            lineRow.append(label, peopleSpan, amountEl);
                             linesWrap.append(lineRow);
                         });
                         body.append(linesWrap);
@@ -1539,6 +1539,7 @@ var ReceiptRing;
                 this.bankTransactions = [];
                 this.monthlySpend = [];
                 this.selectedMonth = null;
+                this.serverHasGeminiKey = false;
                 this.items = this.storageService.load();
             }
             start() {
@@ -1691,7 +1692,7 @@ var ReceiptRing;
             async extractAndItemizeReceipt(file) {
                 const apiKey = localStorage.getItem("gemini_api_key") || "";
                 const model = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
-                if (!apiKey) {
+                if (!apiKey && !this.serverHasGeminiKey) {
                     this.setOcrStatus("Please configure your Gemini API Key in Settings first.", 1);
                     this.openSettings();
                     return;
@@ -1763,12 +1764,10 @@ var ReceiptRing;
                 }
             }
             async initGeminiSettings() {
-                const env = await this.geminiService.loadDotEnv();
-                if (env.GEMINI_API_KEY) {
-                    localStorage.setItem("gemini_api_key", env.GEMINI_API_KEY);
-                }
-                if (env.GEMINI_MODEL) {
-                    localStorage.setItem("gemini_model", env.GEMINI_MODEL);
+                const config = await this.geminiService.loadConfig();
+                this.serverHasGeminiKey = config.hasServerKey;
+                if (config.model) {
+                    localStorage.setItem("gemini_model", config.model);
                 }
                 this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
                 this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
@@ -1966,7 +1965,11 @@ var ReceiptRing;
                 }
                 catch (error) {
                     this.elements.historyEmpty.classList.remove("hidden");
-                    this.elements.historyEmpty.innerHTML = `<strong>Couldn't load history</strong><span>${error instanceof Error ? error.message : "Is the server running?"}</span>`;
+                    const title = document.createElement("strong");
+                    title.textContent = "Couldn't load history";
+                    const detail = document.createElement("span");
+                    detail.textContent = error instanceof Error ? error.message : "Is the server running?";
+                    this.elements.historyEmpty.replaceChildren(title, detail);
                     this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
                 }
             }

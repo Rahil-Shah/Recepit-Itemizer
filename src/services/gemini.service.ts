@@ -1,37 +1,24 @@
 namespace ReceiptRing.Services {
   export class GeminiService {
-    async loadDotEnv(): Promise<Record<string, string>> {
-      // Prefer the backend config endpoint so the raw .env file is never served over HTTP.
+    /**
+     * Load non-secret Gemini config from the backend. The API key is never
+     * returned to the browser; when the server holds a key, receipts are parsed
+     * through the server-side proxy instead.
+     */
+    async loadConfig(): Promise<{ model: string; hasServerKey: boolean }> {
       try {
-        const apiResponse = await fetch("/api/gemini-config");
-        if (apiResponse.ok) {
-          const config = (await apiResponse.json()) as Record<string, string>;
-          if (config && (config.GEMINI_API_KEY || config.GEMINI_MODEL)) {
-            return config;
-          }
+        const response = await fetch("/api/gemini-config", { credentials: "same-origin" });
+        if (response.ok) {
+          const config = (await response.json()) as { GEMINI_MODEL?: string; hasServerKey?: boolean };
+          return {
+            model: config.GEMINI_MODEL || "",
+            hasServerKey: Boolean(config.hasServerKey)
+          };
         }
       } catch {
-        // Fall back to reading the .env file directly (e.g. static-only hosting).
+        // No backend config available (e.g. not logged in); fall through.
       }
-
-      try {
-        const response = await fetch(".env");
-        if (!response.ok) return {};
-        const text = await response.text();
-        const config: Record<string, string> = {};
-        text.split(/\r?\n/).forEach((line) => {
-          const cleanLine = line.trim();
-          if (!cleanLine || cleanLine.startsWith("#")) return;
-          const index = cleanLine.indexOf("=");
-          if (index === -1) return;
-          const key = cleanLine.slice(0, index).trim();
-          const value = cleanLine.slice(index + 1).trim();
-          config[key] = value;
-        });
-        return config;
-      } catch {
-        return {};
-      }
+      return { model: "", hasServerKey: false };
     }
 
     private fileToBase64(file: File): Promise<string> {
@@ -49,7 +36,26 @@ namespace ReceiptRing.Services {
 
     async parseReceiptImage(file: File, apiKey: string, model: string): Promise<any> {
       const base64Data = await this.fileToBase64(file);
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+      // No user-supplied key: parse through the server proxy so the shared key
+      // stays server-side. The server owns the prompt and returns Gemini's
+      // response in the same shape as a direct call.
+      if (!apiKey) {
+        const proxyResponse = await fetch("/api/gemini/parse", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model, mimeType: file.type, imageBase64: base64Data })
+        });
+        if (!proxyResponse.ok) {
+          const errText = await proxyResponse.text();
+          throw new Error(`Receipt parsing failed (${proxyResponse.status}): ${errText}`);
+        }
+        return this.extractParsedJson(await proxyResponse.json());
+      }
+
+      // User brought their own key: call Gemini directly from the browser.
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
       const promptText = `You are an expert receipt parser.
 
@@ -146,16 +152,17 @@ Return only JSON.`;
         throw new Error(`Gemini API Error (${response.status}): ${errText}`);
       }
 
-      const json = await response.json();
-      const textResult = json.candidates?.[0]?.content?.parts?.[0]?.text;
+      return this.extractParsedJson(await response.json());
+    }
+
+    private extractParsedJson(json: any): any {
+      const textResult = json?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!textResult) {
         throw new Error("No response text returned from Gemini.");
       }
-
       try {
         const cleanedText = textResult.trim().replace(/^```json/, "").replace(/```$/, "").trim();
-        const parsed = JSON.parse(cleanedText);
-        return parsed;
+        return JSON.parse(cleanedText);
       } catch (e) {
         console.error("Failed to parse Gemini JSON output. Raw text:", textResult);
         throw new Error("Failed to parse the structured receipt JSON from Gemini response.");

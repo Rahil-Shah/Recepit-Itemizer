@@ -7,9 +7,22 @@ import { encryptSecret, decryptSecret } from "./crypto.mjs";
 
 export function createBank(prisma) {
   // Persist (or refresh) the accounts Teller returns for a connection.
-  async function storeAccounts(connectionId, accounts) {
+  //
+  // tellerAccountId is globally unique, so a naive upsert-by-id would let one
+  // user reassign a row that already belongs to another user. This happens in
+  // Teller's sandbox, where every enrollment returns the same fake account ids.
+  // Guard against it: never touch a row owned by a different user.
+  async function storeAccounts(connectionId, userId, accounts) {
     for (const account of accounts ?? []) {
       if (!account?.id) continue;
+      const existing = await prisma.bankAccount.findUnique({
+        where: { tellerAccountId: account.id },
+        include: { connection: { select: { userId: true } } }
+      });
+      if (existing && existing.connection?.userId !== userId) {
+        console.warn("Skipping bank account owned by another user:", account.id);
+        continue;
+      }
       const fields = {
         name: account.name ?? null,
         type: account.type ?? null,
@@ -56,7 +69,7 @@ export function createBank(prisma) {
             tokenAuthTag: encrypted.authTag
           }
         });
-        await storeAccounts(connection.id, accounts);
+        await storeAccounts(connection.id, req.userId, accounts);
         res.status(201).json({
           id: connection.id,
           institutionName,
@@ -88,6 +101,16 @@ export function createBank(prisma) {
             const transactions = await listTransactions(token, account.tellerAccountId);
             for (const txn of transactions ?? []) {
               if (!txn?.id) continue;
+              // tellerTxnId is globally unique; the same guard as for accounts
+              // prevents reassigning a transaction that belongs to another user
+              // (shared sandbox ids).
+              const existing = await prisma.bankTransaction.findUnique({
+                where: { tellerTxnId: txn.id },
+                include: { account: { include: { connection: { select: { userId: true } } } } }
+              });
+              if (existing && existing.account?.connection?.userId !== req.userId) {
+                continue;
+              }
               const data = {
                 accountId: account.id,
                 date: new Date(txn.date),
