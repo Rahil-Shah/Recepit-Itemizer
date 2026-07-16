@@ -45,7 +45,7 @@ namespace ReceiptRing.UI {
       track.setAttribute("cy", String(cy));
       track.setAttribute("r", String(radius));
       track.setAttribute("fill", "none");
-      track.setAttribute("stroke", "rgba(0,0,0,0.06)");
+      track.setAttribute("stroke", "rgba(255,255,255,0.07)");
       track.setAttribute("stroke-width", String(stroke));
       svg.append(track);
 
