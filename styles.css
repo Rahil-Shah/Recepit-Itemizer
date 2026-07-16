@@ -1128,7 +1128,9 @@ input[type="number"] {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(33, 37, 31, 0.42);
+  background: rgba(5, 6, 7, 0.72);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   animation: fade 160ms ease;
 }
 
@@ -1138,10 +1140,10 @@ input[type="number"] {
 
 .modal-card {
   width: min(440px, 100%);
-  padding: 22px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
+  padding: 24px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
   box-shadow: var(--shadow-pop);
   animation: pop 200ms cubic-bezier(0.2, 1, 0.3, 1) both;
 }
@@ -1171,7 +1173,7 @@ input[type="number"] {
   padding: 11px 13px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: var(--well);
 }
 
 .prompt-item span {
@@ -1219,7 +1221,7 @@ input[type="number"] {
   padding: 1px 5px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--surface-2);
+  background: var(--well);
   font-family: var(--font-mono);
   font-size: 11px;
 }
@@ -1230,7 +1232,7 @@ input[type="number"] {
   max-height: 65vh;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--ink);
+  background: #000;
   object-fit: contain;
 }
 
@@ -1357,7 +1359,9 @@ input[type="number"] {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: var(--bg);
+  background:
+    radial-gradient(640px 420px at 50% -80px, rgba(201, 241, 88, 0.05), transparent 70%),
+    var(--bg);
 }
 
 .auth-overlay.hidden {
@@ -1366,11 +1370,42 @@ input[type="number"] {
 
 .auth-card {
   width: min(380px, 100%);
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  animation: pop 260ms cubic-bezier(0.2, 1, 0.3, 1) both;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+
+.auth-wordmark {
+  font-size: 13px;
+  font-weight: 800;
+  font-stretch: 118%;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.auth-title {
+  margin-bottom: 18px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 .auth-form {
   display: grid;
   gap: 14px;
+}
+
+.auth-form .field {
+  margin-top: 0;
 }
 
 .auth-error {
