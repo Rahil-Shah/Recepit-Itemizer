@@ -44,7 +44,7 @@ if (process.env.TRUST_PROXY) {
 app.disable("x-powered-by");
 
 // Baseline security headers (conservative — no CSP, to avoid breaking the
-// Teller Connect script and Google Fonts the frontend loads).
+// Plaid Link script and Google Fonts the frontend loads).
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -219,8 +219,7 @@ const BLOCKED = [
   /^\/prisma(\/|\.config\.ts$)/,
   /^\/node_modules\//,
   /^\/docker-compose\.yml$/,
-  // Teller mTLS client certificate/key live under ./certs (see .env.example).
-  // Serving them would hand out the bank-API private key.
+  // Never serve TLS material or private keys, even though Plaid needs none.
   /^\/certs\//,
   /\.(pem|key|crt|p12|pfx)$/i
 ];
