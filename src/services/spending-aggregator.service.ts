@@ -14,7 +14,7 @@ namespace ReceiptRing.Services {
   // Fallback colors for categories that aren't part of the built-in palette.
   const FALLBACK_COLORS = ["#7cc4ff", "#f0a6ca", "#c3b1e1", "#ffd6a5", "#9ee7c0", "#e8998d"];
 
-  // Map assorted Teller / receipt category strings onto our display buckets.
+  // Map assorted Plaid / receipt category strings onto our display buckets.
   const CATEGORY_ALIASES: Record<string, string> = {
     dining: "Dining",
     restaurants: "Dining",
@@ -69,7 +69,8 @@ namespace ReceiptRing.Services {
         add(receipt.createdAt, receipt.category, receipt.total ?? 0);
       }
       for (const txn of transactions) {
-        // Teller amounts are negative for outflows; only spending counts.
+        // Amounts are normalized to negative-for-outflows on ingest (see
+        // server/bank.mjs); only spending counts.
         add(txn.date, txn.category, txn.amount < 0 ? -txn.amount : 0);
       }
 

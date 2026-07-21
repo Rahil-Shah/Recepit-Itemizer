@@ -618,40 +618,37 @@ namespace ReceiptRing.App {
 
     private async connectBank(): Promise<void> {
       try {
-        this.setBankStatus("Opening Teller…");
-        const config = await this.bankApiService.config();
-        if (!config.applicationId) {
-          this.setBankStatus("Set TELLER_APPLICATION_ID in .env to connect a bank.");
+        this.setBankStatus("Opening Plaid…");
+        if (typeof Plaid === "undefined") {
+          this.setBankStatus("Plaid Link failed to load. Check your connection.");
           return;
         }
-        if (typeof TellerConnect === "undefined") {
-          this.setBankStatus("Teller Connect failed to load. Check your connection.");
+        const { linkToken } = await this.bankApiService.createLinkToken();
+        if (!linkToken) {
+          this.setBankStatus("Set PLAID_CLIENT_ID and PLAID_SECRET in .env to connect a bank.");
           return;
         }
-        const teller = TellerConnect.setup({
-          applicationId: config.applicationId,
-          environment: config.environment,
-          products: ["transactions"],
-          onSuccess: (enrollment) => void this.handleEnrollment(enrollment),
-          onFailure: () => this.setBankStatus("Bank connection failed."),
-          onExit: () => this.setBankStatus("")
+        const handler = Plaid.create({
+          token: linkToken,
+          onSuccess: (publicToken, metadata) => void this.handleLinkSuccess(publicToken, metadata),
+          onExit: (error) => this.setBankStatus(error ? "Bank connection failed." : "")
         });
-        teller.open();
+        handler.open();
       } catch (error) {
-        this.setBankStatus(error instanceof Error ? error.message : "Could not start Teller.");
+        this.setBankStatus(error instanceof Error ? error.message : "Could not start Plaid.");
       }
     }
 
-    private async handleEnrollment(enrollment: TellerConnectEnrollment): Promise<void> {
+    private async handleLinkSuccess(publicToken: string, metadata: PlaidLinkMetadata): Promise<void> {
       try {
         this.setBankStatus("Linking account…");
-        const result = await this.bankApiService.enroll(enrollment);
+        const result = await this.bankApiService.exchange(publicToken, metadata);
         this.setBankStatus(`Connected ${result.institutionName ?? "bank"}. Syncing…`);
         const { imported } = await this.bankApiService.sync();
         this.setBankStatus(`Imported ${imported} transaction${imported === 1 ? "" : "s"}.`);
         await this.loadBudgeting();
       } catch (error) {
-        this.setBankStatus(error instanceof Error ? error.message : "Enrollment failed.");
+        this.setBankStatus(error instanceof Error ? error.message : "Bank linking failed.");
       }
     }
 
