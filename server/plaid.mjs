@@ -73,7 +73,12 @@ function request(pathname, payload) {
           // Plaid error bodies carry error_code/error_message — surface them
           // for logs without leaking the request body (which holds the secret).
           const detail = parsed?.error_message || parsed?.error_code || raw.slice(0, 300);
-          return reject(new Error(`Plaid request failed (${status}) for ${pathname}: ${detail}`));
+          const err = new Error(`Plaid request failed (${status}) for ${pathname}: ${detail}`);
+          // Expose the machine-readable code so callers can branch on expected,
+          // non-fatal conditions (e.g. PRODUCT_NOT_READY right after linking).
+          err.plaidErrorCode = parsed?.error_code ?? null;
+          err.status = status;
+          return reject(err);
         }
         resolve(parsed);
       });

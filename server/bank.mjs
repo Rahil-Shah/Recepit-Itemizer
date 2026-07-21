@@ -62,7 +62,18 @@ export function createBank(prisma) {
     let hasMore = true;
 
     while (hasMore) {
-      const page = await syncTransactions(token, cursor);
+      let page;
+      try {
+        page = await syncTransactions(token, cursor);
+      } catch (error) {
+        // Right after linking (especially in production), Plaid may still be
+        // pulling the Item's initial transactions. That's expected, not a
+        // failure: report it as pending so the next sync picks the data up.
+        if (error?.plaidErrorCode === "PRODUCT_NOT_READY") {
+          return { imported, cursor, pending: true };
+        }
+        throw error;
+      }
       cursor = page?.next_cursor ?? cursor;
       hasMore = Boolean(page?.has_more);
 
@@ -109,7 +120,7 @@ export function createBank(prisma) {
       }
     }
 
-    return { imported, cursor };
+    return { imported, cursor, pending: false };
   }
 
   function register(app, requireAuth) {
@@ -184,9 +195,11 @@ export function createBank(prisma) {
         });
 
         let imported = 0;
+        let pending = false;
         for (const connection of connections) {
           const result = await syncConnection(connection, req.userId);
           imported += result.imported;
+          if (result.pending) pending = true;
           if (result.cursor && result.cursor !== connection.transactionCursor) {
             await prisma.bankConnection.update({
               where: { id: connection.id },
@@ -194,7 +207,9 @@ export function createBank(prisma) {
             });
           }
         }
-        res.json({ imported });
+        // `pending` means at least one bank is still preparing data; the client
+        // can tell the user to retry shortly rather than showing an error.
+        res.json({ imported, pending });
       } catch (error) {
         console.error("Plaid sync failed:", error);
         res.status(502).json({ error: "Could not sync transactions." });
