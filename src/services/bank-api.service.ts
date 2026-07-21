@@ -1,32 +1,36 @@
-// Ambient declaration for the Teller Connect widget loaded from cdn.teller.io.
-interface TellerConnectEnrollment {
-  accessToken: string;
-  enrollment?: { id?: string; institution?: { name?: string } };
+// Ambient declaration for the Plaid Link widget loaded from cdn.plaid.com.
+interface PlaidLinkAccount {
+  id: string;
+  name?: string;
+  mask?: string;
+  type?: string;
+  subtype?: string;
 }
 
-interface TellerConnectInstance {
+interface PlaidLinkMetadata {
+  institution?: { name?: string; institution_id?: string } | null;
+  accounts?: PlaidLinkAccount[];
+  link_session_id?: string;
+}
+
+interface PlaidLinkHandler {
   open(): void;
+  exit(): void;
+  destroy(): void;
 }
 
-interface TellerConnectSetupOptions {
-  applicationId: string;
-  environment?: string;
-  products?: string[];
-  onSuccess: (enrollment: TellerConnectEnrollment) => void;
-  onExit?: () => void;
-  onFailure?: (error: unknown) => void;
+interface PlaidLinkOptions {
+  token: string;
+  onSuccess: (publicToken: string, metadata: PlaidLinkMetadata) => void;
+  onExit?: (error: unknown, metadata: PlaidLinkMetadata) => void;
+  onEvent?: (eventName: string, metadata: unknown) => void;
 }
 
-declare const TellerConnect: {
-  setup(options: TellerConnectSetupOptions): TellerConnectInstance;
+declare const Plaid: {
+  create(options: PlaidLinkOptions): PlaidLinkHandler;
 };
 
 namespace ReceiptRing.Services {
-  export interface TellerConfig {
-    applicationId: string;
-    environment: string;
-  }
-
   export interface BankTransaction {
     id: string;
     date: string;
@@ -36,7 +40,7 @@ namespace ReceiptRing.Services {
     account: string | null;
   }
 
-  export interface EnrollResult {
+  export interface LinkResult {
     id: string;
     institutionName: string | null;
     accounts: number;
@@ -56,27 +60,24 @@ namespace ReceiptRing.Services {
       }
     }
 
-    async config(): Promise<TellerConfig> {
-      const response = await this.request("/api/teller/config");
+    async createLinkToken(): Promise<{ linkToken: string }> {
+      const response = await this.request("/api/plaid/link-token");
       if (!response.ok) throw new Error(await this.parseError(response));
-      return (await response.json()) as TellerConfig;
+      return (await response.json()) as { linkToken: string };
     }
 
-    async enroll(enrollment: TellerConnectEnrollment): Promise<EnrollResult> {
-      const response = await this.request("/api/teller/enroll", {
+    async exchange(publicToken: string, metadata: PlaidLinkMetadata): Promise<LinkResult> {
+      const response = await this.request("/api/plaid/exchange", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accessToken: enrollment.accessToken,
-          enrollment: enrollment.enrollment ?? null
-        })
+        body: JSON.stringify({ publicToken, metadata })
       });
       if (!response.ok) throw new Error(await this.parseError(response));
-      return (await response.json()) as EnrollResult;
+      return (await response.json()) as LinkResult;
     }
 
     async sync(): Promise<{ imported: number }> {
-      const response = await this.request("/api/teller/sync", { method: "POST" });
+      const response = await this.request("/api/plaid/sync", { method: "POST" });
       if (!response.ok) throw new Error(await this.parseError(response));
       return (await response.json()) as { imported: number };
     }

@@ -1,7 +1,7 @@
 // Security-sensitive primitives, kept in one place.
 //
 // - Passwords: scrypt with a random per-user salt, constant-time comparison.
-// - Secrets at rest (Teller access tokens): AES-256-GCM with a key from env.
+// - Secrets at rest (Plaid access tokens): AES-256-GCM with a key from env.
 // - Session tokens: opaque random tokens; only their SHA-256 hash is stored.
 //
 // These modules live under /server and must never be served to the browser
