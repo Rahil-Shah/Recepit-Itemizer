@@ -11,6 +11,12 @@ model User {
   email        String    @unique
   name         String?
   passwordHash    String?
+  // Optional per-user Gemini API key, stored encrypted at rest (AES-256-GCM:
+  // ciphertext + iv + auth tag) exactly like Teller tokens. Never returned to
+  // the browser; when unset, the server falls back to the shared .env key.
+  geminiKeyCiphertext String?
+  geminiKeyIv         String?
+  geminiKeyAuthTag    String?
   receipts        Receipt[]
   sessions        Session[]
   bankConnections BankConnection[]
