@@ -78,9 +78,9 @@ const { requireAuth } = auth;
 const bank = createBank(prisma);
 bank.register(app, requireAuth);
 
-// Gemini config + image-parsing proxy. The API key stays server-side and is
-// never returned to the browser (see server/gemini.mjs).
-registerGemini(app, requireAuth);
+// Gemini config + image-parsing proxy. Keys (shared or per-user) stay
+// server-side and are never returned to the browser (see server/gemini.mjs).
+registerGemini(app, requireAuth, prisma);
 
 // --- API -------------------------------------------------------------------
 
