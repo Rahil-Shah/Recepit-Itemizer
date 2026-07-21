@@ -34,7 +34,8 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 - **Tax Auto-Calculation**: Input tax and automatically distribute it proportionally based on each person's subtotal.
 - **Smart Categorization**: Categorize receipt items (Dining, Groceries, Travel, etc.) and save defaults for specific items. Receipt category defaults to **Groceries**.
 - **Saved History (Postgres)**: Save a split to a Postgres database and review previous receipts, items, prices, and per-person splits under the **History** tab.
-- **Budgeting (coming soon)**: A dedicated tab reserved for upcoming monthly budgets and spending trends.
+- **Bank Connection (Plaid)**: Securely link a bank through [Plaid Link](https://plaid.com/docs/link/) to import **read-only** transactions. Access tokens are exchanged server-side and stored AES-256-GCM encrypted at rest — they never reach the browser.
+- **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
 
 ---
@@ -65,6 +66,11 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
    ```
    Open `.env` and replace `your_gemini_api_key_here` with your real Gemini API key. The
    `DATABASE_URL` is pre-filled to match the bundled Docker Postgres.
+
+   To enable the optional **bank connection**, add your [Plaid](https://dashboard.plaid.com/)
+   credentials — `PLAID_CLIENT_ID` and `PLAID_SECRET`. `PLAID_ENV` defaults to `sandbox`
+   (fake data); switch to `development` or `production` with the matching secret to link real
+   banks — no code change required. Leave these blank to run without bank import.
 
 ### Running the App Locally
 
