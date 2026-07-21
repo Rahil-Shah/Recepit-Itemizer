@@ -1,24 +1,65 @@
 namespace ReceiptRing.Services {
+  export interface GeminiConfig {
+    model: string;
+    hasServerKey: boolean;
+    hasUserKey: boolean;
+  }
+
   export class GeminiService {
     /**
-     * Load non-secret Gemini config from the backend. The API key is never
-     * returned to the browser; when the server holds a key, receipts are parsed
-     * through the server-side proxy instead.
+     * Load non-secret Gemini config from the backend. No API key is ever
+     * returned to the browser — only the model and whether a shared server key
+     * and/or a personal per-user key exist. Receipts are always parsed through
+     * the server-side proxy so keys stay server-side.
      */
-    async loadConfig(): Promise<{ model: string; hasServerKey: boolean }> {
+    async loadConfig(): Promise<GeminiConfig> {
       try {
         const response = await fetch("/api/gemini-config", { credentials: "same-origin" });
         if (response.ok) {
-          const config = (await response.json()) as { GEMINI_MODEL?: string; hasServerKey?: boolean };
+          const config = (await response.json()) as {
+            GEMINI_MODEL?: string;
+            hasServerKey?: boolean;
+            hasUserKey?: boolean;
+          };
           return {
             model: config.GEMINI_MODEL || "",
-            hasServerKey: Boolean(config.hasServerKey)
+            hasServerKey: Boolean(config.hasServerKey),
+            hasUserKey: Boolean(config.hasUserKey)
           };
         }
       } catch {
         // No backend config available (e.g. not logged in); fall through.
       }
-      return { model: "", hasServerKey: false };
+      return { model: "", hasServerKey: false, hasUserKey: false };
+    }
+
+    /**
+     * Save a personal Gemini API key. The key is sent once to the server, which
+     * validates and encrypts it at rest; it is never persisted in the browser.
+     */
+    async saveApiKey(apiKey: string): Promise<void> {
+      const response = await fetch("/api/gemini-key", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey })
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || "Could not save the key.");
+      }
+    }
+
+    /** Remove the personal key, reverting to the shared server key. */
+    async clearApiKey(): Promise<void> {
+      const response = await fetch("/api/gemini-key", {
+        method: "DELETE",
+        credentials: "same-origin"
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || "Could not clear the key.");
+      }
     }
 
     private fileToBase64(file: File): Promise<string> {
@@ -34,125 +75,25 @@ namespace ReceiptRing.Services {
       });
     }
 
-    async parseReceiptImage(file: File, apiKey: string, model: string): Promise<any> {
+    /**
+     * Parse a receipt image via the server proxy. The server owns the prompt
+     * and calls Gemini with the resolved key (the user's own, or the shared
+     * server key), so no key is ever exposed to the browser.
+     */
+    async parseReceiptImage(file: File, model: string): Promise<any> {
       const base64Data = await this.fileToBase64(file);
 
-      // No user-supplied key: parse through the server proxy so the shared key
-      // stays server-side. The server owns the prompt and returns Gemini's
-      // response in the same shape as a direct call.
-      if (!apiKey) {
-        const proxyResponse = await fetch("/api/gemini/parse", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model, mimeType: file.type, imageBase64: base64Data })
-        });
-        if (!proxyResponse.ok) {
-          const errText = await proxyResponse.text();
-          throw new Error(`Receipt parsing failed (${proxyResponse.status}): ${errText}`);
-        }
-        return this.extractParsedJson(await proxyResponse.json());
-      }
-
-      // User brought their own key: call Gemini directly from the browser.
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-      const promptText = `You are an expert receipt parser.
-
-Your job is to analyze a receipt image and extract ONLY the purchasable items, their prices, and receipt totals.
-
-Rules:
-
-1. Extract every purchased item and its corresponding price.
-2. Preserve item order exactly as it appears on the receipt.
-3. Ignore:
-   - Store addresses
-   - Phone numbers
-   - Loyalty information
-   - Cashier information
-   - Payment methods
-   - Approval codes
-   - Card numbers
-   - Barcode values
-   - Receipt IDs unless needed for totals
-4. Do not invent items.
-5. If text is unclear, make the best reasonable interpretation.
-6. Return valid JSON only.
-7. Prices must be numeric values.
-8. Extract subtotal, tax, and total whenever available.
-9. If an item appears to be a discount or coupon, include it in a separate discounts array.
-10. If confidence is low for an item name, still include the item but add a lowConfidence flag.
-
-Return JSON in exactly this format:
-
-{
-  "storeName": string | null,
-  "subtotal": number | null,
-  "tax": number | null,
-  "total": number | null,
-  "items": [
-    {
-      "name": string,
-      "price": number,
-      "lowConfidence": boolean
-    }
-  ],
-  "discounts": [
-    {
-      "name": string,
-      "amount": number
-    }
-  ]
-}
-
-Important:
-
-Only include actual purchasable line items in the items array.
-
-Do not include:
-- SUBTOTAL
-- TAX
-- TOTAL
-- CHANGE
-- CASH
-- VISA
-- MASTERCARD
-- PAYMENT
-- BALANCE
-
-Return only JSON.`;
-
-      const response = await fetch(url, {
+      const proxyResponse = await fetch("/api/gemini/parse", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: promptText },
-                {
-                  inlineData: {
-                    mimeType: file.type,
-                    data: base64Data
-                  }
-                }
-              ]
-            }
-          ],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        })
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, mimeType: file.type, imageBase64: base64Data })
       });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Gemini API Error (${response.status}): ${errText}`);
+      if (!proxyResponse.ok) {
+        const errText = await proxyResponse.text();
+        throw new Error(`Receipt parsing failed (${proxyResponse.status}): ${errText}`);
       }
-
-      return this.extractParsedJson(await response.json());
+      return this.extractParsedJson(await proxyResponse.json());
     }
 
     private extractParsedJson(json: any): any {

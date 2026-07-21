@@ -49,6 +49,8 @@ namespace ReceiptRing.UI {
     settingsModal: HTMLElement;
     geminiApiKey: HTMLInputElement;
     geminiModel: HTMLSelectElement;
+    geminiKeyStatus: HTMLElement;
+    removeKeyButton: HTMLButtonElement;
     closeSettingsButton: HTMLButtonElement;
     saveSettingsButton: HTMLButtonElement;
     authOverlay: HTMLElement;
@@ -126,6 +128,8 @@ namespace ReceiptRing.UI {
         settingsModal: this.getElement("#settingsModal", HTMLElement),
         geminiApiKey: this.getElement("#geminiApiKey", HTMLInputElement),
         geminiModel: this.getElement("#geminiModel", HTMLSelectElement),
+        geminiKeyStatus: this.getElement("#geminiKeyStatus", HTMLElement),
+        removeKeyButton: this.getElement("#removeKeyButton", HTMLButtonElement),
         closeSettingsButton: this.getElement("#closeSettingsButton", HTMLButtonElement),
         saveSettingsButton: this.getElement("#saveSettingsButton", HTMLButtonElement),
         authOverlay: this.getElement("#authOverlay", HTMLElement),

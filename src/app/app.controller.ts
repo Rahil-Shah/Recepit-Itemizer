@@ -15,6 +15,7 @@ namespace ReceiptRing.App {
     private monthlySpend: Services.MonthlySpend[] = [];
     private selectedMonth: string | null = null;
     private serverHasGeminiKey = false;
+    private userHasGeminiKey = false;
 
     constructor(
       private readonly elements: UI.DomRegistry,
@@ -67,7 +68,8 @@ namespace ReceiptRing.App {
       });
       this.elements.settingsButton.addEventListener("click", () => this.openSettings());
       this.elements.closeSettingsButton.addEventListener("click", () => this.closeSettings());
-      this.elements.saveSettingsButton.addEventListener("click", () => this.saveSettings());
+      this.elements.saveSettingsButton.addEventListener("click", () => void this.saveSettings());
+      this.elements.removeKeyButton.addEventListener("click", () => void this.removeGeminiKey());
       this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
       this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
       this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
@@ -219,13 +221,12 @@ namespace ReceiptRing.App {
     }
 
     private async extractAndItemizeReceipt(file: File): Promise<void> {
-      const apiKey = localStorage.getItem("gemini_api_key") || "";
       const model = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
 
-      // Either the user supplies their own key, or the server holds one and
-      // parses on our behalf through the proxy. Only block when neither exists.
-      if (!apiKey && !this.serverHasGeminiKey) {
-        this.setOcrStatus("Please configure your Gemini API Key in Settings first.", 1);
+      // Parsing always runs through the server proxy, which uses the user's own
+      // saved key or the shared server key. Only block when neither exists.
+      if (!this.userHasGeminiKey && !this.serverHasGeminiKey) {
+        this.setOcrStatus("Please add your Gemini API key in Settings first.", 1);
         this.openSettings();
         return;
       }
@@ -234,7 +235,7 @@ namespace ReceiptRing.App {
       this.elements.parseButton.setAttribute("disabled", "true");
 
       try {
-        const result = await this.geminiService.parseReceiptImage(file, apiKey, model);
+        const result = await this.geminiService.parseReceiptImage(file, model);
 
         // Log the JSON output in the terminal/console when putting a photo
         console.log("Gemini parsed receipt output:", result);
@@ -314,17 +315,19 @@ namespace ReceiptRing.App {
     private async initGeminiSettings(): Promise<void> {
       const config = await this.geminiService.loadConfig();
       this.serverHasGeminiKey = config.hasServerKey;
+      this.userHasGeminiKey = config.hasUserKey;
       if (config.model) {
         localStorage.setItem("gemini_model", config.model);
       }
 
-      this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
       this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
     }
 
     private openSettings(): void {
-      this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
+      // The key is write-only from the browser's side: never prefill the field.
+      this.elements.geminiApiKey.value = "";
       this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
+      this.renderGeminiKeyStatus();
       this.elements.settingsModal.classList.remove("hidden");
     }
 
@@ -332,12 +335,65 @@ namespace ReceiptRing.App {
       this.elements.settingsModal.classList.add("hidden");
     }
 
-    private saveSettings(): void {
+    private renderGeminiKeyStatus(message?: string, isError = false): void {
+      const status = this.elements.geminiKeyStatus;
+      if (message) {
+        status.textContent = message;
+        status.classList.toggle("is-active", !isError);
+        this.elements.removeKeyButton.classList.toggle("hidden", !this.userHasGeminiKey);
+        return;
+      }
+      if (this.userHasGeminiKey) {
+        status.textContent = "Using your saved personal key.";
+        status.classList.add("is-active");
+      } else if (this.serverHasGeminiKey) {
+        status.textContent = "Using the shared server key. Add a key to use your own.";
+        status.classList.remove("is-active");
+      } else {
+        status.textContent = "No key configured yet. Add one to parse receipts.";
+        status.classList.remove("is-active");
+      }
+      this.elements.removeKeyButton.classList.toggle("hidden", !this.userHasGeminiKey);
+    }
+
+    private async saveSettings(): Promise<void> {
       const key = this.elements.geminiApiKey.value.trim();
-      const model = this.elements.geminiModel.value;
-      localStorage.setItem("gemini_api_key", key);
-      localStorage.setItem("gemini_model", model);
-      this.closeSettings();
+      localStorage.setItem("gemini_model", this.elements.geminiModel.value);
+
+      // Only touch the stored key when the user actually typed one; a blank
+      // field means "keep whatever is already there" (the personal or shared key).
+      if (!key) {
+        this.closeSettings();
+        return;
+      }
+
+      this.elements.saveSettingsButton.setAttribute("disabled", "true");
+      try {
+        await this.geminiService.saveApiKey(key);
+        this.userHasGeminiKey = true;
+        this.elements.geminiApiKey.value = "";
+        this.closeSettings();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not save the key.";
+        this.renderGeminiKeyStatus(message, true);
+      } finally {
+        this.elements.saveSettingsButton.removeAttribute("disabled");
+      }
+    }
+
+    private async removeGeminiKey(): Promise<void> {
+      this.elements.removeKeyButton.setAttribute("disabled", "true");
+      try {
+        await this.geminiService.clearApiKey();
+        this.userHasGeminiKey = false;
+        this.elements.geminiApiKey.value = "";
+        this.renderGeminiKeyStatus();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not clear the key.";
+        this.renderGeminiKeyStatus(message, true);
+      } finally {
+        this.elements.removeKeyButton.removeAttribute("disabled");
+      }
     }
 
     private toTitleCase(value: string): string {

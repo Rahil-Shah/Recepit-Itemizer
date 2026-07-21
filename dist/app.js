@@ -554,13 +554,36 @@ var ReceiptRing;
                         const config = (await response.json());
                         return {
                             model: config.GEMINI_MODEL || "",
-                            hasServerKey: Boolean(config.hasServerKey)
+                            hasServerKey: Boolean(config.hasServerKey),
+                            hasUserKey: Boolean(config.hasUserKey)
                         };
                     }
                 }
                 catch {
                 }
-                return { model: "", hasServerKey: false };
+                return { model: "", hasServerKey: false, hasUserKey: false };
+            }
+            async saveApiKey(apiKey) {
+                const response = await fetch("/api/gemini-key", {
+                    method: "PUT",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ apiKey })
+                });
+                if (!response.ok) {
+                    const body = (await response.json().catch(() => ({})));
+                    throw new Error(body.error || "Could not save the key.");
+                }
+            }
+            async clearApiKey() {
+                const response = await fetch("/api/gemini-key", {
+                    method: "DELETE",
+                    credentials: "same-origin"
+                });
+                if (!response.ok) {
+                    const body = (await response.json().catch(() => ({})));
+                    throw new Error(body.error || "Could not clear the key.");
+                }
             }
             fileToBase64(file) {
                 return new Promise((resolve, reject) => {
@@ -574,115 +597,19 @@ var ReceiptRing;
                     reader.readAsDataURL(file);
                 });
             }
-            async parseReceiptImage(file, apiKey, model) {
+            async parseReceiptImage(file, model) {
                 const base64Data = await this.fileToBase64(file);
-                if (!apiKey) {
-                    const proxyResponse = await fetch("/api/gemini/parse", {
-                        method: "POST",
-                        credentials: "same-origin",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ model, mimeType: file.type, imageBase64: base64Data })
-                    });
-                    if (!proxyResponse.ok) {
-                        const errText = await proxyResponse.text();
-                        throw new Error(`Receipt parsing failed (${proxyResponse.status}): ${errText}`);
-                    }
-                    return this.extractParsedJson(await proxyResponse.json());
-                }
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-                const promptText = `You are an expert receipt parser.
-
-Your job is to analyze a receipt image and extract ONLY the purchasable items, their prices, and receipt totals.
-
-Rules:
-
-1. Extract every purchased item and its corresponding price.
-2. Preserve item order exactly as it appears on the receipt.
-3. Ignore:
-   - Store addresses
-   - Phone numbers
-   - Loyalty information
-   - Cashier information
-   - Payment methods
-   - Approval codes
-   - Card numbers
-   - Barcode values
-   - Receipt IDs unless needed for totals
-4. Do not invent items.
-5. If text is unclear, make the best reasonable interpretation.
-6. Return valid JSON only.
-7. Prices must be numeric values.
-8. Extract subtotal, tax, and total whenever available.
-9. If an item appears to be a discount or coupon, include it in a separate discounts array.
-10. If confidence is low for an item name, still include the item but add a lowConfidence flag.
-
-Return JSON in exactly this format:
-
-{
-  "storeName": string | null,
-  "subtotal": number | null,
-  "tax": number | null,
-  "total": number | null,
-  "items": [
-    {
-      "name": string,
-      "price": number,
-      "lowConfidence": boolean
-    }
-  ],
-  "discounts": [
-    {
-      "name": string,
-      "amount": number
-    }
-  ]
-}
-
-Important:
-
-Only include actual purchasable line items in the items array.
-
-Do not include:
-- SUBTOTAL
-- TAX
-- TOTAL
-- CHANGE
-- CASH
-- VISA
-- MASTERCARD
-- PAYMENT
-- BALANCE
-
-Return only JSON.`;
-                const response = await fetch(url, {
+                const proxyResponse = await fetch("/api/gemini/parse", {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        contents: [
-                            {
-                                parts: [
-                                    { text: promptText },
-                                    {
-                                        inlineData: {
-                                            mimeType: file.type,
-                                            data: base64Data
-                                        }
-                                    }
-                                ]
-                            }
-                        ],
-                        generationConfig: {
-                            responseMimeType: "application/json"
-                        }
-                    })
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ model, mimeType: file.type, imageBase64: base64Data })
                 });
-                if (!response.ok) {
-                    const errText = await response.text();
-                    throw new Error(`Gemini API Error (${response.status}): ${errText}`);
+                if (!proxyResponse.ok) {
+                    const errText = await proxyResponse.text();
+                    throw new Error(`Receipt parsing failed (${proxyResponse.status}): ${errText}`);
                 }
-                return this.extractParsedJson(await response.json());
+                return this.extractParsedJson(await proxyResponse.json());
             }
             extractParsedJson(json) {
                 const textResult = json?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -984,6 +911,8 @@ var ReceiptRing;
                     settingsModal: this.getElement("#settingsModal", HTMLElement),
                     geminiApiKey: this.getElement("#geminiApiKey", HTMLInputElement),
                     geminiModel: this.getElement("#geminiModel", HTMLSelectElement),
+                    geminiKeyStatus: this.getElement("#geminiKeyStatus", HTMLElement),
+                    removeKeyButton: this.getElement("#removeKeyButton", HTMLButtonElement),
                     closeSettingsButton: this.getElement("#closeSettingsButton", HTMLButtonElement),
                     saveSettingsButton: this.getElement("#saveSettingsButton", HTMLButtonElement),
                     authOverlay: this.getElement("#authOverlay", HTMLElement),
@@ -1540,6 +1469,7 @@ var ReceiptRing;
                 this.monthlySpend = [];
                 this.selectedMonth = null;
                 this.serverHasGeminiKey = false;
+                this.userHasGeminiKey = false;
                 this.items = this.storageService.load();
             }
             start() {
@@ -1573,7 +1503,8 @@ var ReceiptRing;
                 });
                 this.elements.settingsButton.addEventListener("click", () => this.openSettings());
                 this.elements.closeSettingsButton.addEventListener("click", () => this.closeSettings());
-                this.elements.saveSettingsButton.addEventListener("click", () => this.saveSettings());
+                this.elements.saveSettingsButton.addEventListener("click", () => void this.saveSettings());
+                this.elements.removeKeyButton.addEventListener("click", () => void this.removeGeminiKey());
                 this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
                 this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
                 this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
@@ -1690,17 +1621,16 @@ var ReceiptRing;
                 this.elements.receiptTotal.textContent = this.currencyFormatService.format(grandTotal);
             }
             async extractAndItemizeReceipt(file) {
-                const apiKey = localStorage.getItem("gemini_api_key") || "";
                 const model = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
-                if (!apiKey && !this.serverHasGeminiKey) {
-                    this.setOcrStatus("Please configure your Gemini API Key in Settings first.", 1);
+                if (!this.userHasGeminiKey && !this.serverHasGeminiKey) {
+                    this.setOcrStatus("Please add your Gemini API key in Settings first.", 1);
                     this.openSettings();
                     return;
                 }
                 this.setOcrStatus("Analyzing receipt with Gemini...", 0.15);
                 this.elements.parseButton.setAttribute("disabled", "true");
                 try {
-                    const result = await this.geminiService.parseReceiptImage(file, apiKey, model);
+                    const result = await this.geminiService.parseReceiptImage(file, model);
                     console.log("Gemini parsed receipt output:", result);
                     const storeName = result.storeName || "";
                     const subtotal = typeof result.subtotal === "number" ? result.subtotal : null;
@@ -1766,26 +1696,80 @@ var ReceiptRing;
             async initGeminiSettings() {
                 const config = await this.geminiService.loadConfig();
                 this.serverHasGeminiKey = config.hasServerKey;
+                this.userHasGeminiKey = config.hasUserKey;
                 if (config.model) {
                     localStorage.setItem("gemini_model", config.model);
                 }
-                this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
                 this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
             }
             openSettings() {
-                this.elements.geminiApiKey.value = localStorage.getItem("gemini_api_key") || "";
+                this.elements.geminiApiKey.value = "";
                 this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
+                this.renderGeminiKeyStatus();
                 this.elements.settingsModal.classList.remove("hidden");
             }
             closeSettings() {
                 this.elements.settingsModal.classList.add("hidden");
             }
-            saveSettings() {
+            renderGeminiKeyStatus(message, isError = false) {
+                const status = this.elements.geminiKeyStatus;
+                if (message) {
+                    status.textContent = message;
+                    status.classList.toggle("is-active", !isError);
+                    this.elements.removeKeyButton.classList.toggle("hidden", !this.userHasGeminiKey);
+                    return;
+                }
+                if (this.userHasGeminiKey) {
+                    status.textContent = "Using your saved personal key.";
+                    status.classList.add("is-active");
+                }
+                else if (this.serverHasGeminiKey) {
+                    status.textContent = "Using the shared server key. Add a key to use your own.";
+                    status.classList.remove("is-active");
+                }
+                else {
+                    status.textContent = "No key configured yet. Add one to parse receipts.";
+                    status.classList.remove("is-active");
+                }
+                this.elements.removeKeyButton.classList.toggle("hidden", !this.userHasGeminiKey);
+            }
+            async saveSettings() {
                 const key = this.elements.geminiApiKey.value.trim();
-                const model = this.elements.geminiModel.value;
-                localStorage.setItem("gemini_api_key", key);
-                localStorage.setItem("gemini_model", model);
-                this.closeSettings();
+                localStorage.setItem("gemini_model", this.elements.geminiModel.value);
+                if (!key) {
+                    this.closeSettings();
+                    return;
+                }
+                this.elements.saveSettingsButton.setAttribute("disabled", "true");
+                try {
+                    await this.geminiService.saveApiKey(key);
+                    this.userHasGeminiKey = true;
+                    this.elements.geminiApiKey.value = "";
+                    this.closeSettings();
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : "Could not save the key.";
+                    this.renderGeminiKeyStatus(message, true);
+                }
+                finally {
+                    this.elements.saveSettingsButton.removeAttribute("disabled");
+                }
+            }
+            async removeGeminiKey() {
+                this.elements.removeKeyButton.setAttribute("disabled", "true");
+                try {
+                    await this.geminiService.clearApiKey();
+                    this.userHasGeminiKey = false;
+                    this.elements.geminiApiKey.value = "";
+                    this.renderGeminiKeyStatus();
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : "Could not clear the key.";
+                    this.renderGeminiKeyStatus(message, true);
+                }
+                finally {
+                    this.elements.removeKeyButton.removeAttribute("disabled");
+                }
             }
             toTitleCase(value) {
                 return value

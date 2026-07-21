@@ -307,7 +307,8 @@
         <div class="settings-form">
           <div class="field">
             <label class="field-label" for="geminiApiKey">Gemini API key</label>
-            <input class="table-input" id="geminiApiKey" type="password" placeholder="Enter Gemini API key" />
+            <input class="table-input" id="geminiApiKey" type="password" autocomplete="off" placeholder="Enter Gemini API key" />
+            <p class="settings-status" id="geminiKeyStatus"></p>
           </div>
           <div class="field">
             <label class="field-label" for="geminiModel">Model</label>
@@ -319,10 +320,12 @@
             </select>
           </div>
           <p class="settings-note">
-            The key is stored locally in your browser and can be loaded from <code>.env</code> on startup.
+            Your key is sent once to the server, encrypted at rest, and never stored in or returned to the
+            browser. Leave the field blank to keep using the shared server key from <code>.env</code>.
           </p>
         </div>
         <div class="modal-actions">
+          <button class="btn btn-ghost" id="removeKeyButton" type="button">Remove key</button>
           <button class="btn btn-secondary" id="closeSettingsButton" type="button">Cancel</button>
           <button class="btn btn-primary" id="saveSettingsButton" type="button">Save settings</button>
         </div>
