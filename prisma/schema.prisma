@@ -12,7 +12,7 @@ model User {
   name         String?
   passwordHash    String?
   // Optional per-user Gemini API key, stored encrypted at rest (AES-256-GCM:
-  // ciphertext + iv + auth tag) exactly like Teller tokens. Never returned to
+  // ciphertext + iv + auth tag) exactly like Plaid tokens. Never returned to
   // the browser; when unset, the server falls back to the shared .env key.
   geminiKeyCiphertext String?
   geminiKeyIv         String?
@@ -38,21 +38,24 @@ model Session {
   @@map("sessions")
 }
 
-// A linked bank enrollment. The Teller access token is stored encrypted at rest
+// A linked bank Item. The Plaid access token is stored encrypted at rest
 // (AES-256-GCM: ciphertext + iv + auth tag) and never leaves the server.
+// transactionCursor tracks the position of the last /transactions/sync so each
+// sync only pulls what changed since the previous one.
 model BankConnection {
-  id              String        @id @default(cuid())
-  userId          String
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider        String        @default("teller")
-  institutionName String?
-  enrollmentId    String?
-  encryptedToken  String
-  tokenIv         String
-  tokenAuthTag    String
-  accounts        BankAccount[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String        @default("plaid")
+  institutionName   String?
+  itemId            String?
+  encryptedToken    String
+  tokenIv           String
+  tokenAuthTag      String
+  transactionCursor String?
+  accounts          BankAccount[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   @@index([userId])
   @@map("bank_connections")
@@ -62,7 +65,7 @@ model BankAccount {
   id             String           @id @default(cuid())
   connectionId   String
   connection     BankConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  tellerAccountId String          @unique
+  plaidAccountId String           @unique
   name           String?
   type           String?
   lastFour       String?
@@ -78,7 +81,7 @@ model BankTransaction {
   id          String      @id @default(cuid())
   accountId   String
   account     BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  tellerTxnId String      @unique
+  plaidTxnId  String      @unique
   date        DateTime
   description String?
   amount      Decimal     @db.Decimal(10, 2)
