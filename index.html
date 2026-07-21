@@ -243,7 +243,10 @@
           <section class="panel" aria-label="Bank transactions">
             <header class="panel-header">
               <h2>Bank transactions</h2>
-              <button class="btn btn-primary" id="connectBankButton" type="button">Connect bank</button>
+              <div class="panel-actions">
+                <button class="btn btn-secondary" id="refreshTransactionsButton" type="button">Refresh</button>
+                <button class="btn btn-primary" id="connectBankButton" type="button">Connect bank</button>
+              </div>
             </header>
             <div class="panel-body">
               <p class="bank-status" id="bankStatus"></p>

@@ -928,6 +928,7 @@ var ReceiptRing;
                     budgetRing: this.getElement("#budgetRing", HTMLElement),
                     budgetLegend: this.getElement("#budgetLegend", HTMLElement),
                     connectBankButton: this.getElement("#connectBankButton", HTMLButtonElement),
+                    refreshTransactionsButton: this.getElement("#refreshTransactionsButton", HTMLButtonElement),
                     bankStatus: this.getElement("#bankStatus", HTMLElement),
                     transactionsList: this.getElement("#transactionsList", HTMLElement),
                     transactionsEmpty: this.getElement("#transactionsEmpty", HTMLElement)
@@ -1505,6 +1506,7 @@ var ReceiptRing;
                 this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
                 this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
                 this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
+                this.elements.refreshTransactionsButton.addEventListener("click", () => void this.refreshTransactions());
                 this.elements.budgetMonth.addEventListener("change", () => {
                     this.selectedMonth = this.elements.budgetMonth.value || null;
                     this.renderRing();
@@ -1992,17 +1994,39 @@ var ReceiptRing;
                     else {
                         this.setBankStatus(`Imported ${imported} transaction${imported === 1 ? "" : "s"}.`);
                     }
-                    await this.loadBudgeting();
+                    await this.loadBudgeting({ sync: false });
                 }
                 catch (error) {
                     this.setBankStatus(error instanceof Error ? error.message : "Bank linking failed.");
                 }
             }
-            async loadBudgeting() {
+            async refreshTransactions() {
+                this.elements.refreshTransactionsButton.setAttribute("disabled", "true");
                 try {
-                    await this.bankApiService.sync();
+                    this.setBankStatus("Refreshing…");
+                    const { imported, pending } = await this.bankApiService.sync();
+                    if (pending && imported === 0) {
+                        this.setBankStatus("Your bank is still preparing transactions — try again in a minute.");
+                    }
+                    else {
+                        this.setBankStatus(`Imported ${imported} new transaction${imported === 1 ? "" : "s"}.`);
+                    }
+                    await this.loadBudgeting({ sync: false });
                 }
-                catch {
+                catch (error) {
+                    this.setBankStatus(error instanceof Error ? error.message : "Could not refresh transactions.");
+                }
+                finally {
+                    this.elements.refreshTransactionsButton.removeAttribute("disabled");
+                }
+            }
+            async loadBudgeting(options = {}) {
+                if (options.sync !== false) {
+                    try {
+                        await this.bankApiService.sync();
+                    }
+                    catch {
+                    }
                 }
                 let receipts = [];
                 try {

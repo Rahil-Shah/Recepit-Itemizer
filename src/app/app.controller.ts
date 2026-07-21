@@ -73,6 +73,7 @@ namespace ReceiptRing.App {
       this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
       this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
       this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
+      this.elements.refreshTransactionsButton.addEventListener("click", () => void this.refreshTransactions());
       this.elements.budgetMonth.addEventListener("change", () => {
         this.selectedMonth = this.elements.budgetMonth.value || null;
         this.renderRing();
@@ -651,20 +652,44 @@ namespace ReceiptRing.App {
         } else {
           this.setBankStatus(`Imported ${imported} transaction${imported === 1 ? "" : "s"}.`);
         }
-        await this.loadBudgeting();
+        await this.loadBudgeting({ sync: false });
       } catch (error) {
         this.setBankStatus(error instanceof Error ? error.message : "Bank linking failed.");
       }
     }
 
-    private async loadBudgeting(): Promise<void> {
+    // Explicit re-sync using the stored access token — no re-linking or bank
+    // 2FA needed. Distinct from the silent sync in loadBudgeting so the user
+    // gets clear feedback on how many transactions came in.
+    private async refreshTransactions(): Promise<void> {
+      this.elements.refreshTransactionsButton.setAttribute("disabled", "true");
+      try {
+        this.setBankStatus("Refreshing…");
+        const { imported, pending } = await this.bankApiService.sync();
+        if (pending && imported === 0) {
+          this.setBankStatus("Your bank is still preparing transactions — try again in a minute.");
+        } else {
+          this.setBankStatus(`Imported ${imported} new transaction${imported === 1 ? "" : "s"}.`);
+        }
+        await this.loadBudgeting({ sync: false });
+      } catch (error) {
+        this.setBankStatus(error instanceof Error ? error.message : "Could not refresh transactions.");
+      } finally {
+        this.elements.refreshTransactionsButton.removeAttribute("disabled");
+      }
+    }
+
+    private async loadBudgeting(options: { sync?: boolean } = {}): Promise<void> {
       // Best-effort refresh: pull any new bank transactions on view. Failures
       // (no bank linked, Plaid still preparing data) are non-fatal — we still
-      // render whatever is already stored below.
-      try {
-        await this.bankApiService.sync();
-      } catch {
-        /* ignore — show existing data */
+      // render whatever is already stored below. Callers that just synced pass
+      // { sync: false } to avoid a redundant round-trip.
+      if (options.sync !== false) {
+        try {
+          await this.bankApiService.sync();
+        } catch {
+          /* ignore — show existing data */
+        }
       }
 
       let receipts: Services.SavedReceiptSummary[] = [];

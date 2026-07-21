@@ -69,6 +69,7 @@ namespace ReceiptRing.UI {
     budgetRing: HTMLElement;
     budgetLegend: HTMLElement;
     connectBankButton: HTMLButtonElement;
+    refreshTransactionsButton: HTMLButtonElement;
     bankStatus: HTMLElement;
     transactionsList: HTMLElement;
     transactionsEmpty: HTMLElement;
@@ -148,6 +149,7 @@ namespace ReceiptRing.UI {
         budgetRing: this.getElement("#budgetRing", HTMLElement),
         budgetLegend: this.getElement("#budgetLegend", HTMLElement),
         connectBankButton: this.getElement("#connectBankButton", HTMLButtonElement),
+        refreshTransactionsButton: this.getElement("#refreshTransactionsButton", HTMLButtonElement),
         bankStatus: this.getElement("#bankStatus", HTMLElement),
         transactionsList: this.getElement("#transactionsList", HTMLElement),
         transactionsEmpty: this.getElement("#transactionsEmpty", HTMLElement)
