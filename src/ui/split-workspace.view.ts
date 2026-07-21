@@ -206,7 +206,8 @@ namespace ReceiptRing.UI {
 
     renderHistory(
       container: HTMLElement,
-      receipts: readonly Services.SavedReceiptSummary[]
+      receipts: readonly Services.SavedReceiptSummary[],
+      onDelete?: (receipt: Services.SavedReceiptSummary) => void
     ): void {
       container.innerHTML = "";
       receipts.forEach((receipt) => {
@@ -266,6 +267,18 @@ namespace ReceiptRing.UI {
           peopleWrap.className = "history-people";
           peopleWrap.textContent = `People: ${receipt.people.map((person) => person.name).join(", ")}`;
           body.append(peopleWrap);
+        }
+
+        if (onDelete) {
+          const actions = document.createElement("div");
+          actions.className = "history-actions";
+          const deleteButton = document.createElement("button");
+          deleteButton.type = "button";
+          deleteButton.className = "btn btn-danger btn-small";
+          deleteButton.textContent = "Delete receipt";
+          deleteButton.addEventListener("click", () => onDelete(receipt));
+          actions.append(deleteButton);
+          body.append(actions);
         }
 
         card.append(body);

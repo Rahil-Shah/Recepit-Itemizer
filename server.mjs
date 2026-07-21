@@ -193,6 +193,23 @@ app.post("/api/receipts", requireAuth, async (req, res) => {
   }
 });
 
+app.delete("/api/receipts/:id", requireAuth, async (req, res) => {
+  try {
+    // Scope the delete to the caller so one user can't remove another's
+    // receipt. Cascades to lines, people, and assignments (see schema).
+    const result = await prisma.receipt.deleteMany({
+      where: { id: req.params.id, userId: req.userId }
+    });
+    if (result.count === 0) {
+      return res.status(404).json({ error: "Receipt not found." });
+    }
+    res.status(204).end();
+  } catch (error) {
+    console.error("Failed to delete receipt:", error);
+    res.status(500).json({ error: "Failed to delete receipt." });
+  }
+});
+
 app.get("/api/receipts", requireAuth, async (req, res) => {
   try {
     const receipts = await prisma.receipt.findMany({

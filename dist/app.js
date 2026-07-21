@@ -653,6 +653,15 @@ var ReceiptRing;
                 }
                 return (await response.json());
             }
+            async remove(id) {
+                const response = await fetch(`/api/receipts/${encodeURIComponent(id)}`, {
+                    method: "DELETE"
+                });
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(`Delete failed (${response.status}): ${message}`);
+                }
+            }
         }
         Services.ReceiptApiService = ReceiptApiService;
     })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
@@ -1266,7 +1275,7 @@ var ReceiptRing;
                     container.append(row);
                 });
             }
-            renderHistory(container, receipts) {
+            renderHistory(container, receipts, onDelete) {
                 container.innerHTML = "";
                 receipts.forEach((receipt) => {
                     const card = document.createElement("details");
@@ -1315,6 +1324,17 @@ var ReceiptRing;
                         peopleWrap.className = "history-people";
                         peopleWrap.textContent = `People: ${receipt.people.map((person) => person.name).join(", ")}`;
                         body.append(peopleWrap);
+                    }
+                    if (onDelete) {
+                        const actions = document.createElement("div");
+                        actions.className = "history-actions";
+                        const deleteButton = document.createElement("button");
+                        deleteButton.type = "button";
+                        deleteButton.className = "btn btn-danger btn-small";
+                        deleteButton.textContent = "Delete receipt";
+                        deleteButton.addEventListener("click", () => onDelete(receipt));
+                        actions.append(deleteButton);
+                        body.append(actions);
                     }
                     card.append(body);
                     container.append(card);
@@ -1944,7 +1964,7 @@ var ReceiptRing;
                 try {
                     const receipts = await this.receiptApiService.list();
                     this.elements.historyEmpty.classList.toggle("hidden", receipts.length > 0);
-                    this.splitWorkspaceView.renderHistory(this.elements.historyList, receipts);
+                    this.splitWorkspaceView.renderHistory(this.elements.historyList, receipts, (receipt) => void this.deleteReceipt(receipt));
                 }
                 catch (error) {
                     this.elements.historyEmpty.classList.remove("hidden");
@@ -1954,6 +1974,20 @@ var ReceiptRing;
                     detail.textContent = error instanceof Error ? error.message : "Is the server running?";
                     this.elements.historyEmpty.replaceChildren(title, detail);
                     this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
+                }
+            }
+            async deleteReceipt(receipt) {
+                const label = receipt.storeName || "this receipt";
+                if (!window.confirm(`Delete ${label}? This can't be undone.`)) {
+                    return;
+                }
+                try {
+                    await this.receiptApiService.remove(receipt.id);
+                    await this.loadHistory();
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : "Please try again.";
+                    window.alert(`Couldn't delete receipt. ${message}`);
                 }
             }
             setBankStatus(message) {

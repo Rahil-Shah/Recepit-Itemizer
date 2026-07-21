@@ -599,7 +599,9 @@ namespace ReceiptRing.App {
       try {
         const receipts = await this.receiptApiService.list();
         this.elements.historyEmpty.classList.toggle("hidden", receipts.length > 0);
-        this.splitWorkspaceView.renderHistory(this.elements.historyList, receipts);
+        this.splitWorkspaceView.renderHistory(this.elements.historyList, receipts, (receipt) =>
+          void this.deleteReceipt(receipt)
+        );
       } catch (error) {
         this.elements.historyEmpty.classList.remove("hidden");
         // Error messages can echo server/network response text; render as
@@ -610,6 +612,20 @@ namespace ReceiptRing.App {
         detail.textContent = error instanceof Error ? error.message : "Is the server running?";
         this.elements.historyEmpty.replaceChildren(title, detail);
         this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
+      }
+    }
+
+    private async deleteReceipt(receipt: Services.SavedReceiptSummary): Promise<void> {
+      const label = receipt.storeName || "this receipt";
+      if (!window.confirm(`Delete ${label}? This can't be undone.`)) {
+        return;
+      }
+      try {
+        await this.receiptApiService.remove(receipt.id);
+        await this.loadHistory();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Please try again.";
+        window.alert(`Couldn't delete receipt. ${message}`);
       }
     }
 

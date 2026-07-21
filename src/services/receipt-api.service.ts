@@ -74,5 +74,15 @@ namespace ReceiptRing.Services {
       }
       return (await response.json()) as SavedReceiptSummary[];
     }
+
+    async remove(id: string): Promise<void> {
+      const response = await fetch(`/api/receipts/${encodeURIComponent(id)}`, {
+        method: "DELETE"
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(`Delete failed (${response.status}): ${message}`);
+      }
+    }
   }
 }

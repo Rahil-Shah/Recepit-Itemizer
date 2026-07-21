@@ -1100,6 +1100,28 @@ input[type="number"] {
   font-size: 12.5px;
 }
 
+.history-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: rgba(255, 107, 107, 0.32);
+  color: #ff8a8a;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.12);
+  border-color: rgba(255, 107, 107, 0.5);
+  color: #ffb0b0;
+}
+
 /* ---------------- Coming soon ---------------- */
 .coming-soon {
   display: grid;
