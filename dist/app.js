@@ -1985,8 +1985,13 @@ var ReceiptRing;
                     this.setBankStatus("Linking account…");
                     const result = await this.bankApiService.exchange(publicToken, metadata);
                     this.setBankStatus(`Connected ${result.institutionName ?? "bank"}. Syncing…`);
-                    const { imported } = await this.bankApiService.sync();
-                    this.setBankStatus(`Imported ${imported} transaction${imported === 1 ? "" : "s"}.`);
+                    const { imported, pending } = await this.bankApiService.sync();
+                    if (pending && imported === 0) {
+                        this.setBankStatus("Connected. Your bank is still preparing transactions — reopen Budgeting in a minute.");
+                    }
+                    else {
+                        this.setBankStatus(`Imported ${imported} transaction${imported === 1 ? "" : "s"}.`);
+                    }
                     await this.loadBudgeting();
                 }
                 catch (error) {
@@ -1994,6 +1999,11 @@ var ReceiptRing;
                 }
             }
             async loadBudgeting() {
+                try {
+                    await this.bankApiService.sync();
+                }
+                catch {
+                }
                 let receipts = [];
                 try {
                     receipts = await this.receiptApiService.list();

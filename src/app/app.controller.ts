@@ -644,8 +644,13 @@ namespace ReceiptRing.App {
         this.setBankStatus("Linking account…");
         const result = await this.bankApiService.exchange(publicToken, metadata);
         this.setBankStatus(`Connected ${result.institutionName ?? "bank"}. Syncing…`);
-        const { imported } = await this.bankApiService.sync();
-        this.setBankStatus(`Imported ${imported} transaction${imported === 1 ? "" : "s"}.`);
+        const { imported, pending } = await this.bankApiService.sync();
+        if (pending && imported === 0) {
+          // Plaid is still preparing the initial history — not an error.
+          this.setBankStatus("Connected. Your bank is still preparing transactions — reopen Budgeting in a minute.");
+        } else {
+          this.setBankStatus(`Imported ${imported} transaction${imported === 1 ? "" : "s"}.`);
+        }
         await this.loadBudgeting();
       } catch (error) {
         this.setBankStatus(error instanceof Error ? error.message : "Bank linking failed.");
@@ -653,6 +658,15 @@ namespace ReceiptRing.App {
     }
 
     private async loadBudgeting(): Promise<void> {
+      // Best-effort refresh: pull any new bank transactions on view. Failures
+      // (no bank linked, Plaid still preparing data) are non-fatal — we still
+      // render whatever is already stored below.
+      try {
+        await this.bankApiService.sync();
+      } catch {
+        /* ignore — show existing data */
+      }
+
       let receipts: Services.SavedReceiptSummary[] = [];
       try {
         receipts = await this.receiptApiService.list();

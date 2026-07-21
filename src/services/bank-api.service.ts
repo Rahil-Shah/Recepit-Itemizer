@@ -76,10 +76,10 @@ namespace ReceiptRing.Services {
       return (await response.json()) as LinkResult;
     }
 
-    async sync(): Promise<{ imported: number }> {
+    async sync(): Promise<{ imported: number; pending?: boolean }> {
       const response = await this.request("/api/plaid/sync", { method: "POST" });
       if (!response.ok) throw new Error(await this.parseError(response));
-      return (await response.json()) as { imported: number };
+      return (await response.json()) as { imported: number; pending?: boolean };
     }
 
     async listTransactions(): Promise<BankTransaction[]> {
