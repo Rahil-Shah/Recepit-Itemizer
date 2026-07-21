@@ -1,41 +1,46 @@
 /* ============================================================
-   Receipt Ring — quiet ledger theme
-   Cool neutral surface · hairline borders · one money-green accent
-   Schibsted Grotesk for UI · Spline Sans Mono for figures
+   Receipt Ring — night ledger theme
+   Near-black surfaces · hairline borders · one volt accent
+   Archivo (variable width) for UI · IBM Plex Mono for figures
    ============================================================ */
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  --bg: #f4f4f2;
-  --surface: #ffffff;
-  --surface-2: #fafaf8;
-  --surface-3: #f1f2ef;
+  --bg: #0b0c0e;
+  --well: #0d0e11;
+  --surface: #131518;
+  --surface-2: #191c20;
+  --surface-3: #22262b;
 
-  --border: #e5e6e1;
-  --border-strong: #cfd2ca;
+  --border: #24282d;
+  --border-strong: #363b42;
 
-  --ink: #21251f;
-  --ink-2: #5b6155;
-  --ink-3: #9aa091;
+  --ink: #f2f3f4;
+  --ink-2: #a2a8b0;
+  --ink-3: #62686f;
 
-  --accent: #166f47;
-  --accent-strong: #115a3a;
-  --accent-soft: #e9f3ed;
-  --accent-border: #bcd8c9;
+  --accent: #c9f158;
+  --accent-strong: #daff70;
+  --accent-soft: rgba(201, 241, 88, 0.09);
+  --accent-border: rgba(201, 241, 88, 0.32);
+  --on-accent: #10140a;
 
-  --red: #b3362c;
-  --red-soft: #f9ebe9;
-  --amber: #8a5b0b;
-  --amber-soft: #faf1de;
+  --red: #ff6b5e;
+  --red-soft: rgba(255, 107, 94, 0.12);
+  --amber: #ffc24b;
+  --amber-soft: rgba(255, 194, 75, 0.1);
 
-  --radius: 10px;
-  --radius-sm: 7px;
-  --shadow-card: 0 1px 2px rgba(28, 32, 26, 0.05), 0 4px 14px rgba(28, 32, 26, 0.04);
-  --shadow-pop: 0 4px 10px rgba(28, 32, 26, 0.08), 0 12px 32px rgba(28, 32, 26, 0.12);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+  --shadow-pop: 0 12px 28px rgba(0, 0, 0, 0.45), 0 32px 80px rgba(0, 0, 0, 0.5);
 
-  --font-ui: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Spline Sans Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-ui: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Uppercase tracked micro-label, used for panel titles and field labels */
+  --label-tracking: 0.12em;
 }
 
 * {
@@ -71,13 +76,28 @@ button:disabled {
 }
 
 ::selection {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid var(--bg);
+  border-radius: 999px;
+  background: var(--surface-3);
 }
 
 .hidden {
@@ -97,15 +117,17 @@ h2 {
   top: 0;
   z-index: 30;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: rgba(11, 12, 14, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .appbar-inner {
   display: flex;
-  align-items: stretch;
-  gap: 32px;
+  align-items: center;
+  gap: 28px;
   width: min(1480px, 100%);
-  min-height: 56px;
+  min-height: 60px;
   margin: 0 auto;
   padding: 0 clamp(16px, 3vw, 32px);
 }
@@ -113,75 +135,67 @@ h2 {
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
 }
 
 .brand-logo {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .brand-logo svg {
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
 }
 
 .brand-name {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  font-size: 13px;
+  font-weight: 800;
+  font-stretch: 118%;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 /* ---------------- Tabs ---------------- */
 .tab-nav {
   display: flex;
-  align-items: stretch;
-  gap: 4px;
+  align-items: center;
+  gap: 2px;
   margin-right: auto;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--well);
 }
 
 .tab-button {
-  position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 0 14px;
+  padding: 7px 16px;
   border: 0;
+  border-radius: 999px;
   background: none;
-  color: var(--ink-2);
-  font-size: 14px;
-  font-weight: 500;
-  transition: color 120ms ease;
-}
-
-.tab-button::after {
-  content: "";
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: transparent;
-  transition: background 120ms ease;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: color 120ms ease, background 120ms ease;
 }
 
 .tab-button:hover {
-  color: var(--ink);
+  color: var(--ink-2);
 }
 
 .tab-button.is-active {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.tab-button.is-active::after {
-  background: var(--accent);
+  background: var(--surface-3);
+  color: var(--accent);
 }
 
 .appbar-actions {
@@ -196,13 +210,13 @@ h2 {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-height: 36px;
-  padding: 0 14px;
+  min-height: 38px;
+  padding: 0 16px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 0;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
@@ -216,7 +230,8 @@ h2 {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
+  font-weight: 700;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -225,15 +240,14 @@ h2 {
 }
 
 .btn-secondary {
-  background: var(--surface);
+  background: var(--surface-2);
   border-color: var(--border-strong);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(28, 32, 26, 0.04);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--surface-2);
-  border-color: #b9bdb2;
+  background: var(--surface-3);
+  border-color: #454b53;
 }
 
 .btn-ghost {
@@ -242,7 +256,7 @@ h2 {
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background: var(--surface-3);
+  background: var(--surface-2);
   color: var(--ink);
 }
 
@@ -272,6 +286,11 @@ h2 {
   align-items: start;
 }
 
+/* The budgeting workspace only has two panels — don't leave a dead column. */
+#budgetingView .workspace {
+  grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.5fr);
+}
+
 /* ---------------- Panels ---------------- */
 .panel {
   min-width: 0;
@@ -286,31 +305,36 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 18px;
+  min-height: 52px;
+  padding: 8px 20px;
   border-bottom: 1px solid var(--border);
 }
 
 .panel-header h2 {
-  font-size: 14px;
-  font-weight: 600;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 750;
+  font-stretch: 112%;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
 }
 
 .panel-body {
-  padding: 18px;
+  padding: 20px;
 }
 
 /* ---------------- Badges ---------------- */
 .badge {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 0 9px;
-  border: 1px solid var(--border);
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
-  background: var(--surface-2);
+  background: var(--well);
   color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -319,13 +343,13 @@ h2 {
 .badge-total {
   border-color: var(--accent-border);
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .badge.is-warning {
-  border-color: #ead9b5;
+  border-color: rgba(255, 194, 75, 0.35);
   background: var(--amber-soft);
   color: var(--amber);
 }
@@ -342,11 +366,12 @@ h2 {
 
 .field-label {
   display: block;
-  margin-bottom: 6px;
-  color: var(--ink-2);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  margin-bottom: 7px;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 textarea,
@@ -355,7 +380,7 @@ textarea,
   width: 100%;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--well);
   color: var(--ink);
   outline: none;
   transition: border-color 120ms ease, box-shadow 120ms ease;
@@ -372,8 +397,8 @@ textarea {
 
 .table-input,
 .table-select {
-  min-height: 36px;
-  padding: 0 11px;
+  min-height: 38px;
+  padding: 0 12px;
   font-size: 13.5px;
 }
 
@@ -386,14 +411,14 @@ textarea:focus,
 .table-input:focus,
 .table-select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(22, 111, 71, 0.12);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .table-select {
   appearance: none;
   cursor: pointer;
   padding-right: 30px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%235b6155' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%23a2a8b0' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
 }
@@ -424,8 +449,8 @@ input[type="number"] {
   min-height: 148px;
   padding: 24px;
   border: 1.5px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  border-radius: 12px;
+  background: var(--well);
   text-align: center;
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease;
@@ -433,7 +458,7 @@ input[type="number"] {
 
 .dropzone:hover,
 .dropzone.is-dragging {
-  border-color: var(--accent);
+  border-color: var(--accent-border);
   background: var(--accent-soft);
 }
 
@@ -476,7 +501,7 @@ input[type="number"] {
   margin: 14px 0 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: var(--well);
 }
 
 .receipt-preview img {
@@ -510,7 +535,7 @@ input[type="number"] {
   border: 1px solid var(--accent-border);
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent);
   font-size: 12.5px;
   font-weight: 600;
 }
@@ -523,7 +548,7 @@ input[type="number"] {
   overflow: hidden;
   height: 4px;
   border-radius: 999px;
-  background: rgba(22, 111, 71, 0.18);
+  background: rgba(201, 241, 88, 0.16);
 }
 
 .ocr-progress span {
@@ -546,7 +571,7 @@ input[type="number"] {
 .items-table {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   background: var(--surface);
 }
 
@@ -562,6 +587,11 @@ input[type="number"] {
   min-height: 48px;
   padding: 8px 12px;
   border-top: 1px solid var(--border);
+  transition: background 100ms ease;
+}
+
+.table-row:not(.table-head):hover {
+  background: var(--surface-2);
 }
 
 .table-row:first-child {
@@ -573,10 +603,10 @@ input[type="number"] {
   padding-top: 0;
   padding-bottom: 0;
   background: var(--surface-2);
-  color: var(--ink-2);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -619,10 +649,10 @@ input[type="number"] {
   align-items: center;
   max-width: 100%;
   min-height: 28px;
-  padding: 0 10px;
+  padding: 0 11px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--well);
   color: var(--ink-2);
   font-size: 12.5px;
   font-weight: 500;
@@ -639,14 +669,14 @@ input[type="number"] {
 }
 
 .assign-summary:hover {
-  border-color: var(--accent);
+  border-color: var(--accent-border);
   color: var(--ink);
 }
 
 .assign-dropdown[open] .assign-summary {
-  border-color: var(--accent);
+  border-color: var(--accent-border);
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent);
 }
 
 .assign-panel-pop {
@@ -658,9 +688,9 @@ input[type="number"] {
   display: grid;
   gap: 8px;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-2);
   box-shadow: var(--shadow-pop);
 }
 
@@ -742,9 +772,9 @@ input[type="number"] {
   gap: 3px;
   min-height: 200px;
   padding: 24px;
-  border: 1.5px dashed var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--well);
   text-align: center;
 }
 
@@ -768,7 +798,33 @@ input[type="number"] {
 /* ---------------- Summary / people ---------------- */
 .summary-panel {
   position: sticky;
-  top: 72px;
+  top: 76px;
+}
+
+.stat-hero {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stat-label {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.stat-value {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 34px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .people-panel {
@@ -796,7 +852,7 @@ input[type="number"] {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 3px 4px 3px 10px;
+  padding: 4px 5px 4px 11px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--surface-2);
@@ -850,9 +906,9 @@ input[type="number"] {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0 12px;
-  padding: 10px 13px;
+  padding: 11px 14px;
   border-top: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-2);
 }
 
 .split-total-row:first-child {
@@ -867,7 +923,7 @@ input[type="number"] {
 
 .split-total-row span {
   grid-column: 1;
-  color: var(--ink-2);
+  color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -878,10 +934,10 @@ input[type="number"] {
   grid-row: 1 / span 3;
   align-self: center;
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--accent-strong);
+  color: var(--accent);
 }
 
 /* ---------------- Save panel ---------------- */
@@ -895,7 +951,7 @@ input[type="number"] {
 
 .save-status {
   min-height: 1.1em;
-  color: var(--accent-strong);
+  color: var(--accent);
   font-size: 12.5px;
   font-weight: 600;
   text-align: center;
@@ -927,13 +983,14 @@ input[type="number"] {
 .history-card {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   background: var(--surface);
-  transition: border-color 120ms ease;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 
 .history-card:hover {
   border-color: var(--border-strong);
+  background: var(--surface-2);
 }
 
 .history-summary {
@@ -986,7 +1043,7 @@ input[type="number"] {
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--accent-strong);
+  color: var(--accent);
 }
 
 .history-body {
@@ -1032,7 +1089,7 @@ input[type="number"] {
 .history-people {
   padding: 8px 11px;
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: var(--well);
   color: var(--ink-2);
   font-size: 12.5px;
 }
@@ -1076,7 +1133,9 @@ input[type="number"] {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(33, 37, 31, 0.42);
+  background: rgba(5, 6, 7, 0.72);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   animation: fade 160ms ease;
 }
 
@@ -1086,10 +1145,10 @@ input[type="number"] {
 
 .modal-card {
   width: min(440px, 100%);
-  padding: 22px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
+  padding: 24px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
   box-shadow: var(--shadow-pop);
   animation: pop 200ms cubic-bezier(0.2, 1, 0.3, 1) both;
 }
@@ -1119,7 +1178,7 @@ input[type="number"] {
   padding: 11px 13px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: var(--well);
 }
 
 .prompt-item span {
@@ -1167,7 +1226,7 @@ input[type="number"] {
   padding: 1px 5px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--surface-2);
+  background: var(--well);
   font-family: var(--font-mono);
   font-size: 11px;
 }
@@ -1178,7 +1237,7 @@ input[type="number"] {
   max-height: 65vh;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--ink);
+  background: #000;
   object-fit: contain;
 }
 
@@ -1305,7 +1364,9 @@ input[type="number"] {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: var(--bg);
+  background:
+    radial-gradient(640px 420px at 50% -80px, rgba(201, 241, 88, 0.05), transparent 70%),
+    var(--bg);
 }
 
 .auth-overlay.hidden {
@@ -1314,11 +1375,42 @@ input[type="number"] {
 
 .auth-card {
   width: min(380px, 100%);
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  animation: pop 260ms cubic-bezier(0.2, 1, 0.3, 1) both;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+
+.auth-wordmark {
+  font-size: 13px;
+  font-weight: 800;
+  font-stretch: 118%;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.auth-title {
+  margin-bottom: 18px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 .auth-form {
   display: grid;
   gap: 14px;
+}
+
+.auth-form .field {
+  margin-top: 0;
 }
 
 .auth-error {
