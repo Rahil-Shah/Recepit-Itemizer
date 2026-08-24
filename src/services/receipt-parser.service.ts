@@ -7,6 +7,11 @@ namespace ReceiptRing.Services {
     // and the stray "1" was absorbed into the label, booking a $10,999 TV as
     // $999. Anchor to start-of-line or whitespace and accept any length.
     private readonly amountPattern = /(?:^|\s)(-?\$?\s*\d+(?:,\d{3})*[,.]\d{2}|-?\$\s*\d+)\s*$/;
+    // A run of four or more digits sitting on its own in the label is the
+    // item's SKU/PLU. It used to be deleted outright, which threw away the one
+    // token that names the product unambiguously -- "GV SHRD MOZZ 8Z" is a
+    // guess, "007874203922" is not. Capture the longest such run instead.
+    private readonly itemCodePattern = /\b\d{4,}\b/g;
 
     constructor(
       private readonly categorizationService: CategorizationService,
@@ -27,11 +32,9 @@ namespace ReceiptRing.Services {
       if (!match || match.index === undefined) return null;
 
       const amount = this.parseAmount(match[1]);
-      const label = line
-        .slice(0, match.index)
-        .replace(/[*#@]/g, "")
-        .replace(/\b\d{4,}\b/g, "")
-        .trim();
+      const withoutMarks = line.slice(0, match.index).replace(/[*#@]/g, "");
+      const itemCode = this.extractItemCode(withoutMarks);
+      const label = withoutMarks.replace(this.itemCodePattern, "").trim();
 
       if (!label || this.ignoredLabel.test(label) || !Number.isFinite(amount) || amount === 0) {
         return null;
@@ -43,11 +46,25 @@ namespace ReceiptRing.Services {
         id: this.idService.create(),
         label: this.toTitleCase(label),
         amount: Number(amount.toFixed(2)),
+        ...(itemCode ? { itemCode } : {}),
         category: categorization.category,
         categorizationConfidence: categorization.confidence,
         categorizationSource: categorization.source,
         needsCategoryReview: categorization.shouldPrompt
       };
+    }
+
+    /**
+     * The item's code, when the line carries one. A line can hold more than one
+     * long digit run (a quantity, a weight in grams, a loyalty number); the
+     * longest is overwhelmingly the SKU, and ties go to the first, which is
+     * where receipts print the code.
+     */
+    private extractItemCode(labelPart: string): string | undefined {
+      const codes = labelPart.match(this.itemCodePattern);
+      if (!codes) return undefined;
+
+      return codes.reduce((longest, code) => (code.length > longest.length ? code : longest));
     }
 
     private toTitleCase(value: string): string {

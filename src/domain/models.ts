@@ -19,6 +19,10 @@ namespace ReceiptRing.Domain {
     id: string;
     label: string;
     amount: number;
+    // The SKU/PLU the receipt printed beside the item, when it printed one.
+    // Store-internal and useless on its own, but it is the one token on the
+    // line that unambiguously names the product, so it is worth keeping.
+    itemCode?: string;
     category: CategoryName;
     categorizationConfidence: number;
     categorizationSource: CategorizationSource;

@@ -57,3 +57,41 @@ test("title-cases labels and strips receipt noise", () => {
   const [item] = parser.parse("ORGANIC AVOCADO* 2.50");
   assert.equal(item.label, "Organic Avocado");
 });
+
+test("keeps the item code the label used to have stripped out of it", () => {
+  const parser = makeParser();
+  const items = parser.parse("007874203922 GV SHRD MOZZ 8Z 3.24");
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].itemCode, "007874203922");
+  assert.equal(items[0].label, "Gv Shrd Mozz 8z");
+});
+
+test("leaves out the item code when the line does not print one", () => {
+  const parser = makeParser();
+  const items = parser.parse("Banana 1.25");
+
+  assert.equal(items[0].itemCode, undefined);
+});
+
+test("takes the longest digit run as the code, not a quantity or weight", () => {
+  const parser = makeParser();
+  const items = parser.parse("1200 004900000634 CHKN BRST 12.80");
+
+  assert.equal(items[0].itemCode, "004900000634");
+});
+
+test("does not mistake the amount for an item code", () => {
+  const parser = makeParser();
+  const items = parser.parse("Tv 10999.00");
+
+  assert.equal(items[0].itemCode, undefined);
+  assert.equal(items[0].amount, 10999);
+});
+
+test("still ignores a payment line that carries a long number", () => {
+  const parser = makeParser();
+  const items = parser.parse("VISA 4111111111111111 43.20");
+
+  assert.equal(items.length, 0);
+});
