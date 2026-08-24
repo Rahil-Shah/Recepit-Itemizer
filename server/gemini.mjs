@@ -44,7 +44,8 @@ Rules:
 2. Extract discount ONLY if the receipt shows an original price and a final price for that item. Then discount = original - final.
 3. Never invent or infer a discount amount - if only one price is shown, discount is always 0.
 4. Preserve item order exactly as it appears on the receipt.
-5. Ignore store addresses, phone numbers, loyalty info, payment methods, card numbers, barcodes, receipt IDs.
+5. Ignore store addresses, phone numbers, loyalty info, payment methods, card numbers, receipt IDs.
+5a. If an item line prints a product code / SKU / PLU beside it, return it verbatim as itemCode (digits only, keep leading zeros). Omit itemCode or use null when the line prints no code. Never invent one, and never use the receipt ID or a card number as an item code.
 6. Do not invent items.
 7. If text is unclear, make the best reasonable interpretation.
 8. Return valid JSON only - no markdown, no explanations, just JSON.
@@ -61,6 +62,7 @@ Return JSON in exactly this format, with no backticks or markdown:
   "items": [
     {
       "name": "Item Name",
+      "itemCode": "0001234567890 or null",
       "price": 0.00,
       "discount": 0.00,
       "lowConfidence": false
@@ -70,6 +72,17 @@ Return JSON in exactly this format, with no backticks or markdown:
 
 Return ONLY valid JSON. No other text.`;
 
+// Codes end up in lookup keys and on screen, so keep them to what a SKU
+// actually is. Anything else the model puts in the field -- the string "null",
+// a store name, a card number it was told not to read -- is dropped rather
+// than passed on as if it were a fact about the item.
+const ITEM_CODE_RE = /^\d{4,20}$/;
+
+function normalizeItemCode(value) {
+  const code = typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
+  return ITEM_CODE_RE.test(code) ? code : null;
+}
+
 // Validate receipt data and reconcile discount handling.
 // Prices shown on receipt are what customer actually paid.
 // Discounts shown are only applied if the math requires it.
@@ -77,6 +90,8 @@ function validateAndReconcileReceipt(data) {
   if (!data.items || !Array.isArray(data.items)) {
     return data;
   }
+
+  data.items = data.items.map((item) => ({ ...item, itemCode: normalizeItemCode(item?.itemCode) }));
 
   const tax = Number(data.tax) || 0;
   const total = Number(data.total) || 0;
