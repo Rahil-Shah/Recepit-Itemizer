@@ -159,9 +159,18 @@ namespace ReceiptRing.Config {
     deod: "Deodorant",
     razr: "Razor",
     btry: "Battery",
-    lightblb: "Light Bulb",
+    lightblb: "Light Bulb"
+  };
 
-    // Qualifiers that change what the item is
+  /**
+   * Modifiers, kept apart from the nouns above.
+   *
+   * These describe an item without ever being one. A label that expands to
+   * nothing but qualifiers -- "ORG", "SHRD FRZN" -- has not been identified,
+   * it has been described, and the resolver needs to be able to tell the
+   * difference before it reports a confident "Organic" as a product.
+   */
+  export const QUALIFIER_ABBREVIATIONS: Readonly<Record<string, string>> = {
     org: "Organic",
     orgnc: "Organic",
     nat: "Natural",
