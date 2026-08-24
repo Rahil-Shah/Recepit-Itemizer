@@ -276,6 +276,7 @@ namespace ReceiptRing.App {
         id: item.id,
         label: item.label,
         amount: item.amount,
+        ...(item.itemCode ? { itemCode: item.itemCode } : {}),
         confidence: item.categorizationConfidence * 100,
         ignored: false
       }));
@@ -581,6 +582,7 @@ namespace ReceiptRing.App {
       if (Array.isArray(result.items)) {
         result.items.forEach((item: any) => {
           const label = this.toTitleCase(item.name || "Unknown Item");
+          const itemCode = typeof item.itemCode === "string" ? item.itemCode.trim() : "";
           const price = typeof item.price === "number" ? item.price : Number(item.price) || 0;
           const discount = typeof item.discount === "number" ? item.discount : Number(item.discount) || 0;
           const finalAmount = Math.max(0, price - discount);
@@ -600,6 +602,7 @@ namespace ReceiptRing.App {
             id: this.idService.create(),
             label: itemLabel,
             amount: Number(finalAmount.toFixed(2)),
+            ...(itemCode ? { itemCode } : {}),
             category: categorization.category,
             categorizationConfidence: lowConfidence ? 0.3 : categorization.confidence,
             categorizationSource: categorization.source,

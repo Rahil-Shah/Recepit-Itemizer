@@ -51,6 +51,9 @@ namespace ReceiptRing.Domain {
     id: string;
     label: string;
     amount: number;
+    // The SKU/PLU printed beside the item, carried through from the parse so
+    // an identification can be looked up by code rather than by shorthand.
+    itemCode?: string;
     confidence: number;
     ignored: boolean;
     isFood?: boolean;
