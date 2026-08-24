@@ -14,6 +14,7 @@
   "files": [
     "src/domain/models.ts",
     "src/config/categories.ts",
+    "src/config/abbreviations.ts",
     "src/config/sampleReceipt.ts",
     "src/services/id.service.ts",
     "src/services/currency-format.service.ts",
@@ -21,6 +22,7 @@
     "src/services/categorization.service.ts",
     "src/services/receipt-parser.service.ts",
     "src/services/label-normalizer.service.ts",
+    "src/services/dictionary-resolver.service.ts",
     "src/services/split-calculator.service.ts",
     "src/services/line-selection.service.ts",
     "src/services/storage.service.ts",
