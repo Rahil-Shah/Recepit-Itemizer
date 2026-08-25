@@ -185,3 +185,77 @@ test("passes the store name down to the model", async () => {
 
   assert.equal(ai.calls[0].storeName, "Costco");
 });
+
+test("reports progress through each tier and finishes complete", async () => {
+  const ai = recordingAi([]);
+  const { service } = makeService(ai);
+  const stages = [];
+
+  await service.identify([line("l1", "GV SHRD MOZZ 8Z"), line("l2", "QQZ XZ9")], new Map(), {
+    onProgress: (progress) => stages.push(progress.stage)
+  });
+
+  assert.deepEqual(Array.from(stages), ["aliases", "dictionary", "ai", "complete"]);
+});
+
+test("does not announce an AI stage when there is nothing left to ask about", async () => {
+  const { service } = makeService(recordingAi());
+  const stages = [];
+
+  await service.identify([line("l1", "GV SHRD MOZZ 8Z")], new Map(), {
+    onProgress: (progress) => stages.push(progress.stage)
+  });
+
+  assert.equal(stages.includes("ai"), false);
+});
+
+test("counts lines rather than tiers", async () => {
+  const { service } = makeService();
+  const updates = [];
+
+  await service.identify([line("l1", "GV SHRD MOZZ 8Z"), line("l2", "ORG MLK")], new Map(), {
+    onProgress: (progress) => updates.push({ done: progress.done, total: progress.total })
+  });
+
+  const final = updates[updates.length - 1];
+  assert.equal(final.total, 2);
+  assert.equal(final.done, 2);
+});
+
+test("says how many of how many were identified", async () => {
+  const { service } = makeService();
+  let last = null;
+
+  await service.identify([line("l1", "GV SHRD MOZZ 8Z"), line("l2", "QQZ XZ9")], new Map(), {
+    onProgress: (progress) => {
+      last = progress;
+    }
+  });
+
+  assert.equal(last.message, "Identified 1 of 2 items.");
+});
+
+test("says so when there was nothing to identify", async () => {
+  const { service } = makeService();
+  let last = null;
+
+  await service.identify([], new Map(), {
+    onProgress: (progress) => {
+      last = progress;
+    }
+  });
+
+  assert.equal(last.message, "Nothing to identify.");
+});
+
+test("a listener that throws does not take the identification down with it", async () => {
+  const { service } = makeService();
+
+  const result = await service.identify([line("l1", "GV SHRD MOZZ 8Z")], new Map(), {
+    onProgress: () => {
+      throw new Error("the view exploded");
+    }
+  });
+
+  assert.equal(result.get("l1").resolvedName, "Great Value Shredded Mozzarella");
+});
