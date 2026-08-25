@@ -95,7 +95,7 @@ test("works with no AI tier at all", async () => {
   );
 
   assert.equal(result.get("l1").source, "dictionary");
-  assert.equal(result.has("l2"), false);
+  assert.equal(result.get("l2").source, "unresolved");
 });
 
 test("skips ignored lines", async () => {
@@ -174,7 +174,7 @@ test("ignores an answer for a line it never asked about", async () => {
   const result = await service.identify([line("l1", "QQZ XZ9")], new Map());
 
   assert.equal(result.has("ghost"), false);
-  assert.equal(result.size, 0);
+  assert.equal(result.get("l1").source, "unresolved");
 });
 
 test("passes the store name down to the model", async () => {
@@ -258,4 +258,72 @@ test("a listener that throws does not take the identification down with it", asy
   });
 
   assert.equal(result.get("l1").resolvedName, "Great Value Shredded Mozzarella");
+});
+
+test("records a line nobody could place as unresolved rather than dropping it", async () => {
+  const { service } = makeService();
+
+  const result = await service.identify([line("l1", "QQZ XZ9")], new Map());
+
+  const answer = result.get("l1");
+  assert.equal(answer.source, "unresolved");
+  assert.equal(answer.confidence, 0);
+  assert.equal(answer.confirmed, false);
+  // The receipt's own words are the one thing that is definitely true.
+  assert.equal(answer.resolvedName, "QQZ XZ9");
+});
+
+test("an unresolved line does not count as identified", async () => {
+  const { service } = makeService();
+  let last = null;
+
+  await service.identify([line("l1", "GV SHRD MOZZ 8Z"), line("l2", "QQZ XZ9")], new Map(), {
+    onProgress: (progress) => {
+      last = progress;
+    }
+  });
+
+  assert.equal(last.done, 1);
+  assert.equal(last.message, "Identified 1 of 2 items.");
+});
+
+test("rejects an answer the model did not believe, keeping it as an alternative", async () => {
+  const ai = recordingAi([
+    {
+      lineId: "l1",
+      rawLabel: "QQZ XZ9",
+      resolvedName: "Possibly A Sponge",
+      confidence: 0.2,
+      source: "ai",
+      alternatives: [],
+      confirmed: false
+    }
+  ]);
+  const { service } = makeService(ai);
+
+  const answer = (await service.identify([line("l1", "QQZ XZ9")], new Map())).get("l1");
+
+  assert.equal(answer.source, "unresolved");
+  assert.equal(answer.resolvedName, "QQZ XZ9");
+  assert.equal(answer.alternatives[0].name, "Possibly A Sponge");
+});
+
+test("keeps an answer the model did believe", async () => {
+  const ai = recordingAi([
+    {
+      lineId: "l1",
+      rawLabel: "QQZ XZ9",
+      resolvedName: "Quiznos Gift Card",
+      confidence: 0.82,
+      source: "ai",
+      alternatives: [],
+      confirmed: false
+    }
+  ]);
+  const { service } = makeService(ai);
+
+  const answer = (await service.identify([line("l1", "QQZ XZ9")], new Map())).get("l1");
+
+  assert.equal(answer.source, "ai");
+  assert.equal(answer.resolvedName, "Quiznos Gift Card");
 });

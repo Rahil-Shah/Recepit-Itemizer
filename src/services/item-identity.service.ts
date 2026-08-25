@@ -44,6 +44,12 @@ namespace ReceiptRing.Services {
     onProgress?(progress: IdentifyProgress): void;
   }
 
+  // Under this, an answer is not worth showing as an answer. The model is
+  // asked for its own confidence and will occasionally offer a name it plainly
+  // guessed; below the bar it is recorded as unresolved, keeping whatever it
+  // said as an alternative rather than as a claim.
+  const MIN_REPORTABLE_CONFIDENCE = 0.35;
+
   /**
    * Runs the identification tiers in order and keeps the best answer.
    *
@@ -146,18 +152,68 @@ namespace ReceiptRing.Services {
         const byLineId = new Map(answers.map((answer) => [answer.lineId, answer]));
         unresolvedByDictionary.forEach((line) => {
           const answer = byLineId.get(line.id);
-          if (answer) resolved.set(line.id, answer);
+          if (answer && answer.confidence >= MIN_REPORTABLE_CONFIDENCE) {
+            resolved.set(line.id, answer);
+            return;
+          }
+          // Either the model said nothing about this line, or it said
+          // something it did not believe. Both are the same fact to a reader.
+          resolved.set(line.id, this.unresolved(line, answer ?? null));
+        });
+      } else {
+        unresolvedByDictionary.forEach((line) => {
+          resolved.set(line.id, this.unresolved(line, null));
         });
       }
 
+      // Unresolved lines have entries too, so counting the map would report a
+      // receipt nobody could read as fully identified.
+      const identified = [...resolved.values()].filter(
+        (identification) => identification.source !== "unresolved"
+      ).length;
       report({
         stage: "complete",
-        done: resolved.size,
+        done: identified,
         total,
-        message: this.summarize(resolved.size, total)
+        message: this.summarize(identified, total)
       });
 
       return resolved;
+    }
+
+    /**
+     * A line nobody could place, recorded as such.
+     *
+     * Saying "I don't know" is a result, not the absence of one. Dropping the
+     * line instead would leave the row looking exactly like a row that was
+     * never asked about, and the user would press the button again and pay for
+     * the same non-answer. A low-confidence guess is kept as an alternative --
+     * it may well be right, and it is the obvious thing to offer when someone
+     * opens the row to correct it -- but it is not presented as the name.
+     */
+    private unresolved(
+      line: Domain.ReceiptLine,
+      rejected: Domain.ItemIdentification | null
+    ): Domain.ItemIdentification {
+      const alternatives = rejected
+        ? [{ name: rejected.resolvedName, confidence: rejected.confidence }, ...rejected.alternatives]
+        : [];
+
+      return {
+        lineId: line.id,
+        rawLabel: line.label,
+        ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+        // The receipt's own words. There is nothing better to show, and
+        // blanking the row would lose the one thing that is definitely true.
+        resolvedName: line.label,
+        confidence: 0,
+        source: "unresolved",
+        reasoning: rejected
+          ? "Only a low-confidence guess -- worth checking by hand."
+          : "Couldn't work out what this is.",
+        alternatives,
+        confirmed: false
+      };
     }
 
     private summarize(done: number, total: number): string {
