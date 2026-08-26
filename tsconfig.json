@@ -25,6 +25,7 @@
     "src/services/dictionary-resolver.service.ts",
     "src/services/item-alias-store.service.ts",
     "src/services/item-identity.service.ts",
+    "src/services/item-identity-api.service.ts",
     "src/services/split-calculator.service.ts",
     "src/services/line-selection.service.ts",
     "src/services/storage.service.ts",
