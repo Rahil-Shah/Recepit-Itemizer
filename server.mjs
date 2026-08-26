@@ -9,6 +9,7 @@ import { assertCryptoEnv } from "./server/crypto.mjs";
 import { createAuth } from "./server/auth.mjs";
 import { createBank } from "./server/bank.mjs";
 import { registerGemini } from "./server/gemini.mjs";
+import { registerItemIdentity } from "./server/item-identity.mjs";
 import { createRateLimiter } from "./server/rate-limit.mjs";
 import { parseMonthParam, getMonthRange, getUtcMonthRange } from "./server/month.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
@@ -73,6 +74,17 @@ const authLimiter = createRateLimiter({
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
 
+// Identification calls a paid model on the operator's key, and the browser
+// will happily fire one per receipt. The blanket /api limit is far too loose
+// for a route that costs money per request, so this one gets its own -- tight
+// enough to bound a runaway client or a scripted caller, loose enough that a
+// person working through a stack of receipts never meets it.
+const identifyLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  message: "Too many identification requests. Give it a minute."
+});
+
 const auth = createAuth(prisma);
 const { requireAuth } = auth;
 
@@ -101,6 +113,11 @@ bank.register(app, requireAuth);
 // Gemini config + image-parsing proxy. Keys (shared or per-user) stay
 // server-side and are never returned to the browser (see server/gemini.mjs).
 registerGemini(app, requireAuth, prisma);
+
+// Expands abbreviated receipt lines into real product names. Only the lines
+// the browser could not resolve for free get this far (see
+// src/services/item-identity.service.ts for the tiers in front of it).
+registerItemIdentity(app, requireAuth, prisma, identifyLimiter);
 
 // --- API -------------------------------------------------------------------
 
