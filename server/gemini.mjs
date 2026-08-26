@@ -148,53 +148,131 @@ export function serverGeminiModel() {
   return process.env.GEMINI_MODEL || DEFAULT_MODEL;
 }
 
-export function registerGemini(app, requireAuth, prisma) {
-  // Resolve the key to call Gemini with: the user's own key when they've saved
-  // one, otherwise the shared server key. Returns "" when neither exists.
-  // Read a user's stored key. Returns the key, or null when they have none.
-  // Throws UndecryptableKeyError when a key is stored but cannot be read.
-  async function readUserKey(userId) {
-    if (!prisma || !userId) return null;
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { geminiKeyCiphertext: true, geminiKeyIv: true, geminiKeyAuthTag: true }
+// Read a user's stored key. Returns the key, or null when they have none.
+// Throws UndecryptableKeyError when a key is stored but cannot be read.
+async function readUserKey(prisma, userId) {
+  if (!prisma || !userId) return null;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { geminiKeyCiphertext: true, geminiKeyIv: true, geminiKeyAuthTag: true }
+  });
+  if (!user?.geminiKeyCiphertext || !user.geminiKeyIv || !user.geminiKeyAuthTag) {
+    return null;
+  }
+  try {
+    return decryptSecret({
+      ciphertext: user.geminiKeyCiphertext,
+      iv: user.geminiKeyIv,
+      authTag: user.geminiKeyAuthTag
     });
-    if (!user?.geminiKeyCiphertext || !user.geminiKeyIv || !user.geminiKeyAuthTag) {
+  } catch (error) {
+    console.error("Failed to decrypt stored Gemini key:", error);
+    throw new UndecryptableKeyError();
+  }
+}
+
+// Resolve the key to call Gemini with: the user's own key when they've saved
+// one, otherwise the shared server key. Returns "" when neither exists.
+//
+// An undecryptable personal key used to fall through to the shared key while
+// the config endpoint kept reporting hasUserKey: true. After an encryption
+// key rotation that quietly moved every user onto the operator's key and
+// quota, with nothing but a log line to say so. Surface it instead.
+export async function resolveApiKey(prisma, userId) {
+  const userKey = await readUserKey(prisma, userId);
+  return userKey ?? process.env.GEMINI_API_KEY ?? "";
+}
+
+// Reports whether a usable personal key exists, so the UI cannot claim a key
+// is in use when it can no longer be read.
+async function userHasKey(prisma, userId) {
+  try {
+    return (await readUserKey(prisma, userId)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Turns a failure to resolve a key into the response the caller should get,
+ * or null when a key was found. Every route that calls Gemini owes the user
+ * the same two answers -- "re-enter your key" and "no key is configured" --
+ * and having each one reinvent them is how they drift apart.
+ */
+export async function resolveApiKeyOrRespond(prisma, req, res) {
+  let apiKey;
+  try {
+    apiKey = await resolveApiKey(prisma, req.userId);
+  } catch (error) {
+    if (error instanceof UndecryptableKeyError) {
+      res.status(400).json({
+        error: "Your saved Gemini key can no longer be read. Please re-enter it in Settings."
+      });
       return null;
     }
-    try {
-      return decryptSecret({
-        ciphertext: user.geminiKeyCiphertext,
-        iv: user.geminiKeyIv,
-        authTag: user.geminiKeyAuthTag
-      });
-    } catch (error) {
-      console.error("Failed to decrypt stored Gemini key:", error);
-      throw new UndecryptableKeyError();
-    }
+    throw error;
+  }
+  if (!apiKey) {
+    res.status(503).json({ error: "No Gemini key is configured." });
+    return null;
+  }
+  return apiKey;
+}
+
+/**
+ * One call to Gemini's generateContent, with the guards every caller needs:
+ * a validated model id (it is interpolated into the URL), a deadline so a hung
+ * upstream cannot pin a socket indefinitely, and the key kept out of the
+ * returned error text.
+ *
+ * Resolves to { ok, status, text }. Upstream failures are reported, not thrown
+ * -- each route words its own error, and a 429 from Google is not a bug here.
+ */
+export async function callGemini({ apiKey, model, parts }) {
+  if (!MODEL_RE.test(model)) {
+    return { ok: false, status: 400, text: "Invalid model name." };
   }
 
-  // Resolve the key to call Gemini with: the user's own key when they've saved
-  // one, otherwise the shared server key. Returns "" when neither exists.
-  //
-  // An undecryptable personal key used to fall through to the shared key while
-  // the config endpoint kept reporting hasUserKey: true. After an encryption
-  // key rotation that quietly moved every user onto the operator's key and
-  // quota, with nothing but a log line to say so. Surface it instead.
-  async function resolveApiKey(userId) {
-    const userKey = await readUserKey(userId);
-    return userKey ?? process.env.GEMINI_API_KEY ?? "";
-  }
+  const url = `${GEMINI_HOST}/v1/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const startTime = Date.now();
 
-  // Reports whether a usable personal key exists, so the UI cannot claim a key
-  // is in use when it can no longer be read.
-  async function userHasKey(userId) {
-    try {
-      return (await readUserKey(userId)) !== null;
-    } catch {
-      return false;
-    }
+  const upstream = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents: [{ parts }] }),
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+  });
+
+  console.log(`Gemini response received in ${Date.now() - startTime}ms`);
+  return { ok: upstream.ok, status: upstream.status, text: await upstream.text() };
+}
+
+/**
+ * A short, safe description of an upstream failure. Google's error bodies are
+ * JSON when they are JSON and HTML when they are not, so parse defensively and
+ * truncate -- this string goes to the browser.
+ */
+export function describeUpstreamError(upstream) {
+  try {
+    const body = JSON.parse(upstream.text);
+    const message = body?.error?.message || body?.message || "Unknown error";
+    return `${upstream.status} - ${String(message).slice(0, 100)}`;
+  } catch {
+    return `status ${upstream.status}`;
   }
+}
+
+/** Pulls the model's text out of a generateContent response body. */
+export function extractResponseText(rawBody) {
+  const json = JSON.parse(rawBody);
+  const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (typeof text !== "string" || !text) {
+    throw new Error("No response text returned from Gemini.");
+  }
+  return text.trim().replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+}
+
+export function registerGemini(app, requireAuth, prisma) {
 
   // Non-secret config for the browser: model, whether a shared server key
   // exists, and whether this user has saved a personal key. The key values
@@ -203,7 +281,7 @@ export function registerGemini(app, requireAuth, prisma) {
     res.json({
       GEMINI_MODEL: serverGeminiModel(),
       hasServerKey: hasServerGeminiKey(),
-      hasUserKey: await userHasKey(req.userId)
+      hasUserKey: await userHasKey(prisma, req.userId)
     });
   });
 
@@ -253,20 +331,8 @@ export function registerGemini(app, requireAuth, prisma) {
 
   // Proxy a single receipt image to Gemini using the resolved server-held key.
   app.post("/api/gemini/parse", requireAuth, async (req, res) => {
-    let apiKey;
-    try {
-      apiKey = await resolveApiKey(req.userId);
-    } catch (error) {
-      if (error instanceof UndecryptableKeyError) {
-        return res.status(400).json({
-          error: "Your saved Gemini key can no longer be read. Please re-enter it in Settings."
-        });
-      }
-      throw error;
-    }
-    if (!apiKey) {
-      return res.status(503).json({ error: "No Gemini key is configured." });
-    }
+    const apiKey = await resolveApiKeyOrRespond(prisma, req, res);
+    if (!apiKey) return;
 
     const imageBase64 = typeof req.body?.imageBase64 === "string" ? req.body.imageBase64 : "";
     const mimeType = typeof req.body?.mimeType === "string" ? req.body.mimeType : "";
@@ -286,48 +352,22 @@ export function registerGemini(app, requireAuth, prisma) {
     }
 
     try {
-      const url = `${GEMINI_HOST}/v1/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
       console.log("Sending request to Gemini...");
-      const startTime = Date.now();
-
-      const upstream = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: PROMPT_TEXT },
-                { inlineData: { mimeType, data: imageBase64 } }
-              ]
-            }
-          ]
-        }),
-        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+      const upstream = await callGemini({
+        apiKey,
+        model,
+        parts: [{ text: PROMPT_TEXT }, { inlineData: { mimeType, data: imageBase64 } }]
       });
 
-      const elapsedMs = Date.now() - startTime;
-      console.log(`Gemini response received in ${elapsedMs}ms`);
-
-      const text = await upstream.text();
       if (!upstream.ok) {
-        console.error("Gemini upstream error:", upstream.status, text.slice(0, 300));
-        try {
-          const errorBody = JSON.parse(text);
-          const errorMessage = errorBody?.error?.message || errorBody?.message || "Unknown error";
-          return res.status(502).json({
-            error: `Receipt parsing failed: ${upstream.status} - ${errorMessage.slice(0, 100)}`
-          });
-        } catch {
-          return res.status(502).json({
-            error: `Receipt parsing failed with status ${upstream.status}`
-          });
-        }
+        console.error("Gemini upstream error:", upstream.status, upstream.text.slice(0, 300));
+        return res.status(upstream.status === 400 ? 400 : 502).json({
+          error: `Receipt parsing failed: ${describeUpstreamError(upstream)}`
+        });
       }
 
       console.log("Parsing and validating receipt data...");
-      const cleanedText = text.trim().replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
-      const parsed = JSON.parse(cleanedText);
+      const parsed = JSON.parse(extractResponseText(upstream.text));
       const validated = validateAndReconcileReceipt(parsed);
       console.log("Receipt validation complete");
       res.type("application/json").json(validated);
