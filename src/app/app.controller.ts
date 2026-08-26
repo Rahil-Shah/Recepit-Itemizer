@@ -16,6 +16,10 @@ namespace ReceiptRing.App {
     private assignments: Domain.LineAssignment[] = [];
     private lineModes = new Map<string, Domain.AssignmentMode>();
     private foodFlags = new Map<string, boolean>();
+    // What each line was worked out to be, keyed by line id. Kept beside the
+    // lines rather than inside them: a ReceiptLine is what the receipt says,
+    // and this is what we worked out afterwards.
+    private identifications = new Map<string, Domain.ItemIdentification>();
     private receiptCategory: Domain.ReceiptCategory = "Groceries";
     private cameraStream: MediaStream | null = null;
     private isPromptingForCategories = false;
@@ -265,6 +269,7 @@ namespace ReceiptRing.App {
       this.receiptLines = [];
       this.assignments = [];
       this.lineModes.clear();
+      this.identifications.clear();
       this.lineSelectionService.clear();
       this.receiptImage = null;
       this.hideOcrStatus();
@@ -283,6 +288,7 @@ namespace ReceiptRing.App {
       this.assignments = [];
       this.lineModes.clear();
       this.foodFlags.clear();
+      this.identifications.clear();
       // A new receipt means new line ids; anything still ticked belongs to the
       // receipt that was just replaced.
       this.lineSelectionService.clear();
@@ -487,6 +493,53 @@ namespace ReceiptRing.App {
         this.assignments = this.assignments.filter((assignment) => !targetIds.has(assignment.lineId));
       }
       this.render();
+    }
+
+    /**
+     * An identification as the server stores it, or null.
+     *
+     * Unresolved lines are deliberately not saved. "Nobody could read this" is
+     * a fact about a lookup that already ran, not about the receipt, and
+     * storing it would make the row look permanently answered while telling a
+     * later reader nothing they cannot see for themselves.
+     */
+    private toStoredIdentification(
+      identification: Domain.ItemIdentification | undefined
+    ): Services.StoredIdentification | null {
+      if (!identification || identification.source === "unresolved") return null;
+
+      return {
+        resolvedName: identification.resolvedName,
+        brand: identification.brand ?? null,
+        size: identification.size ?? null,
+        confidence: identification.confidence,
+        source: identification.source,
+        reasoning: identification.reasoning ?? null,
+        alternatives: identification.alternatives,
+        confirmed: identification.confirmed
+      };
+    }
+
+    /** A stored identification back in the shape the workspace works with. */
+    private fromStoredIdentification(
+      line: { id: string; label: string; itemCode?: string | null },
+      stored: Services.StoredIdentification | null | undefined
+    ): Domain.ItemIdentification | null {
+      if (!stored?.resolvedName) return null;
+
+      return {
+        lineId: line.id,
+        rawLabel: line.label,
+        ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+        resolvedName: stored.resolvedName,
+        ...(stored.brand ? { brand: stored.brand } : {}),
+        ...(stored.size ? { size: stored.size } : {}),
+        confidence: Number(stored.confidence) || 0,
+        source: stored.source ?? "unresolved",
+        ...(stored.reasoning ? { reasoning: stored.reasoning } : {}),
+        alternatives: Array.isArray(stored.alternatives) ? stored.alternatives : [],
+        confirmed: Boolean(stored.confirmed)
+      };
     }
 
     private getSelectedLines(includeIgnored = false): Domain.ReceiptLine[] {
@@ -1017,7 +1070,9 @@ namespace ReceiptRing.App {
           label: line.label,
           amount: line.amount,
           ignored: line.ignored,
-          isFood: this.foodFlags.get(line.id) ?? false
+          isFood: this.foodFlags.get(line.id) ?? false,
+          ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+          identification: this.toStoredIdentification(this.identifications.get(line.id))
         })),
         assignments: this.assignments.map((assignment) => ({
           lineClientId: assignment.lineId,

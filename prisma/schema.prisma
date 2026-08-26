@@ -7,23 +7,23 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String?
-  passwordHash    String?
+  id                  String           @id @default(cuid())
+  email               String           @unique
+  name                String?
+  passwordHash        String?
   // Optional per-user Gemini API key, stored encrypted at rest (AES-256-GCM:
   // ciphertext + iv + auth tag) exactly like Plaid tokens. Never returned to
   // the browser; when unset, the server falls back to the shared .env key.
   geminiKeyCiphertext String?
   geminiKeyIv         String?
   geminiKeyAuthTag    String?
-  receipts        Receipt[]
-  sessions        Session[]
-  bankConnections BankConnection[]
-  accountPeople   AccountPerson[]
-  rentEntries     RentEntry[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  receipts            Receipt[]
+  sessions            Session[]
+  bankConnections     BankConnection[]
+  accountPeople       AccountPerson[]
+  rentEntries         RentEntry[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@map("users")
 }
@@ -71,92 +71,113 @@ model BankConnection {
 }
 
 model BankAccount {
-  id             String           @id @default(cuid())
+  id             String            @id @default(cuid())
   connectionId   String
-  connection     BankConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  plaidAccountId String           @unique
+  connection     BankConnection    @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  plaidAccountId String            @unique
   name           String?
   type           String?
   lastFour       String?
   transactions   BankTransaction[]
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   @@index([connectionId])
   @@map("bank_accounts")
 }
 
 model BankTransaction {
-  id               String      @id @default(cuid())
-  accountId        String
-  account          BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  plaidTxnId       String      @unique
-  date             DateTime
-  description      String?
-  amount           Decimal     @db.Decimal(10, 2)
-  category         String?
+  id              String      @id @default(cuid())
+  accountId       String
+  account         BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  plaidTxnId      String      @unique
+  date            DateTime
+  description     String?
+  amount          Decimal     @db.Decimal(10, 2)
+  category        String?
   // Marked by the user in the budgeting view so a whole transaction (e.g. a
   // dinner out) counts toward the education-expense food total.
-  isFood           Boolean     @default(false)
-  linkedReceiptId  String?     @unique
-  linkedReceipt    Receipt?    @relation(fields: [linkedReceiptId], references: [id], onDelete: SetNull)
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  isFood          Boolean     @default(false)
+  linkedReceiptId String?     @unique
+  linkedReceipt   Receipt?    @relation(fields: [linkedReceiptId], references: [id], onDelete: SetNull)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@index([accountId])
   @@map("bank_transactions")
 }
 
 model Receipt {
-  id                    String           @id @default(cuid())
-  userId                String?
-  user                  User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
-  storeName             String?
-  receiptDate           DateTime?
-  receiptNumber         String?
-  category              String           @default("Other")
-  subtotal              Decimal?         @db.Decimal(10, 2)
-  tax                   Decimal?         @db.Decimal(10, 2)
-  total                 Decimal?         @db.Decimal(10, 2)
-  ocrProvider           String?
-  ocrConfidence         Decimal?         @db.Decimal(5, 2)
-  rawOcrText            String?
-  ocrDocument           Json?
-  imageUrl              String?
+  id                String           @id @default(cuid())
+  userId            String?
+  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  storeName         String?
+  receiptDate       DateTime?
+  receiptNumber     String?
+  category          String           @default("Other")
+  subtotal          Decimal?         @db.Decimal(10, 2)
+  tax               Decimal?         @db.Decimal(10, 2)
+  total             Decimal?         @db.Decimal(10, 2)
+  ocrProvider       String?
+  ocrConfidence     Decimal?         @db.Decimal(5, 2)
+  rawOcrText        String?
+  ocrDocument       Json?
+  imageUrl          String?
   // The receipt photo itself, kept with the row so it lives and dies with the
   // receipt (no separate upload directory to back up or clean). Base64 without
   // the data: prefix; imageMimeType doubles as the "has an image" flag, so
   // queries can omit the heavy column and still know a photo exists.
-  imageData             String?
-  imageMimeType         String?
-  lines                 ReceiptLine[]
-  people                Person[]
-  linkedTransaction     BankTransaction?
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
+  imageData         String?
+  imageMimeType     String?
+  lines             ReceiptLine[]
+  people            Person[]
+  linkedTransaction BankTransaction?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@index([userId])
   @@map("receipts")
 }
 
 model ReceiptLine {
-  id          String           @id @default(cuid())
-  receiptId   String
-  receipt     Receipt          @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  label       String
-  amount      Decimal          @db.Decimal(10, 2)
-  confidence  Decimal?         @db.Decimal(5, 2)
-  ignored     Boolean          @default(false)
-  isFood      Boolean          @default(false)
-  ocrLineId   String?
-  boundingBox Json?
-  sortOrder   Int              @default(0)
-  assignments LineAssignment[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id                   String           @id @default(cuid())
+  receiptId            String
+  receipt              Receipt          @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  label                String
+  amount               Decimal          @db.Decimal(10, 2)
+  confidence           Decimal?         @db.Decimal(5, 2)
+  ignored              Boolean          @default(false)
+  isFood               Boolean          @default(false)
+  ocrLineId            String?
+  boundingBox          Json?
+  sortOrder            Int              @default(0)
+  // The SKU/PLU the receipt printed beside the item. Store-internal and
+  // meaningless on its own, but it is the one token on the line that names the
+  // product unambiguously, so it is what an identification is filed under.
+  itemCode             String?
+  // What this line actually was. Receipts print shorthand, and a split
+  // reopened months later is unreadable when nobody can tell which line was
+  // the cheese. All nullable: a line nobody has identified is a valid state.
+  resolvedName         String?
+  resolvedBrand        String?
+  resolvedSize         String?
+  // 0..1. Decimal rather than float because it is shown as a percentage and
+  // compared against thresholds, and neither wants binary rounding surprises.
+  resolvedConfidence   Decimal?         @db.Decimal(3, 2)
+  // "user-confirmed" | "saved-alias" | "dictionary" | "ai" | "unresolved".
+  resolvedSource       String?
+  resolvedReasoning    String?
+  // Runners-up as [{ name, confidence }]. JSON because they are read and
+  // written whole and never queried across.
+  resolvedAlternatives Json?
+  resolvedAt           DateTime?
+  assignments          LineAssignment[]
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
   @@index([receiptId])
   @@index([receiptId, isFood])
+  @@index([receiptId, resolvedName])
   @@map("receipt_lines")
 }
 
@@ -213,22 +234,22 @@ model LineAssignment {
 }
 
 model RentEntry {
-  id            String    @id @default(cuid())
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  year          Int
-  month         Int
-  amount        Decimal   @db.Decimal(10, 2)
-  propertyName  String?
-  date          DateTime
-  photoData     String?
-  photoMimeType String?
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year              Int
+  month             Int
+  amount            Decimal  @db.Decimal(10, 2)
+  propertyName      String?
+  date              DateTime
+  photoData         String?
+  photoMimeType     String?
   // Set when the entry was created straight from a bank transaction in the
   // budgeting view. It is what lets that row keep showing "Rent" after a
   // reload, and what the "remove rent payment" action looks the entry up by.
-  bankTransactionId String? @unique
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  bankTransactionId String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([userId, year, month])
   @@index([userId, year, month])

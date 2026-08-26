@@ -3,12 +3,28 @@ namespace ReceiptRing.Services {
     clientId: string;
   }
 
+  /** An identification as it travels to and from the server. */
+  export interface StoredIdentification {
+    resolvedName: string;
+    brand?: string | null;
+    size?: string | null;
+    confidence: number;
+    source: Domain.IdentificationSource;
+    reasoning?: string | null;
+    alternatives: Domain.IdentificationCandidate[];
+    confirmed: boolean;
+  }
+
   export interface SaveReceiptLine {
     clientId: string;
     label: string;
     amount: number;
     ignored: boolean;
     isFood?: boolean;
+    itemCode?: string;
+    // What the line was worked out to be, saved with it so a receipt reopened
+    // from history reads the way it did on the day it was split.
+    identification?: StoredIdentification | null;
   }
 
   export interface SaveReceiptAssignment {
@@ -46,6 +62,8 @@ namespace ReceiptRing.Services {
     amount: number;
     ignored?: boolean;
     isFood?: boolean;
+    itemCode?: string | null;
+    identification?: StoredIdentification | null;
     assignments: SavedReceiptLineAssignment[];
   }
 

@@ -10,6 +10,7 @@ import { createAuth } from "./server/auth.mjs";
 import { createBank } from "./server/bank.mjs";
 import { registerGemini } from "./server/gemini.mjs";
 import { registerItemIdentity } from "./server/item-identity.mjs";
+import { identificationFields, normalizeStoredItemCode } from "./server/identification.mjs";
 import { createRateLimiter } from "./server/rate-limit.mjs";
 import { parseMonthParam, getMonthRange, getUtcMonthRange } from "./server/month.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
@@ -122,7 +123,6 @@ registerItemIdentity(app, requireAuth, prisma, identifyLimiter);
 // --- API -------------------------------------------------------------------
 
 const toNumber = (value) => (value === null || value === undefined ? null : Number(value));
-
 function serializeReceipt(receipt) {
   return {
     id: receipt.id,
@@ -157,6 +157,23 @@ function serializeReceipt(receipt) {
       amount: toNumber(line.amount),
       ignored: line.ignored ?? false,
       isFood: line.isFood ?? false,
+      itemCode: line.itemCode ?? null,
+      // Null rather than a hollow object when nobody has identified the line,
+      // so a caller can test the field itself instead of inspecting it.
+      identification: line.resolvedName
+        ? {
+            resolvedName: line.resolvedName,
+            brand: line.resolvedBrand,
+            size: line.resolvedSize,
+            confidence: toNumber(line.resolvedConfidence) ?? 0,
+            source: line.resolvedSource ?? "unresolved",
+            reasoning: line.resolvedReasoning,
+            alternatives: Array.isArray(line.resolvedAlternatives) ? line.resolvedAlternatives : [],
+            // Lines saved before identifications existed have a name and no
+            // source; treating them as unconfirmed is the safe read.
+            confirmed: line.resolvedSource === "user-confirmed"
+          }
+        : null,
       assignments: line.assignments.map((assignment) => ({
         // The account-level id, matching the ids in `people` above, so a caller
         // can re-run the split without matching people by display name.
@@ -352,7 +369,9 @@ app.post("/api/receipts", requireAuth, async (req, res) => {
             amount: line.amount ?? 0,
             ignored: Boolean(line.ignored),
             isFood: Boolean(line.isFood),
-            sortOrder: sortOrder++
+            itemCode: normalizeStoredItemCode(line.itemCode),
+            sortOrder: sortOrder++,
+            ...identificationFields(line.identification)
           }
         });
         lineByClient.set(line.clientId, created.id);
