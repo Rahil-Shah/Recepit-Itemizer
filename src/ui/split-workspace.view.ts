@@ -28,6 +28,27 @@ namespace ReceiptRing.UI {
     allIgnored: boolean;
   }
 
+  /**
+   * How sure an identification is, in the three bands that change what a
+   * reader should do about it.
+   *
+   * Three, not a percentage bar. The only decisions available are "believe
+   * it", "glance at it" and "check it", and a continuous scale asks the user
+   * to invent thresholds the app already knows.
+   */
+  export type ConfidenceBand = "sure" | "likely" | "unsure";
+
+  // Above this an identification is worth showing without comment. Below the
+  // lower bound it is a prompt to look rather than an answer.
+  const SURE_THRESHOLD = 0.85;
+  const LIKELY_THRESHOLD = 0.6;
+
+  export function confidenceBand(confidence: number): ConfidenceBand {
+    if (confidence >= SURE_THRESHOLD) return "sure";
+    if (confidence >= LIKELY_THRESHOLD) return "likely";
+    return "unsure";
+  }
+
   const MODE_LABELS: Record<Domain.AssignmentMode, string> = {
     equal: "Split evenly",
     percentage: "Split by percentage",
@@ -161,9 +182,41 @@ namespace ReceiptRing.UI {
       resolved.className = "line-resolved";
       resolved.classList.toggle("is-confirmed", identification.confirmed);
       resolved.textContent = this.describeIdentification(identification);
+
+      const chip = this.buildConfidenceChip(identification);
+      if (chip) resolved.append(" ", chip);
+
       cell.append(resolved);
 
       return cell;
+    }
+
+    /**
+     * How sure the app is, when that is worth saying.
+     *
+     * Nothing is drawn for a confirmed name -- the user wrote it, and putting
+     * a confidence score on their own answer is the app second-guessing them.
+     * Nothing is drawn for a confident one either: a chip on every row is
+     * noise, and once everything is marked, nothing is. The chip appears
+     * exactly where it changes what the reader should do.
+     */
+    private buildConfidenceChip(identification: Domain.ItemIdentification): HTMLElement | null {
+      if (identification.confirmed) return null;
+
+      const band = confidenceBand(identification.confidence);
+      if (band === "sure") return null;
+
+      const chip = document.createElement("span");
+      chip.className = `confidence-chip is-${band}`;
+      const percent = Math.round(identification.confidence * 100);
+      chip.textContent = `${percent}%`;
+      // The number alone does not say what it is a number about.
+      chip.title =
+        band === "likely"
+          ? `Fairly sure -- ${percent}% confident. Click the item to check it.`
+          : `Not sure -- ${percent}% confident. Worth checking by hand.`;
+      chip.setAttribute("aria-label", `${percent} percent confident`);
+      return chip;
     }
 
     /** The product line: the name, and the size when there is one to add. */

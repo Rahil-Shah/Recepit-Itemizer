@@ -843,6 +843,35 @@ input[type="number"] {
   color: var(--accent);
 }
 
+/* How sure the app is, shown only where it changes what the reader should do:
+   never on a name the user confirmed, never on one the app is confident about.
+   A chip on every row is noise, and once everything is marked nothing is. */
+.confidence-chip {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 15px;
+  vertical-align: 1px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* Amber for "probably right, worth a glance", red for "go and look". Both are
+   already in the palette for exactly this kind of warning, so identification
+   does not introduce a colour of its own. */
+.confidence-chip.is-likely {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.confidence-chip.is-unsure {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
 .amount-cell {
   font-family: var(--font-mono);
   font-size: 13px;

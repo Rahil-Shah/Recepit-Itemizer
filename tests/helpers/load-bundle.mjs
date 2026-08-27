@@ -2,9 +2,12 @@
 // built by `tsc -p tests/tsconfig.json`) into a fresh vm context so the
 // browser-targeted namespace code can be exercised under node:test.
 //
-// Only the pure service files are compiled into the bundle — nothing in it
-// touches the DOM at load time. Browser globals a service reaches for at
-// runtime (localStorage) are provided as small in-memory fakes.
+// Mostly the pure service files, plus the view modules whose exported helpers
+// are worth testing on their own — nothing in the bundle touches the DOM at
+// load time, which is the property that matters here. A view class is fine to
+// compile in: it only reaches for `document` inside its methods, and those are
+// not what these tests call. Browser globals a service reaches for at runtime
+// (localStorage) are provided as small in-memory fakes.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

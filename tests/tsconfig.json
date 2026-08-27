@@ -32,6 +32,7 @@
     "../src/services/receipt-api.service.ts",
     "../src/services/bank-api.service.ts",
     "../src/services/rent-api.service.ts",
-    "../src/services/spending-aggregator.service.ts"
+    "../src/services/spending-aggregator.service.ts",
+    "../src/ui/split-workspace.view.ts"
   ]
 }
