@@ -82,10 +82,16 @@ namespace ReceiptRing.UI {
       // after each click and assigning one line to three people meant reopening
       // it three times. Remember what was open and restore it below.
       const openLineIds = new Set<string>();
+      const openDetailLineIds = new Set<string>();
       container
         .querySelectorAll<HTMLDetailsElement>("details.assign-dropdown[open]")
         .forEach((dropdown) => {
           if (dropdown.dataset.lineId) openLineIds.add(dropdown.dataset.lineId);
+        });
+      container
+        .querySelectorAll<HTMLDetailsElement>("details.item-detail-dropdown[open]")
+        .forEach((dropdown) => {
+          if (dropdown.dataset.lineId) openDetailLineIds.add(dropdown.dataset.lineId);
         });
 
       this.panelListeners?.abort();
@@ -111,7 +117,7 @@ namespace ReceiptRing.UI {
           handlers.onLineSelectToggle(line.id, event.shiftKey)
         );
 
-        const name = this.buildLabelCell(line, identifications.get(line.id));
+        const name = this.buildLabelCell(line, identifications.get(line.id), handlers);
 
         const foodCheck = document.createElement("button");
         foodCheck.className = "line-food-check";
@@ -147,6 +153,13 @@ namespace ReceiptRing.UI {
           dropdown.open = true;
           this.anchorDropdown(dropdown);
         }
+        if (openDetailLineIds.has(line.id)) {
+          const detail = name.querySelector<HTMLDetailsElement>("details.item-detail-dropdown");
+          if (detail) {
+            detail.open = true;
+            this.anchorDropdown(detail);
+          }
+        }
       });
     }
 
@@ -161,34 +174,155 @@ namespace ReceiptRing.UI {
      */
     private buildLabelCell(
       line: Domain.ReceiptLine,
-      identification: Domain.ItemIdentification | undefined
+      identification: Domain.ItemIdentification | undefined,
+      handlers: SplitWorkspaceHandlers
     ): HTMLElement {
-      const cell = document.createElement("span");
-      cell.className = "line-label-cell";
+      const stack = document.createElement("span");
+      stack.className = "line-label-stack";
 
       const name = document.createElement("span");
       name.className = "line-label";
       // textContent, never innerHTML: this is receipt text, which came from a
       // photo of something a stranger printed.
       name.textContent = line.label;
-      cell.append(name);
+      stack.append(name);
 
-      if (!identification || identification.source === "unresolved") return cell;
-      // A "resolved" name identical to what is already printed adds a second
-      // copy of the same string and nothing else.
-      if (this.saysTheSameThing(identification.resolvedName, line.label)) return cell;
+      const showsResolved =
+        identification !== undefined &&
+        identification.source !== "unresolved" &&
+        // A "resolved" name identical to what is already printed adds a second
+        // copy of the same string and nothing else.
+        !this.saysTheSameThing(identification.resolvedName, line.label);
 
-      const resolved = document.createElement("span");
-      resolved.className = "line-resolved";
-      resolved.classList.toggle("is-confirmed", identification.confirmed);
-      resolved.textContent = this.describeIdentification(identification);
+      if (showsResolved && identification) {
+        const resolved = document.createElement("span");
+        resolved.className = "line-resolved";
+        resolved.classList.toggle("is-confirmed", identification.confirmed);
+        resolved.textContent = this.describeIdentification(identification);
 
-      const chip = this.buildConfidenceChip(identification);
-      if (chip) resolved.append(" ", chip);
+        const chip = this.buildConfidenceChip(identification);
+        if (chip) resolved.append(" ", chip);
+        stack.append(resolved);
+      }
 
-      cell.append(resolved);
+      // With nothing worked out about the line, there is nothing to open --
+      // a popup saying "no information" is worse than a row that stays still.
+      if (!identification) {
+        const cell = document.createElement("span");
+        cell.className = "line-label-cell";
+        cell.append(stack);
+        return cell;
+      }
 
+      return this.buildItemDetail(line, identification, stack, handlers);
+    }
+
+    /**
+     * The item's label, made into a popup that opens onto what it actually was.
+     *
+     * The label is the summary rather than a separate button beside it: the
+     * thing the user wants to interrogate is the ambiguous name itself, so
+     * that is what they click. A dedicated icon would put the target somewhere
+     * other than where the question is.
+     */
+    private buildItemDetail(
+      line: Domain.ReceiptLine,
+      identification: Domain.ItemIdentification,
+      stack: HTMLElement,
+      handlers: SplitWorkspaceHandlers
+    ): HTMLElement {
+      const details = document.createElement("details");
+      details.className = "item-detail-dropdown";
+      details.dataset.lineId = line.id;
+
+      const summary = document.createElement("summary");
+      summary.className = "item-detail-summary";
+      summary.title = "What is this item?";
+      summary.append(stack);
+      details.append(summary);
+
+      const panel = document.createElement("div");
+      panel.className = "item-detail-pop";
+      panel.append(this.buildItemDetailBody(line, identification, handlers));
+      details.append(panel);
+
+      this.wirePopover(details, summary, panel);
+
+      const cell = document.createElement("span");
+      cell.className = "line-label-cell";
+      cell.append(details);
       return cell;
+    }
+
+    /** What is known about one line, laid out for reading rather than editing. */
+    private buildItemDetailBody(
+      line: Domain.ReceiptLine,
+      identification: Domain.ItemIdentification,
+      _handlers: SplitWorkspaceHandlers
+    ): HTMLElement {
+      const body = document.createElement("div");
+      body.className = "item-detail-body";
+
+      const heading = document.createElement("p");
+      heading.className = "item-detail-name";
+      heading.textContent =
+        identification.source === "unresolved" ? "Not identified" : identification.resolvedName;
+      body.append(heading);
+
+      const facts = document.createElement("dl");
+      facts.className = "item-detail-facts";
+      // The receipt's own words come first. Everything below is derived from
+      // this line, so the reader should be able to see what it was derived
+      // from without leaving the popup.
+      this.appendFact(facts, "On the receipt", line.label);
+      if (line.itemCode) this.appendFact(facts, "Item code", line.itemCode);
+      if (identification.brand) this.appendFact(facts, "Brand", identification.brand);
+      if (identification.size) this.appendFact(facts, "Size", identification.size);
+      this.appendFact(facts, "Price", this.currencyFormatService.format(line.amount));
+      body.append(facts);
+
+      const source = document.createElement("p");
+      source.className = "item-detail-source";
+      source.textContent = this.describeSource(identification);
+      body.append(source);
+
+      if (identification.reasoning) {
+        const reasoning = document.createElement("p");
+        reasoning.className = "item-detail-reasoning";
+        reasoning.textContent = identification.reasoning;
+        body.append(reasoning);
+      }
+
+      return body;
+    }
+
+    private appendFact(list: HTMLElement, label: string, value: string): void {
+      const term = document.createElement("dt");
+      term.textContent = label;
+      const definition = document.createElement("dd");
+      definition.textContent = value;
+      list.append(term, definition);
+    }
+
+    /**
+     * Where the answer came from, in words rather than a source enum. "The app
+     * guessed" and "you told me" deserve very different amounts of trust, and
+     * a reader deciding whether to check a line needs to know which they have.
+     */
+    private describeSource(identification: Domain.ItemIdentification): string {
+      const percent = Math.round(identification.confidence * 100);
+      switch (identification.source) {
+        case "user-confirmed":
+          return "You confirmed this name.";
+        case "saved-alias":
+          return "From a name you saved earlier.";
+        case "dictionary":
+          return `Expanded from receipt shorthand - ${percent}% confident.`;
+        case "ai":
+          return `Identified by AI - ${percent}% confident.`;
+        default:
+          return "Nobody could work out what this is.";
+      }
     }
 
     /**
@@ -256,36 +390,7 @@ namespace ReceiptRing.UI {
       const panel = document.createElement("div");
       panel.className = "assign-panel-pop";
 
-      // The panel is rendered with position: fixed (computed on open) so it
-      // escapes the `.items-table` overflow:hidden clip and the viewport edge.
-      // Without this, the popup for the last row in a long list gets cut off.
-      const reposition = (): void => {
-        if (!details.isConnected) {
-          this.teardownPanelPositioning(reposition);
-          return;
-        }
-        // Scrolling the row itself off screen leaves the popup pinned to a
-        // summary the user can no longer see, which reads as a menu floating
-        // over unrelated rows. Close it instead of chasing an absent anchor.
-        const summaryRect = summary.getBoundingClientRect();
-        if (summaryRect.bottom < 0 || summaryRect.top > window.innerHeight) {
-          details.open = false;
-          return;
-        }
-        this.positionPanel(summary, panel);
-      };
-      details.addEventListener("toggle", () => {
-        if (details.open) {
-          this.closeOtherDropdowns(details);
-          this.positionPanel(summary, panel);
-          const signal = this.panelListeners?.signal;
-          window.addEventListener("scroll", reposition, { capture: true, signal });
-          window.addEventListener("resize", reposition, { signal });
-        } else {
-          this.teardownPanelPositioning(reposition);
-          this.resetPanelPosition(panel);
-        }
-      });
+      this.wirePopover(details, summary, panel);
 
       if (people.length === 0) {
         const hint = document.createElement("p");
@@ -744,13 +849,57 @@ namespace ReceiptRing.UI {
     }
 
     /**
+     * Makes a <details> behave as an anchored popup.
+     *
+     * The panel is rendered with position: fixed (computed on open) so it
+     * escapes the `.items-table` overflow:hidden clip and the viewport edge --
+     * without it the popup for the last row in a long list gets cut off. Every
+     * popup in the table wants exactly that, so it lives here rather than
+     * being written once per popup and drifting.
+     */
+    private wirePopover(
+      details: HTMLDetailsElement,
+      summary: HTMLElement,
+      panel: HTMLElement
+    ): void {
+      const reposition = (): void => {
+        if (!details.isConnected) {
+          this.teardownPanelPositioning(reposition);
+          return;
+        }
+        // Scrolling the row itself off screen leaves the popup pinned to a
+        // summary the user can no longer see, which reads as a menu floating
+        // over unrelated rows. Close it instead of chasing an absent anchor.
+        const summaryRect = summary.getBoundingClientRect();
+        if (summaryRect.bottom < 0 || summaryRect.top > window.innerHeight) {
+          details.open = false;
+          return;
+        }
+        this.positionPanel(summary, panel);
+      };
+
+      details.addEventListener("toggle", () => {
+        if (details.open) {
+          this.closeOtherDropdowns(details);
+          this.positionPanel(summary, panel);
+          const signal = this.panelListeners?.signal;
+          window.addEventListener("scroll", reposition, { capture: true, signal });
+          window.addEventListener("resize", reposition, { signal });
+        } else {
+          this.teardownPanelPositioning(reposition);
+          this.resetPanelPosition(panel);
+        }
+      });
+    }
+
+    /**
      * Re-anchor an already-open dropdown to its own summary. Used after a
      * re-render, where the row is a brand new element that the pending `toggle`
      * event has not caught up with yet.
      */
     private anchorDropdown(details: HTMLDetailsElement): void {
-      const summary = details.querySelector<HTMLElement>("summary.assign-summary");
-      const panel = details.querySelector<HTMLElement>(".assign-panel-pop");
+      const summary = details.querySelector<HTMLElement>("summary");
+      const panel = details.querySelector<HTMLElement>(".assign-panel-pop, .item-detail-pop");
       if (summary && panel) this.positionPanel(summary, panel);
     }
 
@@ -816,9 +965,19 @@ namespace ReceiptRing.UI {
       window.removeEventListener("resize", reposition);
     }
 
+    // Every anchored popup in the table, whichever kind. Two popups open at
+    // once would be two fixed-position panels competing for the same corner of
+    // the screen, so opening one closes the rest.
+    private static readonly POPOVER_SELECTOR =
+      "details.assign-dropdown, details.item-detail-dropdown";
+
     private closeOtherDropdowns(current: HTMLDetailsElement): void {
       document
-        .querySelectorAll<HTMLDetailsElement>("details.assign-dropdown[open]")
+        .querySelectorAll<HTMLDetailsElement>(
+          SplitWorkspaceView.POPOVER_SELECTOR.split(", ")
+            .map((selector) => `${selector}[open]`)
+            .join(", ")
+        )
         .forEach((dropdown) => {
           if (dropdown !== current) {
             dropdown.open = false;

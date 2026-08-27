@@ -808,14 +808,10 @@ input[type="number"] {
   text-decoration: line-through;
 }
 
-/* The item cell stacks the receipt's own text over what it turned out to be.
-   Two lines where there used to be one, so the row's min-height carries it
-   rather than the grid stretching. */
+/* The item cell holds the label stack, and -- once a line has been identified
+   -- the popup wrapper around it. */
 .line-label-cell {
-  display: flex;
   min-width: 0;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .line-label {
@@ -923,7 +919,8 @@ input[type="number"] {
   color: var(--accent);
 }
 
-.assign-panel-pop {
+.assign-panel-pop,
+.item-detail-pop {
   /* Positioned (top/left/width/max-height) in JS on open via position: fixed
      so the popup escapes the .items-table overflow clip and viewport edges. */
   position: fixed;
@@ -945,7 +942,8 @@ input[type="number"] {
   box-shadow: var(--shadow-pop);
 }
 
-.assign-panel-pop.is-anchored {
+.assign-panel-pop.is-anchored,
+.item-detail-pop.is-anchored {
   visibility: visible;
 }
 
@@ -3005,4 +3003,107 @@ input[type="number"] {
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   text-align: right;
+}
+
+/* --- Item identification -------------------------------------------------- */
+
+/* The label is the summary of its own popup: the thing a reader wants to
+   interrogate is the ambiguous name itself, so that is what they click. A
+   separate icon would put the target somewhere other than the question. */
+.item-detail-dropdown {
+  min-width: 0;
+}
+
+.item-detail-summary {
+  display: block;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  list-style: none;
+}
+
+.item-detail-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Underlined on hover rather than boxed. The row is already dense, and a
+   button outline around every item name would read as forty buttons. */
+.item-detail-summary:hover .line-label {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+
+.item-detail-summary:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 2px;
+}
+
+.line-label-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item-detail-pop {
+  width: 300px;
+  max-width: min(300px, calc(100vw - 24px));
+  overflow-y: auto;
+}
+
+.item-detail-body {
+  display: grid;
+  gap: 10px;
+}
+
+.item-detail-name {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* Label/value pairs as a two-column grid. The receipt's own text comes first:
+   everything below is derived from it, and a reader should be able to see what
+   it was derived from without leaving the popup. */
+.item-detail-facts {
+  display: grid;
+  margin: 0;
+  gap: 4px 10px;
+  grid-template-columns: auto 1fr;
+}
+
+.item-detail-facts dt {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  align-self: center;
+}
+
+.item-detail-facts dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.item-detail-source {
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+
+.item-detail-reasoning {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-style: italic;
+  line-height: 1.4;
 }
