@@ -808,10 +808,39 @@ input[type="number"] {
   text-decoration: line-through;
 }
 
+/* The item cell stacks the receipt's own text over what it turned out to be.
+   Two lines where there used to be one, so the row's min-height carries it
+   rather than the grid stretching. */
+.line-label-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .line-label {
   min-width: 0;
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+
+/* What the line actually was. Deliberately quieter than the receipt text above
+   it: that line is what the user can check against the paper in their hand,
+   and this one is support. Monospace would be wrong here -- it is a product
+   name, not a code. */
+.line-resolved {
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* An identification the user has confirmed is the one thing on the row that is
+   known rather than guessed, so it gets the accent -- sparingly, as a text
+   colour and nothing more. */
+.line-resolved.is-confirmed {
+  color: var(--accent);
 }
 
 .amount-cell {

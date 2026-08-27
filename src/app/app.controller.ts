@@ -344,6 +344,7 @@ namespace ReceiptRing.App {
         this.people,
         this.lineModes,
         new Set(this.lineSelectionService.ids()),
+        this.identifications,
         handlers
       );
       this.splitWorkspaceView.renderPeople(this.elements.peopleList, this.people, handlers);

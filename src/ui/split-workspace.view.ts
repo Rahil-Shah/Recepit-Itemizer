@@ -53,6 +53,7 @@ namespace ReceiptRing.UI {
       people: readonly Domain.SplitPerson[],
       lineModes: ReadonlyMap<string, Domain.AssignmentMode>,
       selectedLineIds: ReadonlySet<string>,
+      identifications: ReadonlyMap<string, Domain.ItemIdentification>,
       handlers: SplitWorkspaceHandlers
     ): void {
       // Ticking a person or changing the split mode re-renders every row, which
@@ -89,9 +90,7 @@ namespace ReceiptRing.UI {
           handlers.onLineSelectToggle(line.id, event.shiftKey)
         );
 
-        const name = document.createElement("span");
-        name.className = "line-label";
-        name.textContent = line.label;
+        const name = this.buildLabelCell(line, identifications.get(line.id));
 
         const foodCheck = document.createElement("button");
         foodCheck.className = "line-food-check";
@@ -128,6 +127,57 @@ namespace ReceiptRing.UI {
           this.anchorDropdown(dropdown);
         }
       });
+    }
+
+    /**
+     * The item cell: what the receipt printed, and underneath it what that
+     * turned out to be.
+     *
+     * The receipt text stays on top and stays primary. It is the line the user
+     * can check against the paper in their hand, and demoting it in favour of
+     * a name that might be a guess would make the row harder to verify, not
+     * easier. The identification is support, so it reads as support.
+     */
+    private buildLabelCell(
+      line: Domain.ReceiptLine,
+      identification: Domain.ItemIdentification | undefined
+    ): HTMLElement {
+      const cell = document.createElement("span");
+      cell.className = "line-label-cell";
+
+      const name = document.createElement("span");
+      name.className = "line-label";
+      // textContent, never innerHTML: this is receipt text, which came from a
+      // photo of something a stranger printed.
+      name.textContent = line.label;
+      cell.append(name);
+
+      if (!identification || identification.source === "unresolved") return cell;
+      // A "resolved" name identical to what is already printed adds a second
+      // copy of the same string and nothing else.
+      if (this.saysTheSameThing(identification.resolvedName, line.label)) return cell;
+
+      const resolved = document.createElement("span");
+      resolved.className = "line-resolved";
+      resolved.classList.toggle("is-confirmed", identification.confirmed);
+      resolved.textContent = this.describeIdentification(identification);
+      cell.append(resolved);
+
+      return cell;
+    }
+
+    /** The product line: the name, and the size when there is one to add. */
+    private describeIdentification(identification: Domain.ItemIdentification): string {
+      return identification.size
+        ? `${identification.resolvedName} - ${identification.size}`
+        : identification.resolvedName;
+    }
+
+    // Casing, spacing and punctuation differences are not new information.
+    private saysTheSameThing(left: string, right: string): boolean {
+      const flatten = (value: string): string =>
+        value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      return flatten(left) === flatten(right);
     }
 
     private buildAssignDropdown(
