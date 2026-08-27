@@ -22,6 +22,7 @@ model User {
   bankConnections     BankConnection[]
   accountPeople       AccountPerson[]
   rentEntries         RentEntry[]
+  itemAliases         ItemAlias[]
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -179,6 +180,36 @@ model ReceiptLine {
   @@index([receiptId, isFood])
   @@index([receiptId, resolvedName])
   @@map("receipt_lines")
+}
+
+// A name the user confirmed for an abbreviated receipt item.
+//
+// The memory that makes identification cheap: a correction made once never has
+// to be made again, and on the next receipt from the same shop it costs
+// nothing -- no model call, no wait, and full confidence, because a human
+// wrote it rather than a model guessing.
+model ItemAlias {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // "code:<sku>" where the receipt printed one, otherwise the normalized
+  // label. A code outlives the shorthand beside it, so it is preferred.
+  lookupKey      String
+  // The store it was learned at, lowercased, or "" when there was no store
+  // name. The same shorthand means different things at different chains.
+  storeKey       String   @default("")
+  resolvedName   String
+  brand          String?
+  size           String?
+  // How many times a human has agreed. A name confirmed on three receipts
+  // carries more weight than one accepted in passing.
+  timesConfirmed Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, storeKey, lookupKey])
+  @@index([userId])
+  @@map("item_aliases")
 }
 
 model AccountPerson {

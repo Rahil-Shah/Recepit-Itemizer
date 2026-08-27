@@ -207,3 +207,38 @@ test("survives a reply that is not the shape it was asked for", () => {
   assert.deepEqual(normalizeIdentifyResponse({ items: "nope" }, ["l1"]), []);
   assert.deepEqual(normalizeIdentifyResponse({ items: [null, 3, "x"] }, ["l1"]), []);
 });
+
+import { validateAlias } from "../server/item-identity.mjs";
+
+test("accepts a well-formed alias and normalizes its store key", () => {
+  const alias = validateAlias({
+    lookupKey: "code:7874203922",
+    storeKey: "  WalMart  ",
+    resolvedName: "  Great Value  Shredded   Mozzarella ",
+    brand: "Great Value",
+    size: "8 oz"
+  });
+
+  assert.equal(alias.storeKey, "walmart");
+  assert.equal(alias.resolvedName, "Great Value Shredded Mozzarella");
+  assert.equal(alias.brand, "Great Value");
+});
+
+test("rejects an alias with no key or no name", () => {
+  assert.equal(validateAlias({ resolvedName: "Cheese" }), null);
+  assert.equal(validateAlias({ lookupKey: "k" }), null);
+  assert.equal(validateAlias({ lookupKey: "k", resolvedName: "   " }), null);
+  assert.equal(validateAlias(null), null);
+});
+
+test("rejects an absurdly long lookup key", () => {
+  assert.equal(validateAlias({ lookupKey: "x".repeat(201), resolvedName: "Cheese" }), null);
+});
+
+test("allows an alias with no store, which is the cross-store case", () => {
+  const alias = validateAlias({ lookupKey: "gv shrd mozz", resolvedName: "Cheese" });
+
+  assert.equal(alias.storeKey, "");
+  assert.equal(alias.brand, null);
+  assert.equal(alias.size, null);
+});

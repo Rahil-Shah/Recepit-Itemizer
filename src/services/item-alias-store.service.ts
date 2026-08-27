@@ -31,10 +31,41 @@ namespace ReceiptRing.Services {
    * different store -- widening only when the narrower key misses, so a
    * store-specific meaning is never overridden by a general one.
    */
+  /**
+   * Where aliases are kept between sessions.
+   *
+   * An interface so the store can be exercised with no server, and so the
+   * store itself never has to know whether persistence succeeded -- a failed
+   * write must not cost the user the correction they just made in this
+   * session.
+   */
+  export interface ItemAliasBackend {
+    load(): Promise<readonly ItemAlias[]>;
+    save(alias: ItemAlias): Promise<void>;
+    remove(alias: ItemAlias): Promise<void>;
+  }
+
   export class ItemAliasStoreService {
     private aliases = new Map<string, ItemAlias>();
 
-    constructor(private readonly labelNormalizerService: LabelNormalizerService) {}
+    constructor(
+      private readonly labelNormalizerService: LabelNormalizerService,
+      private readonly backend: ItemAliasBackend | null = null
+    ) {}
+
+    /**
+     * Loads this user's aliases. Failure is survivable and deliberately quiet:
+     * without them identification still works, it just costs a model call for
+     * things the user had already taught it.
+     */
+    async load(): Promise<void> {
+      if (!this.backend) return;
+      try {
+        this.replaceAll(await this.backend.load());
+      } catch (error) {
+        console.error("Could not load saved item names:", error);
+      }
+    }
 
     /** Replaces everything held, as when the server's aliases arrive. */
     replaceAll(aliases: readonly ItemAlias[]): void {
@@ -133,11 +164,20 @@ namespace ReceiptRing.Services {
       };
 
       this.aliases.set(mapKey, alias);
+      // Persist in the background. The in-memory entry is already correct, and
+      // making the user wait on a round trip to see their own correction take
+      // effect would be the slowest possible way to show them nothing new.
+      void this.backend?.save(alias).catch((error) => {
+        console.error("Could not save that name:", error);
+      });
       return alias;
     }
 
     forget(alias: ItemAlias): void {
       this.aliases.delete(this.mapKey(alias.storeKey, alias.lookupKey));
+      void this.backend?.remove(alias).catch((error) => {
+        console.error("Could not forget that name:", error);
+      });
     }
 
     clear(): void {

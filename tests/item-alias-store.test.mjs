@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadReceiptRing } from "./helpers/load-bundle.mjs";
+import { loadReceiptRing, plain } from "./helpers/load-bundle.mjs";
 
 const { ReceiptRing } = loadReceiptRing();
 
@@ -153,4 +153,99 @@ test("a numeric label cannot collide with an item code", () => {
 
   // "1234" as a bare label normalizes to a code token, not to the code key.
   assert.equal(store.find(line("123"), "Walmart"), null);
+});
+
+// A backend that records what it was asked to do and can be made to fail, so
+// the store's behaviour around persistence is testable without a server.
+function fakeBackend(loaded = [], failing = false) {
+  const saved = [];
+  const removed = [];
+  return {
+    saved,
+    removed,
+    load: () => (failing ? Promise.reject(new Error("offline")) : Promise.resolve(loaded)),
+    save: (alias) => {
+      saved.push(alias);
+      return failing ? Promise.reject(new Error("offline")) : Promise.resolve();
+    },
+    remove: (alias) => {
+      removed.push(alias);
+      return failing ? Promise.reject(new Error("offline")) : Promise.resolve();
+    }
+  };
+}
+
+function makeStoreWith(backend) {
+  return new ReceiptRing.Services.ItemAliasStoreService(
+    new ReceiptRing.Services.LabelNormalizerService(),
+    backend
+  );
+}
+
+test("loads the aliases the backend hands over", async () => {
+  const store = makeStoreWith(
+    fakeBackend([
+      {
+        lookupKey: "gv shrd mozz",
+        storeKey: "walmart",
+        resolvedName: "Great Value Shredded Mozzarella",
+        timesConfirmed: 3,
+        updatedAt: new Date().toISOString()
+      }
+    ])
+  );
+
+  await store.load();
+
+  assert.equal(store.resolve(line("GV SHRD MOZZ 8Z"), "Walmart").resolvedName, "Great Value Shredded Mozzarella");
+});
+
+test("a backend that cannot load leaves the store usable", async () => {
+  const store = makeStoreWith(fakeBackend([], true));
+
+  await store.load();
+
+  assert.deepEqual(plain(store.all()), []);
+  store.remember(identification(), "Walmart");
+  assert.ok(store.find(line("GV SHRD MOZZ 8Z"), "Walmart"));
+});
+
+test("persists a remembered name without making the caller wait", () => {
+  const backend = fakeBackend();
+  const store = makeStoreWith(backend);
+
+  const alias = store.remember(identification(), "Walmart");
+
+  // Already in memory and already handed to the backend, synchronously.
+  assert.equal(store.find(line("GV SHRD MOZZ 8Z"), "Walmart").resolvedName, alias.resolvedName);
+  assert.equal(backend.saved.length, 1);
+  assert.equal(backend.saved[0].resolvedName, "Great Value Shredded Mozzarella");
+});
+
+test("a failed write does not cost the user the correction they just made", async () => {
+  const store = makeStoreWith(fakeBackend([], true));
+
+  store.remember(identification(), "Walmart");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(store.find(line("GV SHRD MOZZ 8Z"), "Walmart").resolvedName, "Great Value Shredded Mozzarella");
+});
+
+test("tells the backend to forget an alias too", () => {
+  const backend = fakeBackend();
+  const store = makeStoreWith(backend);
+
+  store.forget(store.remember(identification(), "Walmart"));
+
+  assert.equal(backend.removed.length, 1);
+  assert.equal(store.find(line("GV SHRD MOZZ 8Z"), "Walmart"), null);
+});
+
+test("works with no backend at all", async () => {
+  const store = makeStore();
+
+  await store.load();
+  store.remember(identification(), "Walmart");
+
+  assert.ok(store.find(line("GV SHRD MOZZ 8Z"), "Walmart"));
 });

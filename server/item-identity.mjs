@@ -175,7 +175,119 @@ export function normalizeIdentifyResponse(parsed, requestedIds) {
   return out;
 }
 
+// Keys and names are user text that is stored and echoed back, so bound them.
+const MAX_LOOKUP_KEY_LENGTH = 200;
+const MAX_STORE_KEY_LENGTH = 120;
+
+/** One alias from the browser, checked, or null when it is not usable. */
+export function validateAlias(body) {
+  const lookupKey = typeof body?.lookupKey === "string" ? body.lookupKey.trim() : "";
+  const resolvedName = typeof body?.resolvedName === "string" ? body.resolvedName.replace(/\s+/g, " ").trim() : "";
+  if (!lookupKey || !resolvedName) return null;
+  if (lookupKey.length > MAX_LOOKUP_KEY_LENGTH) return null;
+
+  const storeKey = typeof body?.storeKey === "string" ? body.storeKey.trim().toLowerCase() : "";
+  const brand = typeof body?.brand === "string" ? body.brand.trim() : "";
+  const size = typeof body?.size === "string" ? body.size.trim() : "";
+
+  return {
+    lookupKey,
+    storeKey: storeKey.slice(0, MAX_STORE_KEY_LENGTH),
+    resolvedName: resolvedName.slice(0, MAX_LABEL_LENGTH),
+    brand: brand ? brand.slice(0, 80) : null,
+    size: size ? size.slice(0, 40) : null
+  };
+}
+
+function serializeAlias(alias) {
+  return {
+    lookupKey: alias.lookupKey,
+    storeKey: alias.storeKey,
+    resolvedName: alias.resolvedName,
+    ...(alias.brand ? { brand: alias.brand } : {}),
+    ...(alias.size ? { size: alias.size } : {}),
+    timesConfirmed: alias.timesConfirmed,
+    updatedAt: alias.updatedAt.toISOString()
+  };
+}
+
 export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) {
+  // Every alias this user has. The browser does its own lookups against the
+  // whole set rather than asking per line: a receipt is forty questions, the
+  // table is small, and forty round trips to answer them would be slower than
+  // the model call this is meant to avoid.
+  app.get("/api/item-aliases", requireAuth, async (req, res) => {
+    if (!prisma) return res.status(503).json({ error: "Alias storage is unavailable." });
+    try {
+      const aliases = await prisma.itemAlias.findMany({
+        where: { userId: req.userId },
+        orderBy: { updatedAt: "desc" }
+      });
+      res.json({ aliases: aliases.map(serializeAlias) });
+    } catch (error) {
+      console.error("Failed to load item aliases:", error);
+      res.status(500).json({ error: "Could not load your saved item names." });
+    }
+  });
+
+  // Confirm a name. Confirming the same name again counts up; correcting it to
+  // a different one starts the count over, so a fresh answer cannot inherit
+  // the authority of the one it replaced.
+  app.put("/api/item-aliases", requireAuth, async (req, res) => {
+    if (!prisma) return res.status(503).json({ error: "Alias storage is unavailable." });
+
+    const alias = validateAlias(req.body);
+    if (!alias) {
+      return res.status(400).json({ error: "An alias needs a lookup key and a name." });
+    }
+
+    try {
+      const key = {
+        userId_storeKey_lookupKey: {
+          userId: req.userId,
+          storeKey: alias.storeKey,
+          lookupKey: alias.lookupKey
+        }
+      };
+      const existing = await prisma.itemAlias.findUnique({ where: key });
+      const timesConfirmed =
+        existing && existing.resolvedName === alias.resolvedName ? existing.timesConfirmed + 1 : 1;
+
+      const saved = await prisma.itemAlias.upsert({
+        where: key,
+        create: { userId: req.userId, ...alias, timesConfirmed },
+        update: { ...alias, timesConfirmed }
+      });
+      res.json(serializeAlias(saved));
+    } catch (error) {
+      console.error("Failed to save item alias:", error);
+      res.status(500).json({ error: "Could not save that name." });
+    }
+  });
+
+  // Forget one. The key travels in the query string rather than the path: a
+  // lookup key is arbitrary user text and would need escaping to survive a
+  // path segment intact.
+  app.delete("/api/item-aliases", requireAuth, async (req, res) => {
+    if (!prisma) return res.status(503).json({ error: "Alias storage is unavailable." });
+
+    const lookupKey = typeof req.query?.lookupKey === "string" ? req.query.lookupKey : "";
+    if (!lookupKey) return res.status(400).json({ error: "lookupKey is required." });
+    const storeKey = typeof req.query?.storeKey === "string" ? req.query.storeKey.toLowerCase() : "";
+
+    try {
+      // deleteMany rather than delete: it scopes to this user in the same
+      // statement and answers 0 instead of throwing when there is no such row.
+      const { count } = await prisma.itemAlias.deleteMany({
+        where: { userId: req.userId, storeKey, lookupKey }
+      });
+      res.json({ deleted: count });
+    } catch (error) {
+      console.error("Failed to delete item alias:", error);
+      res.status(500).json({ error: "Could not forget that name." });
+    }
+  });
+
   const guards = identifyLimiter ? [requireAuth, identifyLimiter] : [requireAuth];
 
   // Identify a batch of receipt lines. The browser sends only what its own free
