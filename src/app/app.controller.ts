@@ -346,7 +346,8 @@ namespace ReceiptRing.App {
         onBatchFood: (isFood) => this.setSelectedLinesFood(isFood),
         onBatchIgnore: (ignored) => this.setSelectedLinesIgnored(ignored),
         onIdentificationConfirm: (lineId, name) => this.confirmIdentification(lineId, name),
-        onIdentificationClear: (lineId) => this.clearIdentification(lineId)
+        onIdentificationClear: (lineId) => this.clearIdentification(lineId),
+        onBatchIdentify: () => void this.identifyItems(this.getSelectedLines())
       };
 
       this.splitWorkspaceView.renderLines(
@@ -562,9 +563,16 @@ namespace ReceiptRing.App {
      * tiers finish instantly but the model does not, and a double-click would
      * buy the same answers twice.
      */
-    private async identifyItems(): Promise<void> {
+    private async identifyItems(lines?: readonly Domain.ReceiptLine[]): Promise<void> {
       if (this.isIdentifying) return;
-      if (this.receiptLines.length === 0) {
+
+      // A selection narrows what is looked at, and nothing else. Forcing here
+      // was tempting -- the user did point at these lines -- but it would
+      // re-derive names they had already confirmed and overwrite a known
+      // answer with a guess. Confirmed lines stay skipped; everything else in
+      // the selection is re-asked, which is the default anyway.
+      const target = lines ?? this.receiptLines;
+      if (target.length === 0) {
         this.notificationService.info("Itemize a receipt first, then identify its items.");
         return;
       }
@@ -574,7 +582,7 @@ namespace ReceiptRing.App {
 
       try {
         const resolved = await this.itemIdentityService.identify(
-          this.receiptLines,
+          target,
           this.identifications,
           {
             storeName: this.elements.storeNameInput.value.trim(),

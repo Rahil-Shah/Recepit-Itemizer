@@ -2855,7 +2855,14 @@ var ReceiptRing;
                     ? "Put the selected lines back on the receipt"
                     : "Leave the selected lines out of the split";
                 ignore.addEventListener("click", () => handlers.onBatchIgnore(!lineState.allIgnored));
-                group.append(food, ignore);
+                const identify = document.createElement("button");
+                identify.type = "button";
+                identify.className = "btn btn-secondary btn-small";
+                identify.textContent = "Identify";
+                identify.disabled = !lineState.hasActive;
+                identify.title = "Work out what the selected items actually are";
+                identify.addEventListener("click", () => handlers.onBatchIdentify());
+                group.append(food, ignore, identify);
                 return group;
             }
             renderPeople(container, people, handlers) {
@@ -3680,7 +3687,8 @@ var ReceiptRing;
                     onBatchFood: (isFood) => this.setSelectedLinesFood(isFood),
                     onBatchIgnore: (ignored) => this.setSelectedLinesIgnored(ignored),
                     onIdentificationConfirm: (lineId, name) => this.confirmIdentification(lineId, name),
-                    onIdentificationClear: (lineId) => this.clearIdentification(lineId)
+                    onIdentificationClear: (lineId) => this.clearIdentification(lineId),
+                    onBatchIdentify: () => void this.identifyItems(this.getSelectedLines())
                 };
                 this.splitWorkspaceView.renderLines(this.elements.receiptLinesList, this.receiptLines, this.assignments, this.people, this.lineModes, new Set(this.lineSelectionService.ids()), this.identifications, handlers);
                 this.splitWorkspaceView.renderPeople(this.elements.peopleList, this.people, handlers);
@@ -3795,17 +3803,18 @@ var ReceiptRing;
                     confirmed: Boolean(stored.confirmed)
                 };
             }
-            async identifyItems() {
+            async identifyItems(lines) {
                 if (this.isIdentifying)
                     return;
-                if (this.receiptLines.length === 0) {
+                const target = lines ?? this.receiptLines;
+                if (target.length === 0) {
                     this.notificationService.info("Itemize a receipt first, then identify its items.");
                     return;
                 }
                 this.isIdentifying = true;
                 this.elements.identifyItemsButton.setAttribute("disabled", "true");
                 try {
-                    const resolved = await this.itemIdentityService.identify(this.receiptLines, this.identifications, {
+                    const resolved = await this.itemIdentityService.identify(target, this.identifications, {
                         storeName: this.elements.storeNameInput.value.trim(),
                         onProgress: (progress) => this.setIdentifyStatus(progress)
                     });

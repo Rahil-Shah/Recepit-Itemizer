@@ -14,6 +14,7 @@ namespace ReceiptRing.UI {
     // Both arrive here because both mean the same thing: this is the answer.
     onIdentificationConfirm(lineId: string, name: string): void;
     onIdentificationClear(lineId: string): void;
+    onBatchIdentify(): void;
   }
 
   /**
@@ -639,7 +640,17 @@ namespace ReceiptRing.UI {
         : "Leave the selected lines out of the split";
       ignore.addEventListener("click", () => handlers.onBatchIgnore(!lineState.allIgnored));
 
-      group.append(food, ignore);
+      const identify = document.createElement("button");
+      identify.type = "button";
+      identify.className = "btn btn-secondary btn-small";
+      identify.textContent = "Identify";
+      // Same reasoning as the food button: with the whole selection struck off
+      // there is nothing worth spending a lookup on.
+      identify.disabled = !lineState.hasActive;
+      identify.title = "Work out what the selected items actually are";
+      identify.addEventListener("click", () => handlers.onBatchIdentify());
+
+      group.append(food, ignore, identify);
       return group;
     }
 
