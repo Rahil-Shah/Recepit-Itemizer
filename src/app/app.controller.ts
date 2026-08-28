@@ -1463,6 +1463,7 @@ namespace ReceiptRing.App {
           id: line.id,
           label: line.label,
           amount: Number(line.amount) || 0,
+          ...(line.itemCode ? { itemCode: line.itemCode } : {}),
           confidence: 1,
           ignored: line.ignored ?? false,
           isFood: line.isFood ?? false

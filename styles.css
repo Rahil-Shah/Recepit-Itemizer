@@ -3228,3 +3228,12 @@ input[type="number"] {
 .item-detail-actions .btn {
   flex: 1;
 }
+
+/* History rows stack the same way the workspace rows do, so a receipt reads
+   the same whether it is being split or being looked back at. */
+.history-line-label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}

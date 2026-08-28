@@ -879,7 +879,26 @@ namespace ReceiptRing.UI {
             // line.label comes from OCR of arbitrary receipt images and from
             // the server; render as text, never HTML, to prevent stored XSS.
             const label = document.createElement("span");
-            label.textContent = line.label;
+            label.className = "history-line-label";
+            const printed = document.createElement("span");
+            printed.textContent = line.label;
+            label.append(printed);
+
+            // What the line turned out to be, when it was worked out at the
+            // time. This is the reason identifications are stored at all: a
+            // split reopened months later is unreadable when every row still
+            // says "GV SHRD MOZZ 8Z", and re-deriving it on every visit would
+            // charge for an answer already paid for.
+            const identified = line.identification;
+            if (identified?.resolvedName && !this.saysTheSameThing(identified.resolvedName, line.label)) {
+              const resolved = document.createElement("span");
+              resolved.className = "line-resolved";
+              resolved.classList.toggle("is-confirmed", Boolean(identified.confirmed));
+              resolved.textContent = identified.size
+                ? `${identified.resolvedName} - ${identified.size}`
+                : identified.resolvedName;
+              label.append(resolved);
+            }
 
             const foodCheck = document.createElement("button");
             foodCheck.className = "line-food-check";

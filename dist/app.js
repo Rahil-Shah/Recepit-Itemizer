@@ -3028,7 +3028,20 @@ var ReceiptRing;
                                 .map((assignment) => assignment.personName)
                                 .filter((value) => Boolean(value));
                             const label = document.createElement("span");
-                            label.textContent = line.label;
+                            label.className = "history-line-label";
+                            const printed = document.createElement("span");
+                            printed.textContent = line.label;
+                            label.append(printed);
+                            const identified = line.identification;
+                            if (identified?.resolvedName && !this.saysTheSameThing(identified.resolvedName, line.label)) {
+                                const resolved = document.createElement("span");
+                                resolved.className = "line-resolved";
+                                resolved.classList.toggle("is-confirmed", Boolean(identified.confirmed));
+                                resolved.textContent = identified.size
+                                    ? `${identified.resolvedName} - ${identified.size}`
+                                    : identified.resolvedName;
+                                label.append(resolved);
+                            }
                             const foodCheck = document.createElement("button");
                             foodCheck.className = "line-food-check";
                             foodCheck.type = "button";
@@ -4510,6 +4523,7 @@ var ReceiptRing;
                         id: line.id,
                         label: line.label,
                         amount: Number(line.amount) || 0,
+                        ...(line.itemCode ? { itemCode: line.itemCode } : {}),
                         confidence: 1,
                         ignored: line.ignored ?? false,
                         isFood: line.isFood ?? false
