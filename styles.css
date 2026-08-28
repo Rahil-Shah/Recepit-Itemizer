@@ -585,11 +585,73 @@ input[type="number"] {
 }
 
 /* ---------------- Items table ---------------- */
+/* Three columns now that identification lives up here: store, category, and
+   the button that names the items. The button sits in the toolbar rather than
+   the panel header because it acts on the receipt's contents, which is what
+   the other two controls do. */
 .split-toolbar {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 1.4fr 1fr auto;
   gap: 12px;
   margin-bottom: 16px;
+  align-items: end;
+}
+
+@media (max-width: 720px) {
+  .split-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Full width on its own row rather than squeezed beside the category. */
+  .identify-field {
+    grid-column: 1 / -1;
+  }
+}
+
+.identify-field .btn {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.btn-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+/* Reuses the OCR status treatment: same shape, same accent, because it is the
+   same kind of message -- a job running on the receipt in front of you. */
+.identify-status {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.identify-status.hidden {
+  display: none !important;
+}
+
+.identify-progress {
+  overflow: hidden;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(201, 241, 88, 0.16);
+}
+
+.identify-progress span {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 220ms ease;
 }
 
 /* ---------------- Batch bar ---------------- */

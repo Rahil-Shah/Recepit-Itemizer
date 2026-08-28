@@ -192,6 +192,186 @@ var ReceiptRing;
 (function (ReceiptRing) {
     var Config;
     (function (Config) {
+        Config.BRAND_ABBREVIATIONS = {
+            gv: "Great Value",
+            mm: "Marketside",
+            ks: "Kirkland Signature",
+            kirkland: "Kirkland Signature",
+            pc: "President's Choice",
+            nn: "No Name",
+            sb: "Simple Truth",
+            st: "Simple Truth",
+            gm: "General Mills",
+            kh: "Kraft Heinz",
+            tj: "Trader Joe's",
+            wf: "Whole Foods",
+            "365": "365 by Whole Foods",
+            hy: "Hy-Vee",
+            sw: "Signature Select",
+            ss: "Signature Select",
+            ah: "Archer Farms",
+            gg: "Good & Gather",
+            gng: "Good & Gather"
+        };
+        Config.WORD_ABBREVIATIONS = {
+            mlk: "Milk",
+            mk: "Milk",
+            chz: "Cheese",
+            chs: "Cheese",
+            ched: "Cheddar",
+            chdr: "Cheddar",
+            mozz: "Mozzarella",
+            moz: "Mozzarella",
+            parm: "Parmesan",
+            yog: "Yogurt",
+            ygrt: "Yogurt",
+            crm: "Cream",
+            butr: "Butter",
+            btr: "Butter",
+            eg: "Eggs",
+            egs: "Eggs",
+            hlf: "Half",
+            chkn: "Chicken",
+            chk: "Chicken",
+            chick: "Chicken",
+            brst: "Breast",
+            bnls: "Boneless",
+            sknls: "Skinless",
+            grnd: "Ground",
+            gr: "Ground",
+            bf: "Beef",
+            beff: "Beef",
+            prk: "Pork",
+            sausg: "Sausage",
+            saus: "Sausage",
+            bacn: "Bacon",
+            tky: "Turkey",
+            trky: "Turkey",
+            slmn: "Salmon",
+            shrmp: "Shrimp",
+            tlpa: "Tilapia",
+            bnna: "Banana",
+            ban: "Banana",
+            appl: "Apple",
+            tom: "Tomato",
+            tmto: "Tomato",
+            ptato: "Potato",
+            pot: "Potato",
+            onn: "Onion",
+            onin: "Onion",
+            lett: "Lettuce",
+            ltce: "Lettuce",
+            spnch: "Spinach",
+            brocc: "Broccoli",
+            brcli: "Broccoli",
+            cuke: "Cucumber",
+            cucmb: "Cucumber",
+            avo: "Avocado",
+            strwb: "Strawberry",
+            blubr: "Blueberry",
+            grp: "Grapes",
+            brd: "Bread",
+            bgl: "Bagel",
+            tort: "Tortilla",
+            crckr: "Cracker",
+            cerl: "Cereal",
+            ceral: "Cereal",
+            pnut: "Peanut",
+            pb: "Peanut Butter",
+            jly: "Jelly",
+            sug: "Sugar",
+            flr: "Flour",
+            ol: "Oil",
+            vin: "Vinegar",
+            sce: "Sauce",
+            sauc: "Sauce",
+            ktchp: "Ketchup",
+            mayo: "Mayonnaise",
+            mstrd: "Mustard",
+            past: "Pasta",
+            spag: "Spaghetti",
+            noodl: "Noodle",
+            ric: "Rice",
+            bns: "Beans",
+            soup: "Soup",
+            choc: "Chocolate",
+            cky: "Cookie",
+            ckie: "Cookie",
+            wtr: "Water",
+            jce: "Juice",
+            juc: "Juice",
+            sda: "Soda",
+            cof: "Coffee",
+            coff: "Coffee",
+            cofe: "Coffee",
+            esprso: "Espresso",
+            bevrg: "Beverage",
+            bev: "Beverage",
+            ppr: "Paper",
+            twl: "Towel",
+            tissu: "Tissue",
+            dtrgnt: "Detergent",
+            detrg: "Detergent",
+            lndry: "Laundry",
+            dish: "Dish",
+            sop: "Soap",
+            shmp: "Shampoo",
+            cond: "Conditioner",
+            tthpst: "Toothpaste",
+            deod: "Deodorant",
+            razr: "Razor",
+            btry: "Battery",
+            lightblb: "Light Bulb"
+        };
+        Config.QUALIFIER_ABBREVIATIONS = {
+            org: "Organic",
+            orgnc: "Organic",
+            nat: "Natural",
+            ntrl: "Natural",
+            shrd: "Shredded",
+            shred: "Shredded",
+            slcd: "Sliced",
+            slc: "Sliced",
+            diced: "Diced",
+            chpd: "Chopped",
+            frz: "Frozen",
+            frzn: "Frozen",
+            frsh: "Fresh",
+            fz: "Frozen",
+            lg: "Large",
+            lrg: "Large",
+            sm: "Small",
+            md: "Medium",
+            med: "Medium",
+            xl: "Extra Large",
+            whl: "Whole",
+            wht: "White",
+            wheat: "Wheat",
+            wh: "Wheat",
+            ung: "Unsalted",
+            unsltd: "Unsalted",
+            sltd: "Salted",
+            lofat: "Low Fat",
+            lf: "Low Fat",
+            ff: "Fat Free",
+            nf: "Non Fat",
+            rdcd: "Reduced",
+            lite: "Light",
+            orig: "Original",
+            clsc: "Classic",
+            var: "Variety",
+            asst: "Assorted",
+            mlt: "Multi",
+            dbl: "Double",
+            fam: "Family",
+            val: "Value"
+        };
+    })(Config = ReceiptRing.Config || (ReceiptRing.Config = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Config;
+    (function (Config) {
         Config.SAMPLE_RECEIPT = `FRESH MARKET
 Organic bananas        3.49
 Sourdough bread        5.25
@@ -403,6 +583,7 @@ var ReceiptRing;
                 this.idService = idService;
                 this.ignoredLabel = /^(total|subtotal|tax|cash|change|visa|mastercard|amex|debit|credit|balance|auth|approval|receipt)\b/i;
                 this.amountPattern = /(?:^|\s)(-?\$?\s*\d+(?:,\d{3})*[,.]\d{2}|-?\$\s*\d+)\s*$/;
+                this.itemCodePattern = /\b\d{4,}\b/g;
             }
             parse(text) {
                 return text
@@ -417,11 +598,9 @@ var ReceiptRing;
                 if (!match || match.index === undefined)
                     return null;
                 const amount = this.parseAmount(match[1]);
-                const label = line
-                    .slice(0, match.index)
-                    .replace(/[*#@]/g, "")
-                    .replace(/\b\d{4,}\b/g, "")
-                    .trim();
+                const withoutMarks = line.slice(0, match.index).replace(/[*#@]/g, "");
+                const itemCode = this.extractItemCode(withoutMarks);
+                const label = withoutMarks.replace(this.itemCodePattern, "").trim();
                 if (!label || this.ignoredLabel.test(label) || !Number.isFinite(amount) || amount === 0) {
                     return null;
                 }
@@ -430,11 +609,18 @@ var ReceiptRing;
                     id: this.idService.create(),
                     label: this.toTitleCase(label),
                     amount: Number(amount.toFixed(2)),
+                    ...(itemCode ? { itemCode } : {}),
                     category: categorization.category,
                     categorizationConfidence: categorization.confidence,
                     categorizationSource: categorization.source,
                     needsCategoryReview: categorization.shouldPrompt
                 };
+            }
+            extractItemCode(labelPart) {
+                const codes = labelPart.match(this.itemCodePattern);
+                if (!codes)
+                    return undefined;
+                return codes.reduce((longest, code) => (code.length > longest.length ? code : longest));
             }
             toTitleCase(value) {
                 return value
@@ -452,6 +638,583 @@ var ReceiptRing;
             }
         }
         Services.ReceiptParserService = ReceiptParserService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class LabelNormalizerService {
+            constructor() {
+                this.sizePattern = /^(\d+(?:\.\d+)?)\s*(z|oz|ozs|g|kg|mg|l|ml|lt|ltr|lb|lbs|ct|pk|pc|pcs|pack|qt|gal|ea)$/i;
+                this.quantityPattern = /^(?:x\s*(\d+)|(\d+)\s*x|(\d+)\s*@)$/i;
+                this.codePattern = /^\d{4,}$/;
+                this.unitNames = {
+                    z: "oz",
+                    oz: "oz",
+                    ozs: "oz",
+                    g: "g",
+                    kg: "kg",
+                    mg: "mg",
+                    l: "L",
+                    lt: "L",
+                    ltr: "L",
+                    ml: "mL",
+                    lb: "lb",
+                    lbs: "lb",
+                    ct: "ct",
+                    pk: "pk",
+                    pc: "pc",
+                    pcs: "pc",
+                    pack: "pk",
+                    qt: "qt",
+                    gal: "gal",
+                    ea: "ea"
+                };
+            }
+            normalize(label) {
+                const rawTokens = this.splitTokens(label);
+                const tokens = [];
+                const codes = [];
+                let size = null;
+                let quantity = null;
+                rawTokens.forEach((token) => {
+                    const sizeMatch = token.match(this.sizePattern);
+                    if (sizeMatch && size === null) {
+                        size = `${this.trimNumber(sizeMatch[1])} ${this.unitNames[sizeMatch[2].toLowerCase()]}`;
+                        return;
+                    }
+                    if (sizeMatch)
+                        return;
+                    const quantityMatch = token.match(this.quantityPattern);
+                    if (quantityMatch) {
+                        const value = Number(quantityMatch[1] ?? quantityMatch[2] ?? quantityMatch[3]);
+                        if (Number.isFinite(value) && value > 0 && quantity === null)
+                            quantity = value;
+                        return;
+                    }
+                    if (this.codePattern.test(token)) {
+                        codes.push(token);
+                        return;
+                    }
+                    tokens.push(token.toLowerCase());
+                });
+                return { key: tokens.join(" "), tokens, size, quantity, codes };
+            }
+            keyFor(label) {
+                return this.normalize(label).key;
+            }
+            splitTokens(label) {
+                const tokens = label
+                    .replace(/[()[\]{},;:!?"']/g, " ")
+                    .replace(/\.(?=\s|$)/g, " ")
+                    .replace(/([A-Za-z])(\d+(?:\.\d+)?(?:z|oz|g|kg|ml|l|lb|ct|pk)\b)/gi, "$1 $2")
+                    .split(/\s+/)
+                    .map((token) => token.replace(/^[-*#@/]+|[-*#@/]+$/g, ""))
+                    .filter(Boolean);
+                return this.joinSpacedSizes(tokens);
+            }
+            joinSpacedSizes(tokens) {
+                const joined = [];
+                for (let index = 0; index < tokens.length; index += 1) {
+                    const current = tokens[index];
+                    const next = tokens[index + 1];
+                    if (next !== undefined &&
+                        /^\d+(?:\.\d+)?$/.test(current) &&
+                        Object.prototype.hasOwnProperty.call(this.unitNames, next.toLowerCase())) {
+                        joined.push(`${current}${next}`);
+                        index += 1;
+                        continue;
+                    }
+                    joined.push(current);
+                }
+                return joined;
+            }
+            trimNumber(value) {
+                const parsed = Number(value);
+                return Number.isFinite(parsed) ? String(parsed) : value;
+            }
+        }
+        Services.LabelNormalizerService = LabelNormalizerService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        const MAX_DICTIONARY_CONFIDENCE = 0.9;
+        const MIN_DICTIONARY_CONFIDENCE = 0.5;
+        class DictionaryResolverService {
+            constructor(labelNormalizerService, brands = ReceiptRing.Config.BRAND_ABBREVIATIONS, words = ReceiptRing.Config.WORD_ABBREVIATIONS, qualifiers = ReceiptRing.Config.QUALIFIER_ABBREVIATIONS) {
+                this.labelNormalizerService = labelNormalizerService;
+                this.brands = brands;
+                this.plainWordPattern = /^[a-z][a-z'-]{2,}$/;
+                this.vowelPattern = /[aeiouy]/;
+                this.words = { ...words, ...qualifiers };
+                this.qualifierNames = new Set(Object.values(qualifiers).map((name) => name.toLowerCase()));
+            }
+            expand(label) {
+                const normalized = this.labelNormalizerService.normalize(label);
+                let brand = null;
+                const expandedTokens = [];
+                const unknownTokens = [];
+                const plainTokens = [];
+                const nameParts = [];
+                normalized.tokens.forEach((token, index) => {
+                    if (index === 0 && brand === null && this.brands[token] !== undefined) {
+                        brand = this.brands[token];
+                        expandedTokens.push(token);
+                        return;
+                    }
+                    const expansion = this.words[token];
+                    if (expansion !== undefined) {
+                        expandedTokens.push(token);
+                        nameParts.push(expansion);
+                        return;
+                    }
+                    if (this.plainWordPattern.test(token) && this.vowelPattern.test(token)) {
+                        plainTokens.push(token);
+                        nameParts.push(this.toTitleCase(token));
+                        return;
+                    }
+                    unknownTokens.push(token);
+                    nameParts.push(this.toTitleCase(token));
+                });
+                const name = [brand, ...nameParts].filter(Boolean).join(" ").trim();
+                return {
+                    name,
+                    brand,
+                    size: normalized.size,
+                    expandedTokens,
+                    unknownTokens,
+                    plainTokens
+                };
+            }
+            resolve(line) {
+                const expansion = this.expand(line.label);
+                const total = expansion.expandedTokens.length +
+                    expansion.plainTokens.length +
+                    expansion.unknownTokens.length;
+                if (total === 0 || !expansion.name)
+                    return null;
+                const understood = expansion.expandedTokens.length + expansion.plainTokens.length;
+                const coverage = understood / total;
+                if (expansion.expandedTokens.length === 0 && expansion.plainTokens.length === 0) {
+                    return null;
+                }
+                if (!this.namesSomething(expansion))
+                    return null;
+                const confidence = this.scoreExpansion(expansion, coverage);
+                if (confidence < MIN_DICTIONARY_CONFIDENCE)
+                    return null;
+                return {
+                    lineId: line.id,
+                    rawLabel: line.label,
+                    ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+                    resolvedName: expansion.name,
+                    ...(expansion.brand ? { brand: expansion.brand } : {}),
+                    ...(expansion.size ? { size: expansion.size } : {}),
+                    confidence,
+                    source: "dictionary",
+                    reasoning: this.describe(expansion),
+                    alternatives: [],
+                    confirmed: false
+                };
+            }
+            namesSomething(expansion) {
+                const nameParts = expansion.name
+                    .toLowerCase()
+                    .replace(expansion.brand ? expansion.brand.toLowerCase() : "", "")
+                    .split(/\s+/)
+                    .filter(Boolean);
+                return nameParts.some((part) => !this.qualifierNames.has(part));
+            }
+            scoreExpansion(expansion, coverage) {
+                let confidence = MAX_DICTIONARY_CONFIDENCE * coverage;
+                confidence -= expansion.unknownTokens.length * 0.05;
+                const tokenCount = expansion.expandedTokens.length + expansion.plainTokens.length + expansion.unknownTokens.length;
+                if (tokenCount === 1)
+                    confidence -= 0.15;
+                if (expansion.brand)
+                    confidence += 0.05;
+                return Math.max(0, Math.min(MAX_DICTIONARY_CONFIDENCE, Number(confidence.toFixed(2))));
+            }
+            describe(expansion) {
+                if (expansion.expandedTokens.length === 0) {
+                    return "Read as printed -- no shorthand to expand.";
+                }
+                const expanded = expansion.expandedTokens.map((token) => token.toUpperCase()).join(", ");
+                const suffix = expansion.unknownTokens.length > 0
+                    ? ` Could not place ${expansion.unknownTokens.map((t) => t.toUpperCase()).join(", ")}.`
+                    : "";
+                return `Expanded ${expanded} from the abbreviation list.${suffix}`;
+            }
+            toTitleCase(token) {
+                return token.charAt(0).toUpperCase() + token.slice(1);
+            }
+        }
+        Services.DictionaryResolverService = DictionaryResolverService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class ItemAliasStoreService {
+            constructor(labelNormalizerService, backend = null) {
+                this.labelNormalizerService = labelNormalizerService;
+                this.backend = backend;
+                this.aliases = new Map();
+            }
+            async load() {
+                if (!this.backend)
+                    return;
+                try {
+                    this.replaceAll(await this.backend.load());
+                }
+                catch (error) {
+                    console.error("Could not load saved item names:", error);
+                }
+            }
+            replaceAll(aliases) {
+                this.aliases = new Map(aliases.map((alias) => [this.mapKey(alias.storeKey, alias.lookupKey), alias]));
+            }
+            all() {
+                return [...this.aliases.values()];
+            }
+            find(line, storeName) {
+                const storeKey = this.storeKeyFor(storeName);
+                const labelKey = this.labelNormalizerService.keyFor(line.label);
+                const codeKey = line.itemCode ? this.codeKeyFor(line.itemCode) : null;
+                const candidates = [
+                    codeKey ? this.mapKey(storeKey, codeKey) : null,
+                    this.mapKey(storeKey, labelKey),
+                    codeKey ? this.mapKey("", codeKey) : null,
+                    this.mapKey("", labelKey)
+                ];
+                for (const key of candidates) {
+                    if (key === null)
+                        continue;
+                    const alias = this.aliases.get(key);
+                    if (alias)
+                        return alias;
+                }
+                return null;
+            }
+            resolve(line, storeName) {
+                const alias = this.find(line, storeName);
+                if (!alias)
+                    return null;
+                return {
+                    lineId: line.id,
+                    rawLabel: line.label,
+                    ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+                    resolvedName: alias.resolvedName,
+                    ...(alias.brand ? { brand: alias.brand } : {}),
+                    ...(alias.size ? { size: alias.size } : {}),
+                    confidence: 1,
+                    source: "saved-alias",
+                    reasoning: alias.timesConfirmed > 1
+                        ? `You confirmed this ${alias.timesConfirmed} times.`
+                        : "You confirmed this before.",
+                    alternatives: [],
+                    confirmed: true
+                };
+            }
+            remember(identification, storeName) {
+                const storeKey = this.storeKeyFor(storeName);
+                const lookupKey = identification.itemCode
+                    ? this.codeKeyFor(identification.itemCode)
+                    : this.labelNormalizerService.keyFor(identification.rawLabel);
+                const mapKey = this.mapKey(storeKey, lookupKey);
+                const existing = this.aliases.get(mapKey);
+                const alias = {
+                    lookupKey,
+                    storeKey,
+                    resolvedName: identification.resolvedName,
+                    ...(identification.brand ? { brand: identification.brand } : {}),
+                    ...(identification.size ? { size: identification.size } : {}),
+                    timesConfirmed: existing && existing.resolvedName === identification.resolvedName
+                        ? existing.timesConfirmed + 1
+                        : 1,
+                    updatedAt: new Date().toISOString()
+                };
+                this.aliases.set(mapKey, alias);
+                void this.backend?.save(alias).catch((error) => {
+                    console.error("Could not save that name:", error);
+                });
+                return alias;
+            }
+            forget(alias) {
+                this.aliases.delete(this.mapKey(alias.storeKey, alias.lookupKey));
+                void this.backend?.remove(alias).catch((error) => {
+                    console.error("Could not forget that name:", error);
+                });
+            }
+            clear() {
+                this.aliases.clear();
+            }
+            codeKeyFor(itemCode) {
+                return `code:${itemCode.replace(/^0+(?=\d)/, "")}`;
+            }
+            storeKeyFor(storeName) {
+                return storeName.trim().toLowerCase().replace(/\s+/g, " ");
+            }
+            mapKey(storeKey, lookupKey) {
+                return `${storeKey}\u0000${lookupKey}`;
+            }
+        }
+        Services.ItemAliasStoreService = ItemAliasStoreService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        const MIN_REPORTABLE_CONFIDENCE = 0.35;
+        class ItemIdentityService {
+            constructor(aliasStoreService, dictionaryResolverService, aiIdentifier = null) {
+                this.aliasStoreService = aliasStoreService;
+                this.dictionaryResolverService = dictionaryResolverService;
+                this.aiIdentifier = aiIdentifier;
+            }
+            async identify(lines, known, options = {}) {
+                const storeName = options.storeName ?? "";
+                const resolved = new Map();
+                const report = (progress) => {
+                    try {
+                        options.onProgress?.(progress);
+                    }
+                    catch {
+                    }
+                };
+                const pending = lines.filter((line) => {
+                    if (line.ignored)
+                        return false;
+                    if (options.force)
+                        return true;
+                    return !known.get(line.id)?.confirmed;
+                });
+                const total = pending.length;
+                report({ stage: "aliases", done: 0, total, message: "Checking what you've named before..." });
+                const unresolvedByAlias = [];
+                pending.forEach((line) => {
+                    const alias = this.aliasStoreService.resolve(line, storeName);
+                    if (alias) {
+                        resolved.set(line.id, alias);
+                        return;
+                    }
+                    unresolvedByAlias.push(line);
+                });
+                report({
+                    stage: "dictionary",
+                    done: resolved.size,
+                    total,
+                    message: "Expanding receipt shorthand..."
+                });
+                const unresolvedByDictionary = [];
+                unresolvedByAlias.forEach((line) => {
+                    const expansion = this.dictionaryResolverService.resolve(line);
+                    if (expansion) {
+                        resolved.set(line.id, expansion);
+                        return;
+                    }
+                    unresolvedByDictionary.push(line);
+                });
+                if (unresolvedByDictionary.length > 0 && this.aiIdentifier) {
+                    const count = unresolvedByDictionary.length;
+                    report({
+                        stage: "ai",
+                        done: resolved.size,
+                        total,
+                        message: `Looking up ${count} ${count === 1 ? "item" : "items"}...`
+                    });
+                    const answers = await this.aiIdentifier.identify(unresolvedByDictionary.map((line) => this.toRequest(line)), storeName);
+                    const byLineId = new Map(answers.map((answer) => [answer.lineId, answer]));
+                    unresolvedByDictionary.forEach((line) => {
+                        const answer = byLineId.get(line.id);
+                        if (answer && answer.confidence >= MIN_REPORTABLE_CONFIDENCE) {
+                            resolved.set(line.id, answer);
+                            return;
+                        }
+                        resolved.set(line.id, this.unresolved(line, answer ?? null));
+                    });
+                }
+                else {
+                    unresolvedByDictionary.forEach((line) => {
+                        resolved.set(line.id, this.unresolved(line, null));
+                    });
+                }
+                const identified = [...resolved.values()].filter((identification) => identification.source !== "unresolved").length;
+                report({
+                    stage: "complete",
+                    done: identified,
+                    total,
+                    message: this.summarize(identified, total)
+                });
+                return resolved;
+            }
+            unresolved(line, rejected) {
+                const alternatives = rejected
+                    ? [{ name: rejected.resolvedName, confidence: rejected.confidence }, ...rejected.alternatives]
+                    : [];
+                return {
+                    lineId: line.id,
+                    rawLabel: line.label,
+                    ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+                    resolvedName: line.label,
+                    confidence: 0,
+                    source: "unresolved",
+                    reasoning: rejected
+                        ? "Only a low-confidence guess -- worth checking by hand."
+                        : "Couldn't work out what this is.",
+                    alternatives,
+                    confirmed: false
+                };
+            }
+            summarize(done, total) {
+                if (total === 0)
+                    return "Nothing to identify.";
+                if (done === 0)
+                    return "Couldn't identify anything on this receipt.";
+                if (done === total)
+                    return `Identified all ${total} ${total === 1 ? "item" : "items"}.`;
+                return `Identified ${done} of ${total} items.`;
+            }
+            toRequest(line) {
+                return {
+                    lineId: line.id,
+                    label: line.label,
+                    ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+                    amount: line.amount
+                };
+            }
+        }
+        Services.ItemIdentityService = ItemIdentityService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class ItemIdentityApiService {
+            constructor() {
+                this.maxBatchSize = 60;
+            }
+            async identify(requests, storeName) {
+                if (requests.length === 0)
+                    return [];
+                const batches = [];
+                for (let index = 0; index < requests.length; index += this.maxBatchSize) {
+                    batches.push(requests.slice(index, index + this.maxBatchSize));
+                }
+                const results = await Promise.all(batches.map((batch) => this.identifyBatch(batch, storeName)));
+                return results.flat();
+            }
+            async identifyBatch(requests, storeName) {
+                const response = await fetch("/api/items/identify", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        storeName,
+                        items: requests.map((request) => ({
+                            id: request.lineId,
+                            label: request.label,
+                            ...(request.itemCode ? { itemCode: request.itemCode } : {}),
+                            amount: request.amount
+                        }))
+                    })
+                });
+                if (!response.ok) {
+                    const body = (await response.json().catch(() => ({})));
+                    throw new Error(body.error || `Could not identify these items (${response.status}).`);
+                }
+                const payload = (await response.json());
+                const byLineId = new Map(requests.map((request) => [request.lineId, request]));
+                return (payload.items ?? [])
+                    .map((item) => this.toIdentification(item, byLineId.get(item.id)))
+                    .filter((identification) => identification !== null);
+            }
+            toIdentification(item, request) {
+                if (!request || !item?.name)
+                    return null;
+                return {
+                    lineId: request.lineId,
+                    rawLabel: request.label,
+                    ...(request.itemCode ? { itemCode: request.itemCode } : {}),
+                    resolvedName: item.name,
+                    ...(item.brand ? { brand: item.brand } : {}),
+                    ...(item.size ? { size: item.size } : {}),
+                    confidence: this.clamp(item.confidence),
+                    source: "ai",
+                    ...(item.reasoning ? { reasoning: item.reasoning } : {}),
+                    alternatives: (item.alternatives ?? [])
+                        .filter((alternative) => Boolean(alternative?.name))
+                        .map((alternative) => ({
+                        name: alternative.name,
+                        confidence: this.clamp(alternative.confidence)
+                    })),
+                    confirmed: false
+                };
+            }
+            clamp(value) {
+                const confidence = Number(value);
+                if (!Number.isFinite(confidence))
+                    return 0;
+                return Math.max(0, Math.min(1, confidence));
+            }
+        }
+        Services.ItemIdentityApiService = ItemIdentityApiService;
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
+        class ItemAliasApiService {
+            async load() {
+                const response = await fetch("/api/item-aliases", { credentials: "same-origin" });
+                if (!response.ok) {
+                    throw new Error(`Could not load saved item names (${response.status}).`);
+                }
+                const payload = (await response.json());
+                return payload.aliases ?? [];
+            }
+            async save(alias) {
+                const response = await fetch("/api/item-aliases", {
+                    method: "PUT",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        lookupKey: alias.lookupKey,
+                        storeKey: alias.storeKey,
+                        resolvedName: alias.resolvedName,
+                        ...(alias.brand ? { brand: alias.brand } : {}),
+                        ...(alias.size ? { size: alias.size } : {})
+                    })
+                });
+                if (!response.ok) {
+                    const body = (await response.json().catch(() => ({})));
+                    throw new Error(body.error || `Could not save that name (${response.status}).`);
+                }
+            }
+            async remove(alias) {
+                const query = new URLSearchParams({
+                    lookupKey: alias.lookupKey,
+                    storeKey: alias.storeKey
+                });
+                const response = await fetch(`/api/item-aliases?${query.toString()}`, {
+                    method: "DELETE",
+                    credentials: "same-origin"
+                });
+                if (!response.ok) {
+                    const body = (await response.json().catch(() => ({})));
+                    throw new Error(body.error || `Could not forget that name (${response.status}).`);
+                }
+            }
+        }
+        Services.ItemAliasApiService = ItemAliasApiService;
     })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
@@ -1358,6 +2121,10 @@ var ReceiptRing;
                     batchCount: this.getElement("#batchCount", HTMLElement),
                     batchActions: this.getElement("#batchActions", HTMLElement),
                     batchClearButton: this.getElement("#batchClearButton", HTMLButtonElement),
+                    identifyItemsButton: this.getElement("#identifyItemsButton", HTMLButtonElement),
+                    identifyStatus: this.getElement("#identifyStatus", HTMLElement),
+                    identifyStatusText: this.getElement("#identifyStatusText", HTMLElement),
+                    identifyProgressBar: this.getElement("#identifyProgressBar", HTMLElement),
                     emptyState: this.getElement("#emptyState", HTMLElement),
                     unassignedCount: this.getElement("#unassignedCount", HTMLElement),
                     storeNameInput: this.getElement("#storeNameInput", HTMLInputElement),
@@ -1706,6 +2473,16 @@ var ReceiptRing;
 (function (ReceiptRing) {
     var UI;
     (function (UI) {
+        const SURE_THRESHOLD = 0.85;
+        const LIKELY_THRESHOLD = 0.6;
+        function confidenceBand(confidence) {
+            if (confidence >= SURE_THRESHOLD)
+                return "sure";
+            if (confidence >= LIKELY_THRESHOLD)
+                return "likely";
+            return "unsure";
+        }
+        UI.confidenceBand = confidenceBand;
         const MODE_LABELS = {
             equal: "Split evenly",
             percentage: "Split by percentage",
@@ -1717,13 +2494,20 @@ var ReceiptRing;
                 this.receiptApiService = receiptApiService;
                 this.panelListeners = null;
             }
-            renderLines(container, lines, assignments, people, lineModes, selectedLineIds, handlers) {
+            renderLines(container, lines, assignments, people, lineModes, selectedLineIds, identifications, handlers) {
                 const openLineIds = new Set();
+                const openDetailLineIds = new Set();
                 container
                     .querySelectorAll("details.assign-dropdown[open]")
                     .forEach((dropdown) => {
                     if (dropdown.dataset.lineId)
                         openLineIds.add(dropdown.dataset.lineId);
+                });
+                container
+                    .querySelectorAll("details.item-detail-dropdown[open]")
+                    .forEach((dropdown) => {
+                    if (dropdown.dataset.lineId)
+                        openDetailLineIds.add(dropdown.dataset.lineId);
                 });
                 this.panelListeners?.abort();
                 this.panelListeners = new AbortController();
@@ -1740,9 +2524,7 @@ var ReceiptRing;
                     select.checked = isSelected;
                     select.setAttribute("aria-label", `Select ${line.label}`);
                     select.addEventListener("click", (event) => handlers.onLineSelectToggle(line.id, event.shiftKey));
-                    const name = document.createElement("span");
-                    name.className = "line-label";
-                    name.textContent = line.label;
+                    const name = this.buildLabelCell(line, identifications.get(line.id), handlers);
                     const foodCheck = document.createElement("button");
                     foodCheck.className = "line-food-check";
                     foodCheck.type = "button";
@@ -1769,7 +2551,140 @@ var ReceiptRing;
                         dropdown.open = true;
                         this.anchorDropdown(dropdown);
                     }
+                    if (openDetailLineIds.has(line.id)) {
+                        const detail = name.querySelector("details.item-detail-dropdown");
+                        if (detail) {
+                            detail.open = true;
+                            this.anchorDropdown(detail);
+                        }
+                    }
                 });
+            }
+            buildLabelCell(line, identification, handlers) {
+                const stack = document.createElement("span");
+                stack.className = "line-label-stack";
+                const name = document.createElement("span");
+                name.className = "line-label";
+                name.textContent = line.label;
+                stack.append(name);
+                const showsResolved = identification !== undefined &&
+                    identification.source !== "unresolved" &&
+                    !this.saysTheSameThing(identification.resolvedName, line.label);
+                if (showsResolved && identification) {
+                    const resolved = document.createElement("span");
+                    resolved.className = "line-resolved";
+                    resolved.classList.toggle("is-confirmed", identification.confirmed);
+                    resolved.textContent = this.describeIdentification(identification);
+                    const chip = this.buildConfidenceChip(identification);
+                    if (chip)
+                        resolved.append(" ", chip);
+                    stack.append(resolved);
+                }
+                if (!identification) {
+                    const cell = document.createElement("span");
+                    cell.className = "line-label-cell";
+                    cell.append(stack);
+                    return cell;
+                }
+                return this.buildItemDetail(line, identification, stack, handlers);
+            }
+            buildItemDetail(line, identification, stack, handlers) {
+                const details = document.createElement("details");
+                details.className = "item-detail-dropdown";
+                details.dataset.lineId = line.id;
+                const summary = document.createElement("summary");
+                summary.className = "item-detail-summary";
+                summary.title = "What is this item?";
+                summary.append(stack);
+                details.append(summary);
+                const panel = document.createElement("div");
+                panel.className = "item-detail-pop";
+                panel.append(this.buildItemDetailBody(line, identification, handlers));
+                details.append(panel);
+                this.wirePopover(details, summary, panel);
+                const cell = document.createElement("span");
+                cell.className = "line-label-cell";
+                cell.append(details);
+                return cell;
+            }
+            buildItemDetailBody(line, identification, _handlers) {
+                const body = document.createElement("div");
+                body.className = "item-detail-body";
+                const heading = document.createElement("p");
+                heading.className = "item-detail-name";
+                heading.textContent =
+                    identification.source === "unresolved" ? "Not identified" : identification.resolvedName;
+                body.append(heading);
+                const facts = document.createElement("dl");
+                facts.className = "item-detail-facts";
+                this.appendFact(facts, "On the receipt", line.label);
+                if (line.itemCode)
+                    this.appendFact(facts, "Item code", line.itemCode);
+                if (identification.brand)
+                    this.appendFact(facts, "Brand", identification.brand);
+                if (identification.size)
+                    this.appendFact(facts, "Size", identification.size);
+                this.appendFact(facts, "Price", this.currencyFormatService.format(line.amount));
+                body.append(facts);
+                const source = document.createElement("p");
+                source.className = "item-detail-source";
+                source.textContent = this.describeSource(identification);
+                body.append(source);
+                if (identification.reasoning) {
+                    const reasoning = document.createElement("p");
+                    reasoning.className = "item-detail-reasoning";
+                    reasoning.textContent = identification.reasoning;
+                    body.append(reasoning);
+                }
+                return body;
+            }
+            appendFact(list, label, value) {
+                const term = document.createElement("dt");
+                term.textContent = label;
+                const definition = document.createElement("dd");
+                definition.textContent = value;
+                list.append(term, definition);
+            }
+            describeSource(identification) {
+                const percent = Math.round(identification.confidence * 100);
+                switch (identification.source) {
+                    case "user-confirmed":
+                        return "You confirmed this name.";
+                    case "saved-alias":
+                        return "From a name you saved earlier.";
+                    case "dictionary":
+                        return `Expanded from receipt shorthand - ${percent}% confident.`;
+                    case "ai":
+                        return `Identified by AI - ${percent}% confident.`;
+                    default:
+                        return "Nobody could work out what this is.";
+                }
+            }
+            buildConfidenceChip(identification) {
+                if (identification.confirmed)
+                    return null;
+                const band = confidenceBand(identification.confidence);
+                if (band === "sure")
+                    return null;
+                const chip = document.createElement("span");
+                chip.className = `confidence-chip is-${band}`;
+                const percent = Math.round(identification.confidence * 100);
+                chip.textContent = `${percent}%`;
+                chip.title =
+                    band === "likely"
+                        ? `Fairly sure -- ${percent}% confident. Click the item to check it.`
+                        : `Not sure -- ${percent}% confident. Worth checking by hand.`;
+                chip.setAttribute("aria-label", `${percent} percent confident`);
+                return chip;
+            }
+            describeIdentification(identification) {
+                return identification.size
+                    ? `${identification.resolvedName} - ${identification.size}`
+                    : identification.resolvedName;
+            }
+            saysTheSameThing(left, right) {
+                const flatten = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+                return flatten(left) === flatten(right);
             }
             buildAssignDropdown(line, assignments, people, lineModes, handlers) {
                 const lineAssignments = assignments.filter((assignment) => assignment.lineId === line.id);
@@ -1783,31 +2698,7 @@ var ReceiptRing;
                 details.append(summary);
                 const panel = document.createElement("div");
                 panel.className = "assign-panel-pop";
-                const reposition = () => {
-                    if (!details.isConnected) {
-                        this.teardownPanelPositioning(reposition);
-                        return;
-                    }
-                    const summaryRect = summary.getBoundingClientRect();
-                    if (summaryRect.bottom < 0 || summaryRect.top > window.innerHeight) {
-                        details.open = false;
-                        return;
-                    }
-                    this.positionPanel(summary, panel);
-                };
-                details.addEventListener("toggle", () => {
-                    if (details.open) {
-                        this.closeOtherDropdowns(details);
-                        this.positionPanel(summary, panel);
-                        const signal = this.panelListeners?.signal;
-                        window.addEventListener("scroll", reposition, { capture: true, signal });
-                        window.addEventListener("resize", reposition, { signal });
-                    }
-                    else {
-                        this.teardownPanelPositioning(reposition);
-                        this.resetPanelPosition(panel);
-                    }
-                });
+                this.wirePopover(details, summary, panel);
                 if (people.length === 0) {
                     const hint = document.createElement("p");
                     hint.className = "assign-hint";
@@ -2143,9 +3034,36 @@ var ReceiptRing;
                     container.append(card);
                 });
             }
+            wirePopover(details, summary, panel) {
+                const reposition = () => {
+                    if (!details.isConnected) {
+                        this.teardownPanelPositioning(reposition);
+                        return;
+                    }
+                    const summaryRect = summary.getBoundingClientRect();
+                    if (summaryRect.bottom < 0 || summaryRect.top > window.innerHeight) {
+                        details.open = false;
+                        return;
+                    }
+                    this.positionPanel(summary, panel);
+                };
+                details.addEventListener("toggle", () => {
+                    if (details.open) {
+                        this.closeOtherDropdowns(details);
+                        this.positionPanel(summary, panel);
+                        const signal = this.panelListeners?.signal;
+                        window.addEventListener("scroll", reposition, { capture: true, signal });
+                        window.addEventListener("resize", reposition, { signal });
+                    }
+                    else {
+                        this.teardownPanelPositioning(reposition);
+                        this.resetPanelPosition(panel);
+                    }
+                });
+            }
             anchorDropdown(details) {
-                const summary = details.querySelector("summary.assign-summary");
-                const panel = details.querySelector(".assign-panel-pop");
+                const summary = details.querySelector("summary");
+                const panel = details.querySelector(".assign-panel-pop, .item-detail-pop");
                 if (summary && panel)
                     this.positionPanel(summary, panel);
             }
@@ -2194,7 +3112,9 @@ var ReceiptRing;
             }
             closeOtherDropdowns(current) {
                 document
-                    .querySelectorAll("details.assign-dropdown[open]")
+                    .querySelectorAll(SplitWorkspaceView.POPOVER_SELECTOR.split(", ")
+                    .map((selector) => `${selector}[open]`)
+                    .join(", "))
                     .forEach((dropdown) => {
                     if (dropdown !== current) {
                         dropdown.open = false;
@@ -2215,6 +3135,7 @@ var ReceiptRing;
                 return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="food-check-icon" aria-hidden="true">${box}</svg>`;
             }
         }
+        SplitWorkspaceView.POPOVER_SELECTOR = "details.assign-dropdown, details.item-detail-dropdown";
         UI.SplitWorkspaceView = SplitWorkspaceView;
     })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
 })(ReceiptRing || (ReceiptRing = {}));
@@ -2428,7 +3349,7 @@ var ReceiptRing;
       <path d="M8.6 8.2h6.8M8.6 11.6h6.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
     </svg>`;
         class AppController {
-            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, receiptImageService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, lineSelectionService, idService, receiptApiService, bankApiService, spendingAggregatorService, budgetRingView, monthlyTrendView, peopleApiService, rentEntryApiService, rentEntriesView, notificationService) {
+            constructor(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, receiptImageService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, lineSelectionService, idService, receiptApiService, bankApiService, spendingAggregatorService, budgetRingView, monthlyTrendView, peopleApiService, rentEntryApiService, rentEntriesView, notificationService, itemIdentityService, itemAliasStoreService) {
                 this.elements = elements;
                 this.parserService = parserService;
                 this.categorizationService = categorizationService;
@@ -2452,11 +3373,15 @@ var ReceiptRing;
                 this.rentEntryApiService = rentEntryApiService;
                 this.rentEntriesView = rentEntriesView;
                 this.notificationService = notificationService;
+                this.itemIdentityService = itemIdentityService;
+                this.itemAliasStoreService = itemAliasStoreService;
                 this.receiptLines = [];
                 this.people = [];
                 this.assignments = [];
                 this.lineModes = new Map();
                 this.foodFlags = new Map();
+                this.identifications = new Map();
+                this.isIdentifying = false;
                 this.receiptCategory = "Groceries";
                 this.cameraStream = null;
                 this.isPromptingForCategories = false;
@@ -2483,6 +3408,7 @@ var ReceiptRing;
                 this.render();
                 void this.initGeminiSettings();
                 void this.loadPeople();
+                void this.itemAliasStoreService.load();
             }
             bindEvents() {
                 this.elements.sampleButton.addEventListener("click", () => this.loadSample());
@@ -2498,6 +3424,7 @@ var ReceiptRing;
                 this.elements.clearButton.addEventListener("click", () => this.clearReceipt());
                 this.elements.selectAllLines.addEventListener("change", () => this.toggleSelectAll());
                 this.elements.batchClearButton.addEventListener("click", () => this.clearLineSelection());
+                this.elements.identifyItemsButton.addEventListener("click", () => void this.identifyItems());
                 document.addEventListener("keydown", (event) => {
                     if (event.key !== "Escape" || this.lineSelectionService.count === 0)
                         return;
@@ -2641,6 +3568,7 @@ var ReceiptRing;
                 this.receiptLines = [];
                 this.assignments = [];
                 this.lineModes.clear();
+                this.identifications.clear();
                 this.lineSelectionService.clear();
                 this.receiptImage = null;
                 this.hideOcrStatus();
@@ -2651,12 +3579,14 @@ var ReceiptRing;
                     id: item.id,
                     label: item.label,
                     amount: item.amount,
+                    ...(item.itemCode ? { itemCode: item.itemCode } : {}),
                     confidence: item.categorizationConfidence * 100,
                     ignored: false
                 }));
                 this.assignments = [];
                 this.lineModes.clear();
                 this.foodFlags.clear();
+                this.identifications.clear();
                 this.lineSelectionService.clear();
             }
             itemizeReceiptText() {
@@ -2692,7 +3622,7 @@ var ReceiptRing;
                     onBatchFood: (isFood) => this.setSelectedLinesFood(isFood),
                     onBatchIgnore: (ignored) => this.setSelectedLinesIgnored(ignored)
                 };
-                this.splitWorkspaceView.renderLines(this.elements.receiptLinesList, this.receiptLines, this.assignments, this.people, this.lineModes, new Set(this.lineSelectionService.ids()), handlers);
+                this.splitWorkspaceView.renderLines(this.elements.receiptLinesList, this.receiptLines, this.assignments, this.people, this.lineModes, new Set(this.lineSelectionService.ids()), this.identifications, handlers);
                 this.splitWorkspaceView.renderPeople(this.elements.peopleList, this.people, handlers);
                 this.renderSelectAll();
                 this.renderBatchBar(handlers);
@@ -2774,6 +3704,90 @@ var ReceiptRing;
                 }
                 this.render();
             }
+            toStoredIdentification(identification) {
+                if (!identification || identification.source === "unresolved")
+                    return null;
+                return {
+                    resolvedName: identification.resolvedName,
+                    brand: identification.brand ?? null,
+                    size: identification.size ?? null,
+                    confidence: identification.confidence,
+                    source: identification.source,
+                    reasoning: identification.reasoning ?? null,
+                    alternatives: identification.alternatives,
+                    confirmed: identification.confirmed
+                };
+            }
+            fromStoredIdentification(line, stored) {
+                if (!stored?.resolvedName)
+                    return null;
+                return {
+                    lineId: line.id,
+                    rawLabel: line.label,
+                    ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+                    resolvedName: stored.resolvedName,
+                    ...(stored.brand ? { brand: stored.brand } : {}),
+                    ...(stored.size ? { size: stored.size } : {}),
+                    confidence: Number(stored.confidence) || 0,
+                    source: stored.source ?? "unresolved",
+                    ...(stored.reasoning ? { reasoning: stored.reasoning } : {}),
+                    alternatives: Array.isArray(stored.alternatives) ? stored.alternatives : [],
+                    confirmed: Boolean(stored.confirmed)
+                };
+            }
+            async identifyItems() {
+                if (this.isIdentifying)
+                    return;
+                if (this.receiptLines.length === 0) {
+                    this.notificationService.info("Itemize a receipt first, then identify its items.");
+                    return;
+                }
+                this.isIdentifying = true;
+                this.elements.identifyItemsButton.setAttribute("disabled", "true");
+                try {
+                    const resolved = await this.itemIdentityService.identify(this.receiptLines, this.identifications, {
+                        storeName: this.elements.storeNameInput.value.trim(),
+                        onProgress: (progress) => this.setIdentifyStatus(progress)
+                    });
+                    resolved.forEach((identification, lineId) => {
+                        this.identifications.set(lineId, identification);
+                    });
+                    this.render();
+                    const unresolved = [...resolved.values()].filter((identification) => identification.source === "unresolved").length;
+                    if (unresolved > 0) {
+                        this.notificationService.info(`${unresolved} ${unresolved === 1 ? "item" : "items"} couldn't be identified. Click one to name it yourself.`);
+                    }
+                    window.setTimeout(() => this.hideIdentifyStatus(), 2400);
+                }
+                catch (error) {
+                    console.error("Item identification failed:", error);
+                    const message = error instanceof Error ? error.message : "Could not identify these items.";
+                    this.setIdentifyMessage(message, 1);
+                    this.notificationService.error(message);
+                }
+                finally {
+                    this.isIdentifying = false;
+                    this.elements.identifyItemsButton.removeAttribute("disabled");
+                }
+            }
+            setIdentifyStatus(progress) {
+                const stageFloor = {
+                    aliases: 0.08,
+                    dictionary: 0.2,
+                    ai: 0.45,
+                    complete: 1
+                };
+                this.setIdentifyMessage(progress.message, stageFloor[progress.stage]);
+            }
+            setIdentifyMessage(message, ratio) {
+                this.elements.identifyStatus.classList.remove("hidden");
+                this.elements.identifyStatusText.textContent = message;
+                this.elements.identifyProgressBar.style.width = `${Math.round(Math.min(1, Math.max(0, ratio)) * 100)}%`;
+            }
+            hideIdentifyStatus() {
+                this.elements.identifyStatus.classList.add("hidden");
+                this.elements.identifyProgressBar.style.width = "0%";
+            }
             getSelectedLines(includeIgnored = false) {
                 return this.receiptLines.filter((line) => this.lineSelectionService.has(line.id) && (includeIgnored || !line.ignored));
             }
@@ -2834,6 +3848,7 @@ var ReceiptRing;
                 if (Array.isArray(result.items)) {
                     result.items.forEach((item) => {
                         const label = this.toTitleCase(item.name || "Unknown Item");
+                        const itemCode = typeof item.itemCode === "string" ? item.itemCode.trim() : "";
                         const price = typeof item.price === "number" ? item.price : Number(item.price) || 0;
                         const discount = typeof item.discount === "number" ? item.discount : Number(item.discount) || 0;
                         const finalAmount = Math.max(0, price - discount);
@@ -2851,6 +3866,7 @@ var ReceiptRing;
                             id: this.idService.create(),
                             label: itemLabel,
                             amount: Number(finalAmount.toFixed(2)),
+                            ...(itemCode ? { itemCode } : {}),
                             category: categorization.category,
                             categorizationConfidence: lowConfidence ? 0.3 : categorization.confidence,
                             categorizationSource: categorization.source,
@@ -3202,7 +4218,9 @@ var ReceiptRing;
                         label: line.label,
                         amount: line.amount,
                         ignored: line.ignored,
-                        isFood: this.foodFlags.get(line.id) ?? false
+                        isFood: this.foodFlags.get(line.id) ?? false,
+                        ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+                        identification: this.toStoredIdentification(this.identifications.get(line.id))
                     })),
                     assignments: this.assignments.map((assignment) => ({
                         lineClientId: assignment.lineId,
@@ -4262,6 +5280,10 @@ var ReceiptRing;
     const spendingAggregatorService = new ReceiptRing.Services.SpendingAggregatorService(categories);
     const rentEntryApiService = new ReceiptRing.Services.RentEntryApiService();
     const notificationService = new ReceiptRing.Services.NotificationService();
+    const labelNormalizerService = new ReceiptRing.Services.LabelNormalizerService();
+    const itemAliasStoreService = new ReceiptRing.Services.ItemAliasStoreService(labelNormalizerService, new ReceiptRing.Services.ItemAliasApiService());
+    const dictionaryResolverService = new ReceiptRing.Services.DictionaryResolverService(labelNormalizerService);
+    const itemIdentityService = new ReceiptRing.Services.ItemIdentityService(itemAliasStoreService, dictionaryResolverService, new ReceiptRing.Services.ItemIdentityApiService());
     const elements = new ReceiptRing.UI.DomRegistryFactory().create();
     const categoryPromptView = new ReceiptRing.UI.CategoryPromptView(categories, elements);
     const splitWorkspaceView = new ReceiptRing.UI.SplitWorkspaceView(currencyFormatService, receiptApiService);
@@ -4269,7 +5291,7 @@ var ReceiptRing;
     const monthlyTrendView = new ReceiptRing.UI.MonthlyTrendView(currencyFormatService);
     const rentEntriesView = new ReceiptRing.UI.RentEntriesView(currencyFormatService);
     const authView = new ReceiptRing.UI.AuthView(elements, authApiService);
-    const controller = new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, receiptImageService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, lineSelectionService, idService, receiptApiService, bankApiService, spendingAggregatorService, budgetRingView, monthlyTrendView, peopleApiService, rentEntryApiService, rentEntriesView, notificationService);
+    const controller = new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, receiptImageService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, lineSelectionService, idService, receiptApiService, bankApiService, spendingAggregatorService, budgetRingView, monthlyTrendView, peopleApiService, rentEntryApiService, rentEntriesView, notificationService, itemIdentityService, itemAliasStoreService);
     let started = false;
     const startApp = () => {
         if (started)

@@ -20,6 +20,10 @@ namespace ReceiptRing.App {
     // lines rather than inside them: a ReceiptLine is what the receipt says,
     // and this is what we worked out afterwards.
     private identifications = new Map<string, Domain.ItemIdentification>();
+    // Guards against a second press while a run is in flight. The free tiers
+    // finish instantly, but the model does not, and a double-click would buy
+    // the same answers twice.
+    private isIdentifying = false;
     private receiptCategory: Domain.ReceiptCategory = "Groceries";
     private cameraStream: MediaStream | null = null;
     private isPromptingForCategories = false;
@@ -75,7 +79,9 @@ namespace ReceiptRing.App {
       private readonly peopleApiService: Services.PeopleApiService,
       private readonly rentEntryApiService: Services.RentEntryApiService,
       private readonly rentEntriesView: UI.RentEntriesView,
-      private readonly notificationService: Services.NotificationService
+      private readonly notificationService: Services.NotificationService,
+      private readonly itemIdentityService: Services.ItemIdentityService,
+      private readonly itemAliasStoreService: Services.ItemAliasStoreService
     ) {
       this.items = this.storageService.load();
     }
@@ -85,6 +91,9 @@ namespace ReceiptRing.App {
       this.render();
       void this.initGeminiSettings();
       void this.loadPeople();
+      // Corrections made on past receipts, so the first identification of this
+      // session can already be free for anything the user has taught it.
+      void this.itemAliasStoreService.load();
     }
 
     private bindEvents(): void {
@@ -100,6 +109,7 @@ namespace ReceiptRing.App {
       this.elements.clearButton.addEventListener("click", () => this.clearReceipt());
       this.elements.selectAllLines.addEventListener("change", () => this.toggleSelectAll());
       this.elements.batchClearButton.addEventListener("click", () => this.clearLineSelection());
+      this.elements.identifyItemsButton.addEventListener("click", () => void this.identifyItems());
 
       // Escape is the way out of a selection, as it is out of the dialogs.
       // Listening on the document rather than the table because clicking a
@@ -541,6 +551,83 @@ namespace ReceiptRing.App {
         alternatives: Array.isArray(stored.alternatives) ? stored.alternatives : [],
         confirmed: Boolean(stored.confirmed)
       };
+    }
+
+    /**
+     * Works out what every line on the receipt actually is.
+     *
+     * Guarded against a second press while one is already running: the free
+     * tiers finish instantly but the model does not, and a double-click would
+     * buy the same answers twice.
+     */
+    private async identifyItems(): Promise<void> {
+      if (this.isIdentifying) return;
+      if (this.receiptLines.length === 0) {
+        this.notificationService.info("Itemize a receipt first, then identify its items.");
+        return;
+      }
+
+      this.isIdentifying = true;
+      this.elements.identifyItemsButton.setAttribute("disabled", "true");
+
+      try {
+        const resolved = await this.itemIdentityService.identify(
+          this.receiptLines,
+          this.identifications,
+          {
+            storeName: this.elements.storeNameInput.value.trim(),
+            onProgress: (progress) => this.setIdentifyStatus(progress)
+          }
+        );
+
+        resolved.forEach((identification, lineId) => {
+          this.identifications.set(lineId, identification);
+        });
+        this.render();
+
+        const unresolved = [...resolved.values()].filter(
+          (identification) => identification.source === "unresolved"
+        ).length;
+        if (unresolved > 0) {
+          this.notificationService.info(
+            `${unresolved} ${unresolved === 1 ? "item" : "items"} couldn't be identified. Click one to name it yourself.`
+          );
+        }
+        window.setTimeout(() => this.hideIdentifyStatus(), 2400);
+      } catch (error) {
+        console.error("Item identification failed:", error);
+        const message =
+          error instanceof Error ? error.message : "Could not identify these items.";
+        this.setIdentifyMessage(message, 1);
+        this.notificationService.error(message);
+      } finally {
+        this.isIdentifying = false;
+        this.elements.identifyItemsButton.removeAttribute("disabled");
+      }
+    }
+
+    private setIdentifyStatus(progress: Services.IdentifyProgress): void {
+      // The free tiers land before the first paint, so the bar would jump from
+      // nothing to nearly full and sit there. Give the stages a floor so the
+      // movement the user sees tracks the wait they are actually having.
+      const stageFloor: Record<Services.IdentifyProgress["stage"], number> = {
+        aliases: 0.08,
+        dictionary: 0.2,
+        ai: 0.45,
+        complete: 1
+      };
+      this.setIdentifyMessage(progress.message, stageFloor[progress.stage]);
+    }
+
+    private setIdentifyMessage(message: string, ratio: number): void {
+      this.elements.identifyStatus.classList.remove("hidden");
+      this.elements.identifyStatusText.textContent = message;
+      this.elements.identifyProgressBar.style.width = `${Math.round(Math.min(1, Math.max(0, ratio)) * 100)}%`;
+    }
+
+    private hideIdentifyStatus(): void {
+      this.elements.identifyStatus.classList.add("hidden");
+      this.elements.identifyProgressBar.style.width = "0%";
     }
 
     private getSelectedLines(includeIgnored = false): Domain.ReceiptLine[] {

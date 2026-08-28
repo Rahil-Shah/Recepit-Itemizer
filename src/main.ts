@@ -18,6 +18,22 @@ namespace ReceiptRing {
   const spendingAggregatorService = new Services.SpendingAggregatorService(categories);
   const rentEntryApiService = new Services.RentEntryApiService();
   const notificationService = new Services.NotificationService();
+
+  // Identification, cheapest tier first. The alias store is what makes the
+  // second receipt from a shop mostly free, so it gets the API backend that
+  // keeps corrections between sessions; the dictionary and the model sit
+  // behind it in that order.
+  const labelNormalizerService = new Services.LabelNormalizerService();
+  const itemAliasStoreService = new Services.ItemAliasStoreService(
+    labelNormalizerService,
+    new Services.ItemAliasApiService()
+  );
+  const dictionaryResolverService = new Services.DictionaryResolverService(labelNormalizerService);
+  const itemIdentityService = new Services.ItemIdentityService(
+    itemAliasStoreService,
+    dictionaryResolverService,
+    new Services.ItemIdentityApiService()
+  );
   const elements = new UI.DomRegistryFactory().create();
   const categoryPromptView = new UI.CategoryPromptView(categories, elements);
   const splitWorkspaceView = new UI.SplitWorkspaceView(currencyFormatService, receiptApiService);
@@ -49,7 +65,9 @@ namespace ReceiptRing {
     peopleApiService,
     rentEntryApiService,
     rentEntriesView,
-    notificationService
+    notificationService,
+    itemIdentityService,
+    itemAliasStoreService
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.

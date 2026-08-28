@@ -141,6 +141,23 @@
                     <option>Other</option>
                   </select>
                 </div>
+                <div class="field identify-field">
+                  <span class="field-label">Item names</span>
+                  <button class="btn btn-secondary" id="identifyItemsButton" type="button">
+                    <svg viewBox="0 0 24 24" class="btn-icon" fill="none" aria-hidden="true" focusable="false">
+                      <circle cx="10.5" cy="10.5" r="6" stroke="currentColor" stroke-width="1.8" />
+                      <path d="m15 15 4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    </svg>
+                    Identify items
+                  </button>
+                </div>
+              </div>
+
+              <div class="identify-status hidden" id="identifyStatus" aria-live="polite">
+                <span id="identifyStatusText">Identifying items…</span>
+                <span class="identify-progress">
+                  <span id="identifyProgressBar"></span>
+                </span>
               </div>
 
               <div class="batch-bar hidden" id="batchBar" role="group" aria-label="Edit the selected lines">
