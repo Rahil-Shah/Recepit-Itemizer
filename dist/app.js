@@ -2607,7 +2607,7 @@ var ReceiptRing;
                 cell.append(details);
                 return cell;
             }
-            buildItemDetailBody(line, identification, _handlers) {
+            buildItemDetailBody(line, identification, handlers) {
                 const body = document.createElement("div");
                 body.className = "item-detail-body";
                 const heading = document.createElement("p");
@@ -2636,7 +2636,65 @@ var ReceiptRing;
                     reasoning.textContent = identification.reasoning;
                     body.append(reasoning);
                 }
+                if (identification.alternatives.length > 0) {
+                    body.append(this.buildAlternatives(line, identification, handlers));
+                }
+                body.append(this.buildIdentificationForm(line, identification, handlers));
                 return body;
+            }
+            buildAlternatives(line, identification, handlers) {
+                const group = document.createElement("div");
+                group.className = "item-detail-alternatives";
+                const label = document.createElement("span");
+                label.className = "item-detail-subhead";
+                label.textContent = identification.source === "unresolved" ? "Best guess" : "Or maybe";
+                group.append(label);
+                identification.alternatives.forEach((candidate) => {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "item-detail-alternative";
+                    button.textContent = candidate.name;
+                    button.title = `Use "${candidate.name}" and remember it`;
+                    button.addEventListener("click", () => handlers.onIdentificationConfirm(line.id, candidate.name));
+                    group.append(button);
+                });
+                return group;
+            }
+            buildIdentificationForm(line, identification, handlers) {
+                const form = document.createElement("form");
+                form.className = "item-detail-form";
+                const input = document.createElement("input");
+                input.type = "text";
+                input.className = "table-input";
+                input.value =
+                    identification.source === "unresolved" ? "" : identification.resolvedName;
+                input.placeholder = "What is this item?";
+                input.setAttribute("aria-label", `Name for ${line.label}`);
+                const actions = document.createElement("div");
+                actions.className = "item-detail-actions";
+                const confirm = document.createElement("button");
+                confirm.type = "submit";
+                confirm.className = "btn btn-primary btn-small";
+                confirm.textContent = identification.confirmed ? "Update" : "This is right";
+                actions.append(confirm);
+                if (identification.confirmed) {
+                    const forget = document.createElement("button");
+                    forget.type = "button";
+                    forget.className = "btn btn-ghost btn-small";
+                    forget.textContent = "Forget";
+                    forget.title = "Stop remembering this name for this item";
+                    forget.addEventListener("click", () => handlers.onIdentificationClear(line.id));
+                    actions.append(forget);
+                }
+                form.addEventListener("submit", (event) => {
+                    event.preventDefault();
+                    const name = input.value.trim();
+                    if (!name)
+                        return;
+                    handlers.onIdentificationConfirm(line.id, name);
+                });
+                form.append(input, actions);
+                return form;
             }
             appendFact(list, label, value) {
                 const term = document.createElement("dt");
@@ -3620,7 +3678,9 @@ var ReceiptRing;
                     onLineFood: (lineId, isFood) => this.toggleLineFood(lineId, isFood),
                     onBatchAssign: (personId) => this.toggleSelectedLinesFor(personId),
                     onBatchFood: (isFood) => this.setSelectedLinesFood(isFood),
-                    onBatchIgnore: (ignored) => this.setSelectedLinesIgnored(ignored)
+                    onBatchIgnore: (ignored) => this.setSelectedLinesIgnored(ignored),
+                    onIdentificationConfirm: (lineId, name) => this.confirmIdentification(lineId, name),
+                    onIdentificationClear: (lineId) => this.clearIdentification(lineId)
                 };
                 this.splitWorkspaceView.renderLines(this.elements.receiptLinesList, this.receiptLines, this.assignments, this.people, this.lineModes, new Set(this.lineSelectionService.ids()), this.identifications, handlers);
                 this.splitWorkspaceView.renderPeople(this.elements.peopleList, this.people, handlers);
@@ -3769,6 +3829,50 @@ var ReceiptRing;
                     this.isIdentifying = false;
                     this.elements.identifyItemsButton.removeAttribute("disabled");
                 }
+            }
+            confirmIdentification(lineId, name) {
+                const line = this.receiptLines.find((candidate) => candidate.id === lineId);
+                if (!line)
+                    return;
+                const previous = this.identifications.get(lineId);
+                const confirmed = {
+                    lineId,
+                    rawLabel: line.label,
+                    ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+                    resolvedName: name,
+                    ...(previous && previous.resolvedName === name
+                        ? {
+                            ...(previous.brand ? { brand: previous.brand } : {}),
+                            ...(previous.size ? { size: previous.size } : {})
+                        }
+                        : {}),
+                    confidence: 1,
+                    source: "user-confirmed",
+                    alternatives: [],
+                    confirmed: true
+                };
+                this.identifications.set(lineId, confirmed);
+                this.itemAliasStoreService.remember(confirmed, this.elements.storeNameInput.value.trim());
+                this.closeItemDetail(lineId);
+                this.render();
+            }
+            clearIdentification(lineId) {
+                const identification = this.identifications.get(lineId);
+                if (!identification)
+                    return;
+                const alias = this.itemAliasStoreService.find({ id: lineId, label: identification.rawLabel, amount: 0, confidence: 0, ignored: false,
+                    ...(identification.itemCode ? { itemCode: identification.itemCode } : {}) }, this.elements.storeNameInput.value.trim());
+                if (alias)
+                    this.itemAliasStoreService.forget(alias);
+                this.identifications.delete(lineId);
+                this.closeItemDetail(lineId);
+                this.render();
+            }
+            closeItemDetail(lineId) {
+                const selector = `details.item-detail-dropdown[data-line-id="${CSS.escape(lineId)}"]`;
+                const details = this.elements.receiptLinesList.querySelector(selector);
+                if (details)
+                    details.open = false;
             }
             setIdentifyStatus(progress) {
                 const stageFloor = {

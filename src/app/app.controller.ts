@@ -344,7 +344,9 @@ namespace ReceiptRing.App {
         onLineFood: (lineId, isFood) => this.toggleLineFood(lineId, isFood),
         onBatchAssign: (personId) => this.toggleSelectedLinesFor(personId),
         onBatchFood: (isFood) => this.setSelectedLinesFood(isFood),
-        onBatchIgnore: (ignored) => this.setSelectedLinesIgnored(ignored)
+        onBatchIgnore: (ignored) => this.setSelectedLinesIgnored(ignored),
+        onIdentificationConfirm: (lineId, name) => this.confirmIdentification(lineId, name),
+        onIdentificationClear: (lineId) => this.clearIdentification(lineId)
       };
 
       this.splitWorkspaceView.renderLines(
@@ -604,6 +606,82 @@ namespace ReceiptRing.App {
         this.isIdentifying = false;
         this.elements.identifyItemsButton.removeAttribute("disabled");
       }
+    }
+
+    /**
+     * Takes the user's word for what a line is.
+     *
+     * The name is remembered as an alias, so the same item on the next receipt
+     * from this store resolves for free and at full confidence. That is the
+     * whole economic argument for the feature: corrections compound, and a
+     * correction that only fixed the row in front of you would not.
+     */
+    private confirmIdentification(lineId: string, name: string): void {
+      const line = this.receiptLines.find((candidate) => candidate.id === lineId);
+      if (!line) return;
+
+      const previous = this.identifications.get(lineId);
+      const confirmed: Domain.ItemIdentification = {
+        lineId,
+        rawLabel: line.label,
+        ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+        resolvedName: name,
+        // Brand and size came from a guess that has just been overruled, so
+        // they are only kept when the name itself was left alone -- correcting
+        // "Sliced Mozzarella" to "Brie" must not leave Great Value attached.
+        ...(previous && previous.resolvedName === name
+          ? {
+              ...(previous.brand ? { brand: previous.brand } : {}),
+              ...(previous.size ? { size: previous.size } : {})
+            }
+          : {}),
+        confidence: 1,
+        source: "user-confirmed",
+        alternatives: [],
+        confirmed: true
+      };
+
+      this.identifications.set(lineId, confirmed);
+      this.itemAliasStoreService.remember(confirmed, this.elements.storeNameInput.value.trim());
+      this.closeItemDetail(lineId);
+      this.render();
+    }
+
+    /**
+     * Forgets a confirmed name, here and for future receipts.
+     *
+     * The row falls back to the receipt's own text rather than to the guess
+     * that preceded it: the user has just said that answer was wrong, and
+     * quietly restoring it would be the app arguing back.
+     */
+    private clearIdentification(lineId: string): void {
+      const identification = this.identifications.get(lineId);
+      if (!identification) return;
+
+      const alias = this.itemAliasStoreService.find(
+        { id: lineId, label: identification.rawLabel, amount: 0, confidence: 0, ignored: false,
+          ...(identification.itemCode ? { itemCode: identification.itemCode } : {}) },
+        this.elements.storeNameInput.value.trim()
+      );
+      if (alias) this.itemAliasStoreService.forget(alias);
+
+      this.identifications.delete(lineId);
+      this.closeItemDetail(lineId);
+      this.render();
+    }
+
+    /**
+     * Shuts the popup for a line before the re-render that follows.
+     *
+     * renderLines restores whichever popups were open, which is right while
+     * someone is working inside one and wrong the moment they have finished:
+     * confirming a name and watching the panel stay put reads as the click not
+     * having landed.
+     */
+    private closeItemDetail(lineId: string): void {
+      const selector = `details.item-detail-dropdown[data-line-id="${CSS.escape(lineId)}"]`;
+      const details = this.elements.receiptLinesList.querySelector<HTMLDetailsElement>(selector);
+      if (details) details.open = false;
     }
 
     private setIdentifyStatus(progress: Services.IdentifyProgress): void {

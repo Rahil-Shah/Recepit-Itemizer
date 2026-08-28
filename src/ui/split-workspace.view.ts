@@ -10,6 +10,10 @@ namespace ReceiptRing.UI {
     onBatchAssign(personId: string): void;
     onBatchFood(isFood: boolean): void;
     onBatchIgnore(ignored: boolean): void;
+    // A name the user settled on, either typed or picked from the runners-up.
+    // Both arrive here because both mean the same thing: this is the answer.
+    onIdentificationConfirm(lineId: string, name: string): void;
+    onIdentificationClear(lineId: string): void;
   }
 
   /**
@@ -258,7 +262,7 @@ namespace ReceiptRing.UI {
     private buildItemDetailBody(
       line: Domain.ReceiptLine,
       identification: Domain.ItemIdentification,
-      _handlers: SplitWorkspaceHandlers
+      handlers: SplitWorkspaceHandlers
     ): HTMLElement {
       const body = document.createElement("div");
       body.className = "item-detail-body";
@@ -293,7 +297,106 @@ namespace ReceiptRing.UI {
         body.append(reasoning);
       }
 
+      if (identification.alternatives.length > 0) {
+        body.append(this.buildAlternatives(line, identification, handlers));
+      }
+
+      body.append(this.buildIdentificationForm(line, identification, handlers));
+
       return body;
+    }
+
+    /**
+     * The runners-up, as one click each.
+     *
+     * A wrong first guess usually has the right answer sitting just behind it,
+     * and retyping a name the app already considered is busywork. Picking one
+     * confirms it outright rather than merely swapping the display: the user
+     * choosing between candidates *is* the judgement the app was missing.
+     */
+    private buildAlternatives(
+      line: Domain.ReceiptLine,
+      identification: Domain.ItemIdentification,
+      handlers: SplitWorkspaceHandlers
+    ): HTMLElement {
+      const group = document.createElement("div");
+      group.className = "item-detail-alternatives";
+
+      const label = document.createElement("span");
+      label.className = "item-detail-subhead";
+      label.textContent = identification.source === "unresolved" ? "Best guess" : "Or maybe";
+      group.append(label);
+
+      identification.alternatives.forEach((candidate) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "item-detail-alternative";
+        button.textContent = candidate.name;
+        button.title = `Use "${candidate.name}" and remember it`;
+        button.addEventListener("click", () =>
+          handlers.onIdentificationConfirm(line.id, candidate.name)
+        );
+        group.append(button);
+      });
+
+      return group;
+    }
+
+    /**
+     * Where a correction is made.
+     *
+     * The field starts on the current name, so confirming an answer that is
+     * already right and correcting one that is nearly right are the same
+     * gesture with different amounts of typing. A form, so Enter submits --
+     * the whole point is that this is quick.
+     */
+    private buildIdentificationForm(
+      line: Domain.ReceiptLine,
+      identification: Domain.ItemIdentification,
+      handlers: SplitWorkspaceHandlers
+    ): HTMLElement {
+      const form = document.createElement("form");
+      form.className = "item-detail-form";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "table-input";
+      input.value =
+        identification.source === "unresolved" ? "" : identification.resolvedName;
+      input.placeholder = "What is this item?";
+      input.setAttribute("aria-label", `Name for ${line.label}`);
+
+      const actions = document.createElement("div");
+      actions.className = "item-detail-actions";
+
+      const confirm = document.createElement("button");
+      confirm.type = "submit";
+      confirm.className = "btn btn-primary btn-small";
+      confirm.textContent = identification.confirmed ? "Update" : "This is right";
+
+      actions.append(confirm);
+
+      // Only offered once there is something saved to undo. On a fresh guess
+      // it would be a button that clears a field the user has not filled in.
+      if (identification.confirmed) {
+        const forget = document.createElement("button");
+        forget.type = "button";
+        forget.className = "btn btn-ghost btn-small";
+        forget.textContent = "Forget";
+        forget.title = "Stop remembering this name for this item";
+        forget.addEventListener("click", () => handlers.onIdentificationClear(line.id));
+        actions.append(forget);
+      }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const name = input.value.trim();
+        if (!name) return;
+        handlers.onIdentificationConfirm(line.id, name);
+      });
+
+      form.append(input, actions);
+      return form;
     }
 
     private appendFact(list: HTMLElement, label: string, value: string): void {

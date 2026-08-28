@@ -3169,3 +3169,62 @@ input[type="number"] {
   font-style: italic;
   line-height: 1.4;
 }
+
+/* The runners-up, one click each. A wrong first guess usually has the right
+   answer sitting just behind it, and retyping a name the app already
+   considered is busywork. */
+.item-detail-alternatives {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.item-detail-subhead {
+  width: 100%;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.item-detail-alternative {
+  padding: 4px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--well);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.item-detail-alternative:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+/* Where a correction is made. The field starts on the current name, so
+   confirming an answer that is already right and fixing one that is nearly
+   right are the same gesture with different amounts of typing. */
+.item-detail-form {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.item-detail-form .table-input {
+  width: 100%;
+}
+
+.item-detail-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.item-detail-actions .btn {
+  flex: 1;
+}
