@@ -31,13 +31,48 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
   - **Split by Percentage**: Allocate item shares based on custom percentages.
   - **Split by Custom Amount**: Assign exact cost allocations to individuals.
 - **Per-line People Assignment**: Each receipt line has a dropdown of the people you've added — check/uncheck to assign, choose even / percentage / custom-amount split per line.
-- **Batch Select**: Tick several lines (or the header checkbox for all of them, shift-click for a run) and a bar appears above the table: one click puts a person on every selected line, clicking their name again takes them off, and the same bar marks the selection as food or ignores it. Escape clears the selection.
+- **Batch Select**: Tick several lines (or the header checkbox for all of them, shift-click for a run) and a bar appears above the table: one click puts a person on every selected line, clicking their name again takes them off, and the same bar marks the selection as food, ignores it, or identifies just those items. Escape clears the selection.
 - **Tax Auto-Calculation**: Input tax and automatically distribute it proportionally based on each person's subtotal.
+- **Item Identification**: Receipts print shorthand — `GV SHRD MOZZ 8Z` — which is unreadable weeks later. Hit **Identify items** and every line gets its real product name, with a confidence score. Click any item to see what the receipt printed, its item code, brand, size, where the answer came from and why; correct it, or pick one of the alternatives. Corrections are remembered, so the same item on your next receipt from that shop is named for free.
 - **Smart Categorization**: Categorize receipt items (Dining, Groceries, Travel, etc.) and save defaults for specific items. Receipt category defaults to **Groceries**.
 - **Saved History (Postgres)**: Save a split to a Postgres database and review previous receipts, items, prices, and per-person splits under the **History** tab.
 - **Bank Connection (Plaid)**: Securely link a bank through [Plaid Link](https://plaid.com/docs/link/) to import **read-only** transactions. Access tokens are exchanged server-side and stored AES-256-GCM encrypted at rest — they never reach the browser.
 - **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
+
+---
+
+## 🔍 How item identification works
+
+Receipt shorthand is ambiguous, so identification runs in tiers — cheapest
+first, and each tier only ever sees what the one before it could not place:
+
+| Tier | What it is | Cost | Confidence |
+| --- | --- | --- | --- |
+| 1 | **Names you confirmed before**, looked up by item code or label, scoped to the store | free, instant | 100% |
+| 2 | **Local abbreviation dictionary** — `GV`→Great Value, `MLK`→Milk, `8Z`→8 oz | free, instant | up to 90% |
+| 3 | **Gemini**, one batched request for the whole receipt | one API call | self-reported, clamped |
+| 4 | **Unresolved** — the app says it doesn't know rather than guessing | — | — |
+
+A few consequences worth knowing:
+
+- **Corrections compound.** Confirming a name saves it against the item's
+  code (or its label) for that store. Your second Costco receipt is mostly
+  named before Gemini is called at all.
+- **The item code is used when the receipt prints one.** `007874203922` names
+  a product unambiguously in a way `GV SHRD MOZZ 8Z` never can, so the parser
+  keeps it and the lookup prefers it.
+- **A confidence chip only appears when it should change what you do.** Nothing
+  is shown on a name you confirmed, or on one the app is confident about.
+- **Nothing is invented.** A line the tiers cannot place is reported as
+  unidentified, keeping any low-confidence guess as an alternative rather than
+  presenting it as the answer.
+- **It costs money per receipt**, so the identify endpoint is rate limited
+  separately from the rest of the API, and the free tiers run first
+  specifically to shrink what reaches the model.
+
+Identifications are saved with the receipt, so reopening it from **History**
+shows the names without paying for them again.
 
 ---
 
@@ -168,5 +203,9 @@ migrations under `prisma/migrations/`.
 2. **Parse**: The image is sent to the Gemini API, which returns the structured line items, discounts, and totals.
 3. **Itemize**: You can also paste raw receipt text and click **Itemize receipt** to detect lines locally.
 4. **Add People**: Enter names of individuals to add them to the splitting roster.
-5. **Assign**: Open a line's dropdown to assign it, or tick several lines and click a name in the batch bar to assign them all at once.
-6. **Settle Up**: Review individual totals under the **Split** panel including taxes.
+5. **Identify** (optional): Click **Identify items** to turn abbreviated line
+   items into real product names. Click any item to check, correct, or rename
+   it — corrections are remembered for next time. With lines selected, the
+   batch bar's **Identify** does just those.
+6. **Assign**: Open a line's dropdown to assign it, or tick several lines and click a name in the batch bar to assign them all at once.
+7. **Settle Up**: Review individual totals under the **Split** panel including taxes.
