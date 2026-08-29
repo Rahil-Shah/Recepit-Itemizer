@@ -211,13 +211,31 @@ function serializeAlias(alias) {
   };
 }
 
+/**
+ * Whether the alias table is actually reachable.
+ *
+ * `prisma.itemAlias` is undefined when the generated client predates the model
+ * -- which is exactly what happens after pulling a schema change without
+ * regenerating. That produced a TypeError deep inside the route and a 500 with
+ * a stack trace, when the honest answer is that this feature is not wired up
+ * yet on this machine.
+ */
+function aliasStoreReady(prisma) {
+  return Boolean(prisma?.itemAlias);
+}
+
 export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) {
+  const aliasUnavailable = (res) =>
+    res.status(503).json({
+      error: "Saved item names are unavailable. Run `npm run db:migrate` to set them up."
+    });
+
   // Every alias this user has. The browser does its own lookups against the
   // whole set rather than asking per line: a receipt is forty questions, the
   // table is small, and forty round trips to answer them would be slower than
   // the model call this is meant to avoid.
   app.get("/api/item-aliases", requireAuth, async (req, res) => {
-    if (!prisma) return res.status(503).json({ error: "Alias storage is unavailable." });
+    if (!aliasStoreReady(prisma)) return aliasUnavailable(res);
     try {
       const aliases = await prisma.itemAlias.findMany({
         where: { userId: req.userId },
@@ -234,7 +252,7 @@ export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) 
   // a different one starts the count over, so a fresh answer cannot inherit
   // the authority of the one it replaced.
   app.put("/api/item-aliases", requireAuth, async (req, res) => {
-    if (!prisma) return res.status(503).json({ error: "Alias storage is unavailable." });
+    if (!aliasStoreReady(prisma)) return aliasUnavailable(res);
 
     const alias = validateAlias(req.body);
     if (!alias) {
@@ -269,7 +287,7 @@ export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) 
   // lookup key is arbitrary user text and would need escaping to survive a
   // path segment intact.
   app.delete("/api/item-aliases", requireAuth, async (req, res) => {
-    if (!prisma) return res.status(503).json({ error: "Alias storage is unavailable." });
+    if (!aliasStoreReady(prisma)) return aliasUnavailable(res);
 
     const lookupKey = typeof req.query?.lookupKey === "string" ? req.query.lookupKey : "";
     if (!lookupKey) return res.status(400).json({ error: "lookupKey is required." });

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Minimal receipt itemizer and spending category ring.",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "prisma generate && tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
     "build:tests": "tsc -p tests/tsconfig.json",
     "test": "npm run build:tests && node --test tests/*.test.mjs",
@@ -13,7 +13,7 @@
     "db:down": "docker compose down",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "serve": "node server.mjs",
+    "serve": "prisma generate && node server.mjs",
     "start": "npm run build && node server.mjs",
     "dev": "node --watch server.mjs"
   },
