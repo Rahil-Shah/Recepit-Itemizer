@@ -24,6 +24,13 @@ namespace ReceiptRing.App {
     // finish instantly, but the model does not, and a double-click would buy
     // the same answers twice.
     private isIdentifying = false;
+    // The photo a parse failed on, so a retry has something to send.
+    //
+    // Held here rather than read back off the file input, because the input is
+    // emptied the moment the file is in hand -- picking the same file twice
+    // fires no change event, so by the time a parse fails there is nothing
+    // left there to go back to.
+    private failedParseFile: File | null = null;
     private receiptCategory: Domain.ReceiptCategory = "Groceries";
     private cameraStream: MediaStream | null = null;
     private isPromptingForCategories = false;
@@ -282,6 +289,10 @@ namespace ReceiptRing.App {
       this.identifications.clear();
       this.lineSelectionService.clear();
       this.receiptImage = null;
+      // Removing the photo has to drop the retry with it. Otherwise "Try
+      // again" would re-upload an image the user had deliberately taken away,
+      // which is the app overruling them about their own receipt.
+      this.failedParseFile = null;
       this.hideOcrStatus();
     }
 
@@ -777,11 +788,13 @@ namespace ReceiptRing.App {
 
         this.applyParsedReceiptJson(result);
 
+        this.failedParseFile = null;
         this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`, 1);
         window.setTimeout(() => this.hideOcrStatus(), 1600);
       } catch (error) {
         console.error("Gemini receipt parsing failed:", error);
         const message = error instanceof Error ? error.message : "Could not extract text from this receipt.";
+        this.failedParseFile = file;
         this.setOcrStatus(message, 1);
       } finally {
         this.elements.parseButton.removeAttribute("disabled");
@@ -1047,6 +1060,8 @@ namespace ReceiptRing.App {
     }
 
     private processReceiptImage(file: File): void {
+      // Whatever failed before is not what the user is looking at now.
+      this.failedParseFile = null;
       this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
       this.setOcrStatus(`Loaded ${file.name || "receipt image"}`, 0.02);
       // Start shrinking the photo now so it is ready by the time the parse
