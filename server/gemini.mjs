@@ -228,24 +228,33 @@ export async function resolveApiKeyOrRespond(prisma, req, res) {
  * Resolves to { ok, status, text }. Upstream failures are reported, not thrown
  * -- each route words its own error, and a 429 from Google is not a bug here.
  */
-export async function callGemini({ apiKey, model, parts }) {
+export async function callGemini({ apiKey, model, parts, tools }) {
   if (!MODEL_RE.test(model)) {
     return { ok: false, status: 400, text: "Invalid model name." };
   }
 
-  const url = `${GEMINI_HOST}/v1/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  // Grounding tools only exist on v1beta, so a grounded call has to go there.
+  // Ungrounded calls stay on v1: it is the stable surface and the receipt
+  // parser has been working against it.
+  const apiVersion = tools ? "v1beta" : "v1";
+  const url = `${GEMINI_HOST}/${apiVersion}/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const startTime = Date.now();
 
   const upstream = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contents: [{ parts }] }),
+    body: JSON.stringify({ contents: [{ parts }], ...(tools ? { tools } : {}) }),
     signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
   });
 
   console.log(`Gemini response received in ${Date.now() - startTime}ms`);
   return { ok: upstream.ok, status: upstream.status, text: await upstream.text() };
 }
+
+// Lets the model run a Google search before answering. Confirmed against the
+// REST docs: the field is `google_search` (older models used
+// `google_search_retrieval`), and it is only accepted on v1beta.
+export const GOOGLE_SEARCH_TOOL = [{ google_search: {} }];
 
 /**
  * A short, safe description of an upstream failure. Google's error bodies are
@@ -262,14 +271,43 @@ export function describeUpstreamError(upstream) {
   }
 }
 
-/** Pulls the model's text out of a generateContent response body. */
+/**
+ * Pulls the model's text out of a generateContent response body.
+ *
+ * A grounded reply can arrive in several parts -- search results and prose
+ * alongside the answer -- so every text part is joined rather than only the
+ * first, which silently returned the wrong half of the response.
+ */
 export function extractResponseText(rawBody) {
   const json = JSON.parse(rawBody);
-  const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof text !== "string" || !text) {
+  const parts = json?.candidates?.[0]?.content?.parts;
+  const text = Array.isArray(parts)
+    ? parts.map((part) => (typeof part?.text === "string" ? part.text : "")).join("")
+    : "";
+  if (!text) {
     throw new Error("No response text returned from Gemini.");
   }
   return text.trim().replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+}
+
+/**
+ * The JSON object inside a model's reply.
+ *
+ * Grounded answers are chattier than plain ones: they open with a sentence
+ * about what was searched, or wrap the object in a fence the prompt asked them
+ * not to use. Rather than trust the whole string to be JSON, take the span
+ * from the first brace to the last -- which is the object when there is one,
+ * and fails the same way as before when there is not.
+ */
+export function parseJsonFromReply(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start === -1 || end <= start) throw new Error("No JSON object in the model's reply.");
+    return JSON.parse(text.slice(start, end + 1));
+  }
 }
 
 export function registerGemini(app, requireAuth, prisma) {

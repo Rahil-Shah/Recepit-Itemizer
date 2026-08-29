@@ -10,9 +10,11 @@
 // way /api/gemini/parse does, through the shared helpers.
 
 import {
+  GOOGLE_SEARCH_TOOL,
   callGemini,
   describeUpstreamError,
   extractResponseText,
+  parseJsonFromReply,
   resolveApiKeyOrRespond,
   serverGeminiModel
 } from "./gemini.mjs";
@@ -321,12 +323,23 @@ export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) 
 
     const model = String(req.body?.model || serverGeminiModel());
 
+    const parts = [{ text: buildIdentifyPrompt(request.items, request.storeName) }];
+
     try {
-      const upstream = await callGemini({
-        apiKey,
-        model,
-        parts: [{ text: buildIdentifyPrompt(request.items, request.storeName) }]
-      });
+      // Grounded first: a store SKU means nothing to a model's own memory, but
+      // it is often a single search away -- retailers put their own item
+      // numbers on the product page.
+      let upstream = await callGemini({ apiKey, model, parts, tools: GOOGLE_SEARCH_TOOL });
+
+      // Not every model or project has search enabled, and a refusal comes
+      // back as a 400 about the tool rather than as a capability flag we could
+      // check up front. Falling back beats failing: an ungrounded answer is
+      // worth more than none, and the alternative is the feature going dark
+      // for anyone whose key cannot ground.
+      if (!upstream.ok && upstream.status === 400) {
+        console.warn("Grounded identify refused, retrying without search:", upstream.text.slice(0, 200));
+        upstream = await callGemini({ apiKey, model, parts });
+      }
 
       if (!upstream.ok) {
         console.error("Gemini identify error:", upstream.status, upstream.text.slice(0, 300));
@@ -335,7 +348,7 @@ export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) 
         });
       }
 
-      const parsed = JSON.parse(extractResponseText(upstream.text));
+      const parsed = parseJsonFromReply(extractResponseText(upstream.text));
       const items = normalizeIdentifyResponse(
         parsed,
         request.items.map((item) => item.id)
