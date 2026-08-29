@@ -568,6 +568,16 @@ input[type="number"] {
   display: none !important;
 }
 
+/* The retry sits inside the status block, beside the message that explains why
+   it is there. A failure and its remedy in the same place. */
+.ocr-retry {
+  justify-self: start;
+}
+
+.ocr-retry.hidden {
+  display: none !important;
+}
+
 .ocr-progress {
   overflow: hidden;
   height: 4px;

@@ -9,6 +9,7 @@ namespace ReceiptRing.UI {
     ocrStatus: HTMLElement;
     ocrStatusText: HTMLElement;
     ocrProgressBar: HTMLElement;
+    retryParseButton: HTMLButtonElement;
     receiptText: HTMLTextAreaElement;
     openCameraButton: HTMLButtonElement;
     cameraModal: HTMLElement;
@@ -130,6 +131,7 @@ namespace ReceiptRing.UI {
         ocrStatus: this.getElement("#ocrStatus", HTMLElement),
         ocrStatusText: this.getElement("#ocrStatusText", HTMLElement),
         ocrProgressBar: this.getElement("#ocrProgressBar", HTMLElement),
+        retryParseButton: this.getElement("#retryParseButton", HTMLButtonElement),
         receiptText: this.getElement("#receiptText", HTMLTextAreaElement),
         openCameraButton: this.getElement("#openCameraButton", HTMLButtonElement),
         cameraModal: this.getElement("#cameraModal", HTMLElement),

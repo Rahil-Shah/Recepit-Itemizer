@@ -24,6 +24,11 @@ namespace ReceiptRing.App {
     // finish instantly, but the model does not, and a double-click would buy
     // the same answers twice.
     private isIdentifying = false;
+    // Guards against a second parse starting on top of a running one. Two
+    // in-flight parses race to write the same receipt, so the slower reply
+    // could overwrite the faster one and leave the workspace showing a result
+    // the user did not ask for -- while charging for both.
+    private isParsing = false;
     // The photo a parse failed on, so a retry has something to send.
     //
     // Held here rather than read back off the file input, because the input is
@@ -112,6 +117,7 @@ namespace ReceiptRing.App {
       });
       this.elements.receiptImage.addEventListener("change", () => this.handleImageInput());
       this.elements.clearImageButton.addEventListener("click", () => this.clearImage());
+      this.elements.retryParseButton.addEventListener("click", () => void this.retryParse());
       this.elements.parseButton.addEventListener("click", () => this.itemizeReceiptText());
       this.elements.clearButton.addEventListener("click", () => this.clearReceipt());
       this.elements.selectAllLines.addEventListener("change", () => this.toggleSelectAll());
@@ -777,6 +783,8 @@ namespace ReceiptRing.App {
         return;
       }
 
+      if (this.isParsing) return;
+      this.isParsing = true;
       this.setOcrStatus("Analyzing receipt with Gemini...", 0.15);
       this.elements.parseButton.setAttribute("disabled", "true");
 
@@ -797,7 +805,9 @@ namespace ReceiptRing.App {
         this.failedParseFile = file;
         this.setOcrStatus(message, 1);
       } finally {
+        this.isParsing = false;
         this.elements.parseButton.removeAttribute("disabled");
+        this.renderRetryButton();
       }
     }
 
@@ -999,13 +1009,40 @@ namespace ReceiptRing.App {
 
     private setOcrStatus(label: string, progress: number): void {
       this.elements.ocrStatus.classList.remove("hidden");
+      // textContent, never innerHTML. This string can carry an error message
+      // that originated at Gemini and was passed through the server, so it is
+      // upstream text on a page -- it gets rendered, never parsed.
       this.elements.ocrStatusText.textContent = label;
       this.elements.ocrProgressBar.style.width = `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
+      this.renderRetryButton();
     }
 
     private hideOcrStatus(): void {
       this.elements.ocrStatus.classList.add("hidden");
       this.elements.ocrProgressBar.style.width = "0%";
+      this.renderRetryButton();
+    }
+
+    /**
+     * The retry offer, shown only while there is a photo to retry and no parse
+     * already running.
+     *
+     * Driven off state rather than toggled at each call site: every path that
+     * ends a parse would otherwise have to remember to hide it, and the one
+     * that forgot would leave a button that silently re-sends a stale photo.
+     */
+    private renderRetryButton(): void {
+      const canRetry = this.failedParseFile !== null && !this.isParsing;
+      this.elements.retryParseButton.classList.toggle("hidden", !canRetry);
+      this.elements.retryParseButton.disabled = !canRetry;
+    }
+
+    /** Sends the photo the last parse failed on back through the parser. */
+    private async retryParse(): Promise<void> {
+      const file = this.failedParseFile;
+      if (!file || this.isParsing) return;
+
+      await this.extractAndItemizeReceipt(file);
     }
 
     private async openCamera(): Promise<void> {

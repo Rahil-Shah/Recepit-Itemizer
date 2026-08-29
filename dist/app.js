@@ -2132,6 +2132,7 @@ var ReceiptRing;
                     ocrStatus: this.getElement("#ocrStatus", HTMLElement),
                     ocrStatusText: this.getElement("#ocrStatusText", HTMLElement),
                     ocrProgressBar: this.getElement("#ocrProgressBar", HTMLElement),
+                    retryParseButton: this.getElement("#retryParseButton", HTMLButtonElement),
                     receiptText: this.getElement("#receiptText", HTMLTextAreaElement),
                     openCameraButton: this.getElement("#openCameraButton", HTMLButtonElement),
                     cameraModal: this.getElement("#cameraModal", HTMLElement),
@@ -3486,6 +3487,8 @@ var ReceiptRing;
                 this.foodFlags = new Map();
                 this.identifications = new Map();
                 this.isIdentifying = false;
+                this.isParsing = false;
+                this.failedParseFile = null;
                 this.receiptCategory = "Groceries";
                 this.cameraStream = null;
                 this.isPromptingForCategories = false;
@@ -3524,6 +3527,7 @@ var ReceiptRing;
                 });
                 this.elements.receiptImage.addEventListener("change", () => this.handleImageInput());
                 this.elements.clearImageButton.addEventListener("click", () => this.clearImage());
+                this.elements.retryParseButton.addEventListener("click", () => void this.retryParse());
                 this.elements.parseButton.addEventListener("click", () => this.itemizeReceiptText());
                 this.elements.clearButton.addEventListener("click", () => this.clearReceipt());
                 this.elements.selectAllLines.addEventListener("change", () => this.toggleSelectAll());
@@ -3675,6 +3679,7 @@ var ReceiptRing;
                 this.identifications.clear();
                 this.lineSelectionService.clear();
                 this.receiptImage = null;
+                this.failedParseFile = null;
                 this.hideOcrStatus();
             }
             setItemsFromParse(items) {
@@ -3970,22 +3975,29 @@ var ReceiptRing;
                     this.openSettings();
                     return;
                 }
+                if (this.isParsing)
+                    return;
+                this.isParsing = true;
                 this.setOcrStatus("Analyzing receipt with Gemini...", 0.15);
                 this.elements.parseButton.setAttribute("disabled", "true");
                 try {
                     const result = await this.geminiService.parseReceiptImage(file, model);
                     console.log("Gemini parsed receipt output:", result);
                     this.applyParsedReceiptJson(result);
+                    this.failedParseFile = null;
                     this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`, 1);
                     window.setTimeout(() => this.hideOcrStatus(), 1600);
                 }
                 catch (error) {
                     console.error("Gemini receipt parsing failed:", error);
                     const message = error instanceof Error ? error.message : "Could not extract text from this receipt.";
+                    this.failedParseFile = file;
                     this.setOcrStatus(message, 1);
                 }
                 finally {
+                    this.isParsing = false;
                     this.elements.parseButton.removeAttribute("disabled");
+                    this.renderRetryButton();
                 }
             }
             applyParsedReceiptJson(result) {
@@ -4159,10 +4171,23 @@ var ReceiptRing;
                 this.elements.ocrStatus.classList.remove("hidden");
                 this.elements.ocrStatusText.textContent = label;
                 this.elements.ocrProgressBar.style.width = `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
+                this.renderRetryButton();
             }
             hideOcrStatus() {
                 this.elements.ocrStatus.classList.add("hidden");
                 this.elements.ocrProgressBar.style.width = "0%";
+                this.renderRetryButton();
+            }
+            renderRetryButton() {
+                const canRetry = this.failedParseFile !== null && !this.isParsing;
+                this.elements.retryParseButton.classList.toggle("hidden", !canRetry);
+                this.elements.retryParseButton.disabled = !canRetry;
+            }
+            async retryParse() {
+                const file = this.failedParseFile;
+                if (!file || this.isParsing)
+                    return;
+                await this.extractAndItemizeReceipt(file);
             }
             async openCamera() {
                 if (!navigator.mediaDevices?.getUserMedia) {
@@ -4211,6 +4236,7 @@ var ReceiptRing;
                 this.processReceiptImage(file);
             }
             processReceiptImage(file) {
+                this.failedParseFile = null;
                 this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
                 this.setOcrStatus(`Loaded ${file.name || "receipt image"}`, 0.02);
                 this.receiptImage = this.receiptImageService.toStorableDataUrl(file);
