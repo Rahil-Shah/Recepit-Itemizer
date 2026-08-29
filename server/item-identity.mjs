@@ -26,6 +26,9 @@ const MAX_ITEMS_PER_REQUEST = 120;
 const MAX_LABEL_LENGTH = 200;
 const MAX_STORE_NAME_LENGTH = 120;
 const MAX_ALTERNATIVES = 3;
+// Upstream statuses that mean "grounding is not available to you", as opposed
+// to "your request was wrong". Both are worth retrying without the tool.
+const GROUNDING_FALLBACK_STATUSES = new Set([400, 429]);
 
 const PROMPT_HEADER = `You identify exactly which product each line of a store receipt refers to. You have Google Search. Use it.
 
@@ -350,16 +353,28 @@ export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) 
       // Grounded first: a store SKU means nothing to a model's own memory, but
       // it is often a single search away -- retailers put their own item
       // numbers on the product page.
+      let grounded = true;
       let upstream = await callGemini({ apiKey, model, parts, tools: GOOGLE_SEARCH_TOOL });
 
-      // Not every model or project has search enabled, and a refusal comes
-      // back as a 400 about the tool rather than as a capability flag we could
-      // check up front. Falling back beats failing: an ungrounded answer is
-      // worth more than none, and the alternative is the feature going dark
-      // for anyone whose key cannot ground.
-      if (!upstream.ok && upstream.status === 400) {
-        console.warn("Grounded identify refused, retrying without search:", upstream.text.slice(0, 200));
+      // Falling back beats failing. An ungrounded answer is worth more than
+      // none, and without this the whole feature goes dark for anyone whose
+      // key cannot ground right now.
+      //
+      // Two ways that happens, and neither is announced as a capability flag
+      // we could check up front:
+      //   400 - the model or project does not have search enabled at all.
+      //   429 - search grounding carries its own quota, separate from
+      //         generateContent's. It is entirely normal to have quota for the
+      //         plain call and none for the grounded one, which showed up here
+      //         as an ungrounded request returning 200 while a grounded one to
+      //         the same model, seconds apart, returned 429.
+      if (!upstream.ok && GROUNDING_FALLBACK_STATUSES.has(upstream.status)) {
+        console.warn(
+          `Grounded identify unavailable (${upstream.status}), retrying without search:`,
+          upstream.text.slice(0, 200)
+        );
         upstream = await callGemini({ apiKey, model, parts });
+        grounded = false;
       }
 
       if (!upstream.ok) {
@@ -375,7 +390,10 @@ export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) 
         request.items.map((item) => item.id)
       );
 
-      res.json({ items });
+      // Told to the browser so a caller can say why an answer is weaker than
+      // usual: without a search the model is working from the abbreviation
+      // alone, which is exactly the case this pass exists to improve on.
+      res.json({ items, grounded });
     } catch (error) {
       console.error("Item identification failed:", error);
       if (error?.name === "TimeoutError" || error?.name === "AbortError") {
