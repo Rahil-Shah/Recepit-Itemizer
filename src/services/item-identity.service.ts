@@ -122,13 +122,30 @@ namespace ReceiptRing.Services {
         message: "Expanding receipt shorthand..."
       });
 
+      // A line carrying an item code is skipped past the dictionary when there
+      // is an AI tier to send it to.
+      //
+      // The dictionary reads the abbreviation; the code identifies the product
+      // outright. Letting a name-based guess settle a line that had an exact
+      // identifier printed on it was the wrong answer arriving first and
+      // stopping the right one -- "GV SHRD MOZZ 8Z" expanded confidently
+      // enough to score 0.9 and never reach the lookup that would have named
+      // the actual product.
+      //
+      // The expansion is kept rather than thrown away: if the model comes back
+      // with nothing for that line, a decoded name still beats no name.
+      const dictionaryFallbacks = new Map<string, Domain.ItemIdentification>();
       const unresolvedByDictionary: Domain.ReceiptLine[] = [];
+
       unresolvedByAlias.forEach((line) => {
         const expansion = this.dictionaryResolverService.resolve(line);
-        if (expansion) {
+        const prefersCodeLookup = Boolean(line.itemCode) && this.aiIdentifier !== null;
+
+        if (expansion && !prefersCodeLookup) {
           resolved.set(line.id, expansion);
           return;
         }
+        if (expansion) dictionaryFallbacks.set(line.id, expansion);
         unresolvedByDictionary.push(line);
       });
 
@@ -156,8 +173,14 @@ namespace ReceiptRing.Services {
             resolved.set(line.id, answer);
             return;
           }
-          // Either the model said nothing about this line, or it said
-          // something it did not believe. Both are the same fact to a reader.
+          // The model had nothing, or nothing it believed. A dictionary
+          // expansion set aside earlier is better than admitting defeat, so
+          // take it back rather than reporting the line unread.
+          const fallback = dictionaryFallbacks.get(line.id);
+          if (fallback) {
+            resolved.set(line.id, fallback);
+            return;
+          }
           resolved.set(line.id, this.unresolved(line, answer ?? null));
         });
       } else {

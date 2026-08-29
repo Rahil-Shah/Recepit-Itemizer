@@ -327,3 +327,113 @@ test("keeps an answer the model did believe", async () => {
   assert.equal(answer.source, "ai");
   assert.equal(answer.resolvedName, "Quiznos Gift Card");
 });
+
+test("a line with an item code goes to the code lookup, not the dictionary", async () => {
+  const ai = recordingAi([
+    {
+      lineId: "l1",
+      rawLabel: "GV SHRD MOZZ 8Z",
+      resolvedName: "Great Value Finely Shredded Mozzarella Cheese",
+      confidence: 0.94,
+      source: "ai",
+      alternatives: [],
+      confirmed: false
+    }
+  ]);
+  const { service } = makeService(ai);
+
+  // The dictionary can expand this label confidently, but the receipt printed
+  // a SKU, and the SKU names the product exactly.
+  const result = await service.identify(
+    [line("l1", "GV SHRD MOZZ 8Z", { itemCode: "007874203922" })],
+    new Map()
+  );
+
+  assert.deepEqual(Array.from(ai.calls[0].requests), ["l1"]);
+  assert.equal(result.get("l1").source, "ai");
+  assert.equal(result.get("l1").resolvedName, "Great Value Finely Shredded Mozzarella Cheese");
+});
+
+test("a line with no item code still stops at the dictionary", async () => {
+  const ai = recordingAi();
+  const { service } = makeService(ai);
+
+  const result = await service.identify([line("l1", "GV SHRD MOZZ 8Z")], new Map());
+
+  assert.equal(ai.calls.length, 0);
+  assert.equal(result.get("l1").source, "dictionary");
+});
+
+test("keeps the dictionary expansion when the code lookup comes back empty", async () => {
+  const ai = recordingAi([]);
+  const { service } = makeService(ai);
+
+  const result = await service.identify(
+    [line("l1", "GV SHRD MOZZ 8Z", { itemCode: "007874203922" })],
+    new Map()
+  );
+
+  // Set aside, not thrown away: a decoded name beats no name at all.
+  assert.equal(result.get("l1").source, "dictionary");
+  assert.equal(result.get("l1").resolvedName, "Great Value Shredded Mozzarella");
+});
+
+test("keeps the dictionary expansion when the model answers without conviction", async () => {
+  const ai = recordingAi([
+    {
+      lineId: "l1",
+      rawLabel: "GV SHRD MOZZ 8Z",
+      resolvedName: "Possibly A Sponge",
+      confidence: 0.1,
+      source: "ai",
+      alternatives: [],
+      confirmed: false
+    }
+  ]);
+  const { service } = makeService(ai);
+
+  const result = await service.identify(
+    [line("l1", "GV SHRD MOZZ 8Z", { itemCode: "007874203922" })],
+    new Map()
+  );
+
+  assert.equal(result.get("l1").source, "dictionary");
+});
+
+test("with no AI tier a coded line falls back to the dictionary immediately", async () => {
+  const { service } = makeService(null);
+
+  const result = await service.identify(
+    [line("l1", "GV SHRD MOZZ 8Z", { itemCode: "007874203922" })],
+    new Map()
+  );
+
+  assert.equal(result.get("l1").source, "dictionary");
+});
+
+test("a saved alias still beats the code lookup", async () => {
+  const ai = recordingAi();
+  const { service, aliases } = makeService(ai);
+  aliases.remember(
+    {
+      lineId: "x",
+      rawLabel: "GV SHRD MOZZ 8Z",
+      itemCode: "007874203922",
+      resolvedName: "The Name I Chose",
+      confidence: 1,
+      source: "user-confirmed",
+      alternatives: [],
+      confirmed: true
+    },
+    "Walmart"
+  );
+
+  const result = await service.identify(
+    [line("l1", "GV SHRD MOZZ 8Z", { itemCode: "007874203922" })],
+    new Map(),
+    { storeName: "Walmart" }
+  );
+
+  assert.equal(ai.calls.length, 0);
+  assert.equal(result.get("l1").resolvedName, "The Name I Chose");
+});
