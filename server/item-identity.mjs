@@ -27,22 +27,34 @@ const MAX_LABEL_LENGTH = 200;
 const MAX_STORE_NAME_LENGTH = 120;
 const MAX_ALTERNATIVES = 3;
 
-const PROMPT_HEADER = `You identify what products a store receipt's abbreviated line items actually are.
+const PROMPT_HEADER = `You identify exactly which product each line of a store receipt refers to. You have Google Search. Use it.
 
-You are given the store name and a list of items, each with the exact text printed on the receipt, the item code beside it where the receipt printed one, and the price paid.
+Each item gives you the store name, the exact text printed on the receipt, the item code printed beside it when there is one, and the price paid.
 
-Rules:
+THE ITEM CODE IS THE PRIMARY EVIDENCE. It is the retailer's own SKU/PLU/DPCI for that product, and it identifies the product exactly, which the abbreviated text never can. When an item has a code:
 
-1. Work out the real, full product name a shopper would recognise. "GV SHRD MOZZ 8Z" is "Great Value Shredded Mozzarella Cheese".
-2. Use the store name. Store brand prefixes differ by chain, and the same abbreviation means different things at different retailers.
-3. The item code is a store-internal SKU or PLU. Use it as supporting evidence when you recognise it. Never read it as a quantity or a price.
-4. The price is a sanity check. A "STK" at $46.00 is a steak; at $4.60 it is not a whole steak.
-5. Report your own confidence honestly as a number from 0 to 1. Being unsure is useful information; a confident wrong name is not. Use below 0.4 when you are guessing.
-6. Give up to 3 alternatives when the name is genuinely ambiguous. Leave alternatives empty when it is not.
-7. brand and size are optional. Omit them rather than inventing them.
-8. reasoning is one short sentence on what the abbreviation decodes to. No more.
-9. Return one entry for every id you were given, and no entries for ids you were not given. Do not merge, split, reorder or invent items.
-10. Return valid JSON only - no markdown, no backticks, no explanation.
+1. Search the web for it, together with the store name - for example: Walmart 007874203922, or "007874203922" site:walmart.com. Retailers publish their own item numbers on the product page, and resellers and receipt-scanner sites index them too.
+2. Trust what the search returns about the code over your own reading of the abbreviated text. If the code resolves to "Great Value Finely Shredded Mozzarella Cheese, 8 oz" then that is the item, even if the receipt text looked like something else.
+3. Only fall back to decoding the abbreviation when the code returns nothing usable.
+4. Never treat the code as a quantity, a price, or a date.
+
+When an item has no code, decode the abbreviation using the store name and the price, and search for the decoded name plus the store when you are unsure.
+
+Confidence rules - these matter more than being decisive:
+
+- 0.9 or above: a search confirmed the code (or the exact product) at this retailer.
+- 0.6 to 0.9: confident decoding of the abbreviation, no direct confirmation.
+- 0.4 to 0.6: a plausible reading you could not confirm.
+- Below 0.4: guessing. Say so. A wrong name stated confidently is worse than an honest "unsure", because nobody will check it.
+
+Other rules:
+
+- Use the price as a sanity check. A "STK" at $46.00 is a steak; at $4.60 it is not.
+- Give up to 3 alternatives when genuinely ambiguous. Leave alternatives empty when it is not.
+- brand and size are optional. Omit rather than invent.
+- reasoning is one short sentence. When a search settled it, say what the code resolved to.
+- Return one entry for every id you were given, and none for ids you were not given. Do not merge, split, reorder or invent items.
+- Return valid JSON only. No markdown, no backticks, no commentary before or after.
 
 Return JSON in exactly this shape:
 {
@@ -108,12 +120,21 @@ export function buildIdentifyPrompt(items, storeName) {
   const context = storeName ? `Store: ${storeName}` : "Store: unknown";
   const lines = items.map((item) => ({
     id: item.id,
-    receiptText: item.label,
+    // itemCode is listed before receiptText deliberately. Field order is the
+    // cheapest hint available about which evidence matters, and the whole
+    // point of this pass is that the code beats the abbreviation.
     ...(item.itemCode ? { itemCode: item.itemCode } : {}),
+    receiptText: item.label,
     ...(item.amount !== null ? { price: item.amount } : {})
   }));
 
-  return `${PROMPT_HEADER}\n\n${context}\n\nItems:\n${JSON.stringify(lines, null, 2)}`;
+  const coded = lines.filter((line) => line.itemCode !== undefined).length;
+  const codeNote =
+    coded > 0
+      ? `\n\n${coded} of these ${lines.length} items printed an item code. Search for those codes first.`
+      : "\n\nNone of these items printed an item code, so decode the abbreviations.";
+
+  return `${PROMPT_HEADER}\n\n${context}${codeNote}\n\nItems:\n${JSON.stringify(lines, null, 2)}`;
 }
 
 // A model's self-reported confidence is a number it chose. Treat it as a hint

@@ -242,3 +242,49 @@ test("allows an alias with no store, which is the cross-store case", () => {
   assert.equal(alias.brand, null);
   assert.equal(alias.size, null);
 });
+
+test("the prompt tells the model to search for the item code", () => {
+  const prompt = buildIdentifyPrompt(
+    [{ id: "l1", label: "GV SHRD MOZZ 8Z", itemCode: "007874203922", amount: 3.24 }],
+    "Walmart"
+  );
+
+  assert.match(prompt, /ITEM CODE IS THE PRIMARY EVIDENCE/);
+  assert.match(prompt, /Search the web for it/);
+  assert.match(prompt, /1 of these 1 items printed an item code/);
+});
+
+test("puts the item code before the receipt text in the payload", () => {
+  const prompt = buildIdentifyPrompt(
+    [{ id: "l1", label: "GV SHRD MOZZ 8Z", itemCode: "007874203922", amount: 3.24 }],
+    "Walmart"
+  );
+
+  // Field order is the cheapest hint about which evidence matters.
+  assert.ok(
+    prompt.indexOf('"itemCode"') < prompt.indexOf('"receiptText"'),
+    "itemCode should be listed before receiptText"
+  );
+});
+
+test("says so when no item printed a code", () => {
+  const prompt = buildIdentifyPrompt(
+    [{ id: "l1", label: "BANANA", itemCode: null, amount: 1.2 }],
+    "Walmart"
+  );
+
+  assert.match(prompt, /None of these items printed an item code/);
+});
+
+test("counts only the items that actually carry a code", () => {
+  const prompt = buildIdentifyPrompt(
+    [
+      { id: "l1", label: "A", itemCode: "12345", amount: 1 },
+      { id: "l2", label: "B", itemCode: null, amount: 2 },
+      { id: "l3", label: "C", itemCode: "67890", amount: 3 }
+    ],
+    "Costco"
+  );
+
+  assert.match(prompt, /2 of these 3 items printed an item code/);
+});
