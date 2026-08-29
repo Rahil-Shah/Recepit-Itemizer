@@ -48,6 +48,7 @@ namespace ReceiptRing.Services {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           storeName,
+          model: this.selectedModel(),
           items: requests.map((request) => ({
             id: request.lineId,
             label: request.label,
@@ -102,6 +103,19 @@ namespace ReceiptRing.Services {
           })),
         confirmed: false
       };
+    }
+
+    /**
+     * The model the user picked in Settings -- the same one the receipt was
+     * parsed with.
+     *
+     * Identification used to send no model at all and let the server fall back
+     * to its own GEMINI_MODEL, so choosing a model in Settings changed how the
+     * photo was read but not how the items were named. Two different models on
+     * one receipt, and only one of them the user had asked for.
+     */
+    private selectedModel(): string {
+      return localStorage.getItem("gemini_model") || "gemini-3.5-flash-lite";
     }
 
     // The server clamps too. Doing it again here keeps the guarantee local to

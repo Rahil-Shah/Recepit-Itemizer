@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadReceiptRing, plain } from "./helpers/load-bundle.mjs";
+import { loadReceiptRing, plain, createLocalStorageFake } from "./helpers/load-bundle.mjs";
 
 // Captures the requests the service makes and replies with whatever the test
 // queued, so the transport can be exercised without a server.
@@ -19,9 +19,11 @@ function fakeFetch(responses) {
   return { fetch, calls };
 }
 
-function makeService(responses) {
+function makeService(responses, storedModel) {
   const { fetch, calls } = fakeFetch(responses);
-  const { ReceiptRing } = loadReceiptRing({ fetch });
+  const localStorage = createLocalStorageFake();
+  if (storedModel) localStorage.setItem("gemini_model", storedModel);
+  const { ReceiptRing } = loadReceiptRing({ fetch, localStorage });
   return { service: new ReceiptRing.Services.ItemIdentityApiService(), calls };
 }
 
@@ -148,4 +150,20 @@ test("survives a response with no items array", async () => {
   const { service } = makeService({ body: {} });
 
   assert.deepEqual(plain(await service.identify([request], "Walmart")), []);
+});
+
+test("sends the model the receipt was parsed with", async () => {
+  const { service, calls } = makeService({ body: { items: [] } }, "gemini-3.5-flash");
+
+  await service.identify([request], "Walmart");
+
+  assert.equal(calls[0].body.model, "gemini-3.5-flash");
+});
+
+test("falls back to flash-lite when Settings has never been opened", async () => {
+  const { service, calls } = makeService({ body: { items: [] } });
+
+  await service.identify([request], "Walmart");
+
+  assert.equal(calls[0].body.model, "gemini-3.5-flash-lite");
 });
