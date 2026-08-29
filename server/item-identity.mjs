@@ -158,13 +158,33 @@ function cleanText(value, maxLength) {
 }
 
 /**
+ * The ceiling for an answer produced without a search.
+ *
+ * The prompt reserves 0.9 and above for "a search confirmed this", so a model
+ * that could not search has not earned that band -- and it will claim it
+ * anyway. Asked to identify SKU 007874203922 with grounding unavailable, this
+ * one answered 0.95 and gave "Search for item code 007874203922 at Walmart
+ * confirmed this exact product" as its reasoning, describing a search that
+ * never happened.
+ *
+ * The name was in fact correct, so the answer is worth keeping. What is not
+ * worth keeping is the top band: 0.85 still reads as confident in the UI while
+ * leaving 0.9+ to mean what it says.
+ */
+const UNGROUNDED_CONFIDENCE_CEILING = 0.85;
+
+function capUngrounded(confidence, grounded) {
+  return grounded ? confidence : Math.min(confidence, UNGROUNDED_CONFIDENCE_CEILING);
+}
+
+/**
  * The model's reply, reduced to what is safe to hand back.
  *
  * Only ids that were asked about survive, each at most once. Everything else
  * is dropped: an entry for an id nobody asked about is either a hallucination
  * or a mistake, and neither belongs on a receipt.
  */
-export function normalizeIdentifyResponse(parsed, requestedIds) {
+export function normalizeIdentifyResponse(parsed, requestedIds, grounded = true) {
   const wanted = new Set(requestedIds);
   const answered = new Set();
   const items = Array.isArray(parsed?.items) ? parsed.items : [];
@@ -192,7 +212,7 @@ export function normalizeIdentifyResponse(parsed, requestedIds) {
       name,
       brand: cleanText(item?.brand, 80),
       size: cleanText(item?.size, 40),
-      confidence: clampConfidence(item?.confidence),
+      confidence: capUngrounded(clampConfidence(item?.confidence), grounded),
       reasoning: cleanText(item?.reasoning, 240),
       alternatives
     });
@@ -387,7 +407,8 @@ export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) 
       const parsed = parseJsonFromReply(extractResponseText(upstream.text));
       const items = normalizeIdentifyResponse(
         parsed,
-        request.items.map((item) => item.id)
+        request.items.map((item) => item.id),
+        grounded
       );
 
       // Told to the browser so a caller can say why an answer is weaker than

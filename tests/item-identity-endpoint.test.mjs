@@ -288,3 +288,44 @@ test("counts only the items that actually carry a code", () => {
 
   assert.match(prompt, /2 of these 3 items printed an item code/);
 });
+
+test("an ungrounded answer cannot claim the search-confirmed band", () => {
+  // Observed live: with grounding unavailable the model still answered 0.95
+  // and cited a search it never ran.
+  const items = normalizeIdentifyResponse(
+    { items: [{ id: "l1", name: "Great Value Shredded Mozzarella", confidence: 0.95 }] },
+    ["l1"],
+    false
+  );
+
+  assert.equal(items[0].confidence, 0.85);
+});
+
+test("a grounded answer keeps the confidence it reported", () => {
+  const items = normalizeIdentifyResponse(
+    { items: [{ id: "l1", name: "Great Value Shredded Mozzarella", confidence: 0.95 }] },
+    ["l1"],
+    true
+  );
+
+  assert.equal(items[0].confidence, 0.95);
+});
+
+test("capping never raises a low ungrounded confidence", () => {
+  const items = normalizeIdentifyResponse(
+    { items: [{ id: "l1", name: "Something", confidence: 0.3 }] },
+    ["l1"],
+    false
+  );
+
+  assert.equal(items[0].confidence, 0.3);
+});
+
+test("grounded is assumed when the caller does not say", () => {
+  const items = normalizeIdentifyResponse(
+    { items: [{ id: "l1", name: "Something", confidence: 0.95 }] },
+    ["l1"]
+  );
+
+  assert.equal(items[0].confidence, 0.95);
+});
