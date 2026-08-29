@@ -584,22 +584,35 @@ var ReceiptRing;
                 this.ignoredLabel = /^(total|subtotal|tax|cash|change|visa|mastercard|amex|debit|credit|balance|auth|approval|receipt)\b/i;
                 this.amountPattern = /(?:^|\s)(-?\$?\s*\d+(?:,\d{3})*[,.]\d{2}|-?\$\s*\d+)\s*$/;
                 this.itemCodePattern = /\b\d{4,}\b/g;
+                this.standaloneCodePattern = /^(\d{4,})$/;
             }
             parse(text) {
-                return text
+                const items = [];
+                let pendingCode;
+                text
                     .split(/\n+/)
                     .map((line) => line.replace(/\s+/g, " ").trim())
                     .filter(Boolean)
-                    .map((line) => this.parseLine(line))
-                    .filter((item) => item !== null);
+                    .forEach((line) => {
+                    const standalone = line.match(this.standaloneCodePattern);
+                    if (standalone) {
+                        pendingCode = standalone[1];
+                        return;
+                    }
+                    const item = this.parseLine(line, pendingCode);
+                    pendingCode = undefined;
+                    if (item)
+                        items.push(item);
+                });
+                return items;
             }
-            parseLine(line) {
+            parseLine(line, pendingCode) {
                 const match = line.match(this.amountPattern);
                 if (!match || match.index === undefined)
                     return null;
                 const amount = this.parseAmount(match[1]);
                 const withoutMarks = line.slice(0, match.index).replace(/[*#@]/g, "");
-                const itemCode = this.extractItemCode(withoutMarks);
+                const itemCode = this.extractItemCode(withoutMarks) ?? pendingCode;
                 const label = withoutMarks.replace(this.itemCodePattern, "").trim();
                 if (!label || this.ignoredLabel.test(label) || !Number.isFinite(amount) || amount === 0) {
                     return null;
@@ -1012,13 +1025,17 @@ var ReceiptRing;
                     total,
                     message: "Expanding receipt shorthand..."
                 });
+                const dictionaryFallbacks = new Map();
                 const unresolvedByDictionary = [];
                 unresolvedByAlias.forEach((line) => {
                     const expansion = this.dictionaryResolverService.resolve(line);
-                    if (expansion) {
+                    const prefersCodeLookup = Boolean(line.itemCode) && this.aiIdentifier !== null;
+                    if (expansion && !prefersCodeLookup) {
                         resolved.set(line.id, expansion);
                         return;
                     }
+                    if (expansion)
+                        dictionaryFallbacks.set(line.id, expansion);
                     unresolvedByDictionary.push(line);
                 });
                 if (unresolvedByDictionary.length > 0 && this.aiIdentifier) {
@@ -1035,6 +1052,11 @@ var ReceiptRing;
                         const answer = byLineId.get(line.id);
                         if (answer && answer.confidence >= MIN_REPORTABLE_CONFIDENCE) {
                             resolved.set(line.id, answer);
+                            return;
+                        }
+                        const fallback = dictionaryFallbacks.get(line.id);
+                        if (fallback) {
+                            resolved.set(line.id, fallback);
                             return;
                         }
                         resolved.set(line.id, this.unresolved(line, answer ?? null));
@@ -1118,6 +1140,7 @@ var ReceiptRing;
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         storeName,
+                        model: this.selectedModel(),
                         items: requests.map((request) => ({
                             id: request.lineId,
                             label: request.label,
@@ -1157,6 +1180,9 @@ var ReceiptRing;
                     })),
                     confirmed: false
                 };
+            }
+            selectedModel() {
+                return localStorage.getItem("gemini_model") || "gemini-3.5-flash-lite";
             }
             clamp(value) {
                 const confidence = Number(value);

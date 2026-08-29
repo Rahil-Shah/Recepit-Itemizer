@@ -12,6 +12,11 @@ namespace ReceiptRing.Services {
     // token that names the product unambiguously -- "GV SHRD MOZZ 8Z" is a
     // guess, "007874203922" is not. Capture the longest such run instead.
     private readonly itemCodePattern = /\b\d{4,}\b/g;
+    // A line that is nothing but a code. Receipts from Target, Costco and
+    // Walmart routinely print the SKU on its own line above the item it
+    // belongs to, and a line with no amount on it is dropped before anything
+    // looks at it -- so those codes were being thrown away entirely.
+    private readonly standaloneCodePattern = /^(\d{4,})$/;
 
     constructor(
       private readonly categorizationService: CategorizationService,
@@ -19,21 +24,41 @@ namespace ReceiptRing.Services {
     ) {}
 
     parse(text: string): Domain.PurchaseItem[] {
-      return text
+      const items: Domain.PurchaseItem[] = [];
+      // A code seen on its own line, waiting for the item it describes.
+      let pendingCode: string | undefined;
+
+      text
         .split(/\n+/)
         .map((line) => line.replace(/\s+/g, " ").trim())
         .filter(Boolean)
-        .map((line) => this.parseLine(line))
-        .filter((item): item is Domain.PurchaseItem => item !== null);
+        .forEach((line) => {
+          const standalone = line.match(this.standaloneCodePattern);
+          if (standalone) {
+            pendingCode = standalone[1];
+            return;
+          }
+
+          const item = this.parseLine(line, pendingCode);
+          // Cleared whatever happened next, including on a line that parsed to
+          // nothing. A code carried past a Subtotal row would attach itself to
+          // an item further down the receipt that it has nothing to do with.
+          pendingCode = undefined;
+          if (item) items.push(item);
+        });
+
+      return items;
     }
 
-    private parseLine(line: string): Domain.PurchaseItem | null {
+    private parseLine(line: string, pendingCode?: string): Domain.PurchaseItem | null {
       const match = line.match(this.amountPattern);
       if (!match || match.index === undefined) return null;
 
       const amount = this.parseAmount(match[1]);
       const withoutMarks = line.slice(0, match.index).replace(/[*#@]/g, "");
-      const itemCode = this.extractItemCode(withoutMarks);
+      // A code printed on the item's own line describes it more directly than
+      // one on the line above, so an inline code wins.
+      const itemCode = this.extractItemCode(withoutMarks) ?? pendingCode;
       const label = withoutMarks.replace(this.itemCodePattern, "").trim();
 
       if (!label || this.ignoredLabel.test(label) || !Number.isFinite(amount) || amount === 0) {

@@ -45,7 +45,14 @@ Rules:
 3. Never invent or infer a discount amount - if only one price is shown, discount is always 0.
 4. Preserve item order exactly as it appears on the receipt.
 5. Ignore store addresses, phone numbers, loyalty info, payment methods, card numbers, receipt IDs.
-5a. If an item line prints a product code / SKU / PLU beside it, return it verbatim as itemCode (digits only, keep leading zeros). Omit itemCode or use null when the line prints no code. Never invent one, and never use the receipt ID or a card number as an item code.
+
+ITEM CODES - read these carefully, they matter as much as the prices:
+
+5a. Most receipts print a product code beside or under each item: a SKU, PLU, UPC, DPCI or article number. It is usually a run of 4-14 digits, often zero-padded, sitting to the left of the item name or directly beneath it. Return it verbatim as itemCode, digits only, KEEPING LEADING ZEROS ("007874203922", not 7874203922).
+5b. Look for the code on the line above and the line below the item name too. Many receipts (Target, Costco, Walmart) put the code on its own line next to the item rather than inline with the price.
+5c. If a line shows a code and a name, they belong to the same item. Do not emit the code as a separate item.
+5d. Use null for itemCode only when that item genuinely prints no code. Do not skip the field because it looked unimportant.
+5e. Never use as an item code: the receipt/transaction number, a card number, a phone number, a store number, a date, a time, a quantity, a weight, or a loyalty number. Those are document-level, not item-level - a real item code appears once, beside one item.
 6. Do not invent items.
 7. If text is unclear, make the best reasonable interpretation.
 8. Return valid JSON only - no markdown, no explanations, just JSON.
@@ -62,7 +69,7 @@ Return JSON in exactly this format, with no backticks or markdown:
   "items": [
     {
       "name": "Item Name",
-      "itemCode": "0001234567890 or null",
+      "itemCode": "007874203922 or null",
       "price": 0.00,
       "discount": 0.00,
       "lowConfidence": false
@@ -76,6 +83,10 @@ Return ONLY valid JSON. No other text.`;
 // actually is. Anything else the model puts in the field -- the string "null",
 // a store name, a card number it was told not to read -- is dropped rather
 // than passed on as if it were a fact about the item.
+// Grocery PLUs are four digits, five with an organic prefix; SKUs and UPCs run
+// to twelve or fourteen. The floor was four, which rejected nothing real but
+// also nothing useful -- kept, because a one- to three-digit "code" is a
+// quantity or a line number, not a product.
 const ITEM_CODE_RE = /^\d{4,20}$/;
 
 function normalizeItemCode(value) {

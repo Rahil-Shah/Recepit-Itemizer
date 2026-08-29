@@ -95,3 +95,54 @@ test("still ignores a payment line that carries a long number", () => {
 
   assert.equal(items.length, 0);
 });
+
+test("attaches a code printed on its own line to the item below it", () => {
+  const parser = makeParser();
+  const items = parser.parse("007874203922\nGV SHRD MOZZ 8Z 3.24");
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].itemCode, "007874203922");
+  assert.equal(items[0].label, "Gv Shrd Mozz 8z");
+});
+
+test("an inline code beats one from the line above", () => {
+  const parser = makeParser();
+  const items = parser.parse("111111\n004900000634 CHKN BRST 12.80");
+
+  assert.equal(items[0].itemCode, "004900000634");
+});
+
+test("a standalone code does not leak past a line it cannot describe", () => {
+  const parser = makeParser();
+  const items = parser.parse("007874203922\nSubtotal 10.00\nBanana 1.25");
+
+  // The code belonged to whatever the Subtotal row displaced, not the banana.
+  assert.equal(items.length, 1);
+  assert.equal(items[0].label, "Banana");
+  assert.equal(items[0].itemCode, undefined);
+});
+
+test("a standalone code applies to one item only", () => {
+  const parser = makeParser();
+  const items = parser.parse("007874203922\nCheese 3.24\nBanana 1.25");
+
+  assert.equal(items[0].itemCode, "007874203922");
+  assert.equal(items[1].itemCode, undefined);
+});
+
+test("a bare code with no item after it is simply dropped", () => {
+  const parser = makeParser();
+  const items = parser.parse("Banana 1.25\n007874203922");
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].itemCode, undefined);
+});
+
+test("a standalone code line never becomes an item of its own", () => {
+  const parser = makeParser();
+  const items = parser.parse("007874203922\n004900000634\nCheese 3.24");
+
+  assert.equal(items.length, 1);
+  // The nearest code above wins.
+  assert.equal(items[0].itemCode, "004900000634");
+});
