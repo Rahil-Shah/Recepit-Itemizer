@@ -38,6 +38,24 @@ namespace ReceiptRing.Services {
     return status === 408 || status === 429 || status === 502 || status === 504;
   }
 
+  /**
+   * How long to wait before a retry is allowed, given how many have already
+   * been made. Doubling, and capped -- a person watching a spinner will not
+   * wait past about half a minute, and past that point the honest advice is to
+   * come back later rather than to keep a button alive that keeps failing.
+   *
+   * Exported and pure so the schedule can be checked without a clock.
+   */
+  export function retryBackoffMs(attempt: number): number {
+    const base = 2000;
+    const ceiling = 30_000;
+    return Math.min(ceiling, base * Math.pow(2, Math.max(0, attempt - 1)));
+  }
+
+  // Past this the photo is not the problem and neither is the moment. Stop
+  // offering, so the user goes and looks at the receipt instead of the button.
+  export const MAX_PARSE_RETRIES = 4;
+
   export interface GeminiConfig {
     model: string;
     hasServerKey: boolean;

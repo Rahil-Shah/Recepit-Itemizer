@@ -1562,6 +1562,13 @@ var ReceiptRing;
             return status === 408 || status === 429 || status === 502 || status === 504;
         }
         Services.isRetryableParseFailure = isRetryableParseFailure;
+        function retryBackoffMs(attempt) {
+            const base = 2000;
+            const ceiling = 30000;
+            return Math.min(ceiling, base * Math.pow(2, Math.max(0, attempt - 1)));
+        }
+        Services.retryBackoffMs = retryBackoffMs;
+        Services.MAX_PARSE_RETRIES = 4;
         class GeminiService {
             async loadConfig() {
                 try {
@@ -3513,6 +3520,9 @@ var ReceiptRing;
                 this.isIdentifying = false;
                 this.isParsing = false;
                 this.failedParseFile = null;
+                this.parseRetryCount = 0;
+                this.retryAvailableAt = 0;
+                this.retryCountdownTimer = null;
                 this.receiptCategory = "Groceries";
                 this.cameraStream = null;
                 this.isPromptingForCategories = false;
@@ -3704,6 +3714,7 @@ var ReceiptRing;
                 this.lineSelectionService.clear();
                 this.receiptImage = null;
                 this.failedParseFile = null;
+                this.resetRetryBackoff();
                 this.hideOcrStatus();
             }
             setItemsFromParse(items) {
@@ -4009,14 +4020,19 @@ var ReceiptRing;
                     console.log("Gemini parsed receipt output:", result);
                     this.applyParsedReceiptJson(result);
                     this.failedParseFile = null;
+                    this.resetRetryBackoff();
                     this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`, 1);
                     window.setTimeout(() => this.hideOcrStatus(), 1600);
                 }
                 catch (error) {
                     console.error("Gemini receipt parsing failed:", error);
                     const message = error instanceof Error ? error.message : "Could not extract text from this receipt.";
-                    this.failedParseFile = this.canRetryParse(error) ? file : null;
-                    this.setOcrStatus(this.withRetryHint(message, this.failedParseFile !== null), 1);
+                    const exhausted = this.parseRetryCount >= ReceiptRing.Services.MAX_PARSE_RETRIES;
+                    this.failedParseFile = this.canRetryParse(error) && !exhausted ? file : null;
+                    if (this.failedParseFile) {
+                        this.beginRetryBackoff();
+                    }
+                    this.setOcrStatus(exhausted ? `${message} Try a clearer photo, or come back in a few minutes.` : this.withRetryHint(message, this.failedParseFile !== null), 1);
                 }
                 finally {
                     this.isParsing = false;
@@ -4203,9 +4219,18 @@ var ReceiptRing;
                 this.renderRetryButton();
             }
             renderRetryButton() {
-                const canRetry = this.failedParseFile !== null && !this.isParsing;
-                this.elements.retryParseButton.classList.toggle("hidden", !canRetry);
-                this.elements.retryParseButton.disabled = !canRetry;
+                const offered = this.failedParseFile !== null && !this.isParsing;
+                this.elements.retryParseButton.classList.toggle("hidden", !offered);
+                if (!offered) {
+                    this.elements.retryParseButton.disabled = true;
+                    return;
+                }
+                const waitMs = this.retryAvailableAt - Date.now();
+                const waiting = waitMs > 0;
+                this.elements.retryParseButton.disabled = waiting;
+                this.elements.retryParseButton.textContent = waiting
+                    ? `Try again in ${Math.ceil(waitMs / 1000)}s`
+                    : "Try again";
             }
             canRetryParse(error) {
                 if (error instanceof ReceiptRing.Services.ReceiptParseError) {
@@ -4218,9 +4243,31 @@ var ReceiptRing;
             }
             async retryParse() {
                 const file = this.failedParseFile;
-                if (!file || this.isParsing)
+                if (!file || this.isParsing || Date.now() < this.retryAvailableAt)
                     return;
+                this.parseRetryCount += 1;
                 await this.extractAndItemizeReceipt(file);
+            }
+            resetRetryBackoff() {
+                this.parseRetryCount = 0;
+                this.retryAvailableAt = 0;
+                if (this.retryCountdownTimer !== null) {
+                    window.clearInterval(this.retryCountdownTimer);
+                    this.retryCountdownTimer = null;
+                }
+            }
+            beginRetryBackoff() {
+                this.retryAvailableAt = Date.now() + ReceiptRing.Services.retryBackoffMs(this.parseRetryCount + 1);
+                if (this.retryCountdownTimer !== null)
+                    window.clearInterval(this.retryCountdownTimer);
+                this.retryCountdownTimer = window.setInterval(() => {
+                    this.renderRetryButton();
+                    if (Date.now() >= this.retryAvailableAt && this.retryCountdownTimer !== null) {
+                        window.clearInterval(this.retryCountdownTimer);
+                        this.retryCountdownTimer = null;
+                    }
+                }, 250);
+                this.renderRetryButton();
             }
             async openCamera() {
                 if (!navigator.mediaDevices?.getUserMedia) {
@@ -4270,6 +4317,7 @@ var ReceiptRing;
             }
             processReceiptImage(file) {
                 this.failedParseFile = null;
+                this.resetRetryBackoff();
                 this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
                 this.setOcrStatus(`Loaded ${file.name || "receipt image"}`, 0.02);
                 this.receiptImage = this.receiptImageService.toStorableDataUrl(file);

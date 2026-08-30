@@ -36,6 +36,13 @@ namespace ReceiptRing.App {
     // fires no change event, so by the time a parse fails there is nothing
     // left there to go back to.
     private failedParseFile: File | null = null;
+    // How many times the current photo has been retried, and when the button
+    // becomes live again. The server has a ceiling of its own, but reaching it
+    // costs a full 16mb upload per attempt before being turned away -- backing
+    // off here means those attempts are never made.
+    private parseRetryCount = 0;
+    private retryAvailableAt = 0;
+    private retryCountdownTimer: number | null = null;
     private receiptCategory: Domain.ReceiptCategory = "Groceries";
     private cameraStream: MediaStream | null = null;
     private isPromptingForCategories = false;
@@ -299,6 +306,7 @@ namespace ReceiptRing.App {
       // again" would re-upload an image the user had deliberately taken away,
       // which is the app overruling them about their own receipt.
       this.failedParseFile = null;
+      this.resetRetryBackoff();
       this.hideOcrStatus();
     }
 
@@ -797,6 +805,7 @@ namespace ReceiptRing.App {
         this.applyParsedReceiptJson(result);
 
         this.failedParseFile = null;
+        this.resetRetryBackoff();
         this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`, 1);
         window.setTimeout(() => this.hideOcrStatus(), 1600);
       } catch (error) {
@@ -806,8 +815,19 @@ namespace ReceiptRing.App {
         // rejected image type or a missing key will fail identically forever,
         // and a button that cannot succeed is worse than no button: it costs a
         // click and a paid call to teach the user it does nothing.
-        this.failedParseFile = this.canRetryParse(error) ? file : null;
-        this.setOcrStatus(this.withRetryHint(message, this.failedParseFile !== null), 1);
+        // Stop offering once the same photo has failed this many times. It is
+        // not a blip any more, and a button that keeps failing is worse than
+        // one that admits the receipt needs a different photo.
+        const exhausted = this.parseRetryCount >= Services.MAX_PARSE_RETRIES;
+        this.failedParseFile = this.canRetryParse(error) && !exhausted ? file : null;
+
+        if (this.failedParseFile) {
+          this.beginRetryBackoff();
+        }
+        this.setOcrStatus(
+          exhausted ? `${message} Try a clearer photo, or come back in a few minutes.` : this.withRetryHint(message, this.failedParseFile !== null),
+          1
+        );
       } finally {
         this.isParsing = false;
         this.elements.parseButton.removeAttribute("disabled");
@@ -1036,9 +1056,21 @@ namespace ReceiptRing.App {
      * that forgot would leave a button that silently re-sends a stale photo.
      */
     private renderRetryButton(): void {
-      const canRetry = this.failedParseFile !== null && !this.isParsing;
-      this.elements.retryParseButton.classList.toggle("hidden", !canRetry);
-      this.elements.retryParseButton.disabled = !canRetry;
+      const offered = this.failedParseFile !== null && !this.isParsing;
+      this.elements.retryParseButton.classList.toggle("hidden", !offered);
+      if (!offered) {
+        this.elements.retryParseButton.disabled = true;
+        return;
+      }
+
+      const waitMs = this.retryAvailableAt - Date.now();
+      const waiting = waitMs > 0;
+      this.elements.retryParseButton.disabled = waiting;
+      // Counting down beats a button that is simply dead: the user can see the
+      // app is pacing itself rather than ignoring them.
+      this.elements.retryParseButton.textContent = waiting
+        ? `Try again in ${Math.ceil(waitMs / 1000)}s`
+        : "Try again";
     }
 
     /**
@@ -1065,9 +1097,44 @@ namespace ReceiptRing.App {
     /** Sends the photo the last parse failed on back through the parser. */
     private async retryParse(): Promise<void> {
       const file = this.failedParseFile;
-      if (!file || this.isParsing) return;
+      if (!file || this.isParsing || Date.now() < this.retryAvailableAt) return;
 
+      this.parseRetryCount += 1;
       await this.extractAndItemizeReceipt(file);
+    }
+
+    /**
+     * Puts the retry back to its opening state.
+     *
+     * Called whenever the photo changes or a parse succeeds, because the
+     * backoff describes one photo's run of failures. Carrying a count across
+     * photos would greet a fresh receipt with a thirty-second wait it did
+     * nothing to earn.
+     */
+    private resetRetryBackoff(): void {
+      this.parseRetryCount = 0;
+      this.retryAvailableAt = 0;
+      if (this.retryCountdownTimer !== null) {
+        window.clearInterval(this.retryCountdownTimer);
+        this.retryCountdownTimer = null;
+      }
+    }
+
+    /**
+     * Starts the wait before the next attempt, and ticks the button's label
+     * down so the delay is visible rather than the button just being dead.
+     */
+    private beginRetryBackoff(): void {
+      this.retryAvailableAt = Date.now() + Services.retryBackoffMs(this.parseRetryCount + 1);
+      if (this.retryCountdownTimer !== null) window.clearInterval(this.retryCountdownTimer);
+      this.retryCountdownTimer = window.setInterval(() => {
+        this.renderRetryButton();
+        if (Date.now() >= this.retryAvailableAt && this.retryCountdownTimer !== null) {
+          window.clearInterval(this.retryCountdownTimer);
+          this.retryCountdownTimer = null;
+        }
+      }, 250);
+      this.renderRetryButton();
     }
 
     private async openCamera(): Promise<void> {
@@ -1124,6 +1191,7 @@ namespace ReceiptRing.App {
     private processReceiptImage(file: File): void {
       // Whatever failed before is not what the user is looking at now.
       this.failedParseFile = null;
+      this.resetRetryBackoff();
       this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
       this.setOcrStatus(`Loaded ${file.name || "receipt image"}`, 0.02);
       // Start shrinking the photo now so it is ready by the time the parse

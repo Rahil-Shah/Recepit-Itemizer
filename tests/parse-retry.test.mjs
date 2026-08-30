@@ -54,3 +54,40 @@ test("ReceiptParseError carries the status alongside the message", () => {
   assert.deepEqual(chain, ["ReceiptParseError", "Error", "Object"]);
   assert.equal(typeof error.stack, "string");
 });
+
+const { retryBackoffMs, MAX_PARSE_RETRIES } = ReceiptRing.Services;
+
+test("the wait doubles with each attempt", () => {
+  assert.equal(retryBackoffMs(1), 2000);
+  assert.equal(retryBackoffMs(2), 4000);
+  assert.equal(retryBackoffMs(3), 8000);
+  assert.equal(retryBackoffMs(4), 16000);
+});
+
+test("the wait is capped so the button never goes dead for minutes", () => {
+  assert.equal(retryBackoffMs(5), 30000);
+  assert.equal(retryBackoffMs(50), 30000);
+});
+
+test("the first attempt is never punished for a zero or negative count", () => {
+  assert.equal(retryBackoffMs(0), 2000);
+  assert.equal(retryBackoffMs(-3), 2000);
+});
+
+test("retries stop well inside the server's own ceiling", () => {
+  // The server allows 30 parses per 15 minutes. Even the worst case here --
+  // a first attempt plus every retry -- stays far below that, so a stuck
+  // client cannot spend a user's whole allowance on one receipt.
+  assert.ok(MAX_PARSE_RETRIES + 1 < 30);
+});
+
+test("the whole retry run takes under a minute of waiting", () => {
+  let total = 0;
+  for (let attempt = 1; attempt <= MAX_PARSE_RETRIES; attempt += 1) {
+    total += retryBackoffMs(attempt);
+  }
+
+  // Long enough to outlast a Gemini blip, short enough that someone watching
+  // it does not conclude the app has hung.
+  assert.ok(total <= 60000, `expected under a minute of backoff, got ${total}ms`);
+});
