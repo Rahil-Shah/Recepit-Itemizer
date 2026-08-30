@@ -802,8 +802,12 @@ namespace ReceiptRing.App {
       } catch (error) {
         console.error("Gemini receipt parsing failed:", error);
         const message = error instanceof Error ? error.message : "Could not extract text from this receipt.";
-        this.failedParseFile = file;
-        this.setOcrStatus(message, 1);
+        // Only hold the photo when another attempt could plausibly work. A
+        // rejected image type or a missing key will fail identically forever,
+        // and a button that cannot succeed is worse than no button: it costs a
+        // click and a paid call to teach the user it does nothing.
+        this.failedParseFile = this.canRetryParse(error) ? file : null;
+        this.setOcrStatus(this.withRetryHint(message, this.failedParseFile !== null), 1);
       } finally {
         this.isParsing = false;
         this.elements.parseButton.removeAttribute("disabled");
@@ -1035,6 +1039,27 @@ namespace ReceiptRing.App {
       const canRetry = this.failedParseFile !== null && !this.isParsing;
       this.elements.retryParseButton.classList.toggle("hidden", !canRetry);
       this.elements.retryParseButton.disabled = !canRetry;
+    }
+
+    /**
+     * Whether this failure is one another attempt could get past.
+     *
+     * A failure that never produced a status -- the parser threw while reading
+     * the reply, or the request never left the browser -- is treated as
+     * retryable. Those are the ones most likely to be a blip, and the cost of
+     * being wrong is one wasted click rather than a receipt the user cannot
+     * load at all.
+     */
+    private canRetryParse(error: unknown): boolean {
+      if (error instanceof Services.ReceiptParseError) {
+        return Services.isRetryableParseFailure(error.status);
+      }
+      return true;
+    }
+
+    // The button says what to do; the message should say it is worth doing.
+    private withRetryHint(message: string, canRetry: boolean): string {
+      return canRetry ? `${message} This often clears up on a second try.` : message;
     }
 
     /** Sends the photo the last parse failed on back through the parser. */

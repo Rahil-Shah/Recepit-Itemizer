@@ -1548,6 +1548,20 @@ var ReceiptRing;
 (function (ReceiptRing) {
     var Services;
     (function (Services) {
+        class ReceiptParseError extends Error {
+            constructor(message, status) {
+                super(message);
+                this.status = status;
+                this.name = "ReceiptParseError";
+            }
+        }
+        Services.ReceiptParseError = ReceiptParseError;
+        function isRetryableParseFailure(status) {
+            if (status === 0)
+                return true;
+            return status === 408 || status === 429 || status === 502 || status === 504;
+        }
+        Services.isRetryableParseFailure = isRetryableParseFailure;
         class GeminiService {
             async loadConfig() {
                 try {
@@ -1608,10 +1622,20 @@ var ReceiptRing;
                     body: JSON.stringify({ model, mimeType: file.type, imageBase64: base64Data })
                 });
                 if (!proxyResponse.ok) {
-                    const errText = await proxyResponse.text();
-                    throw new Error(`Receipt parsing failed (${proxyResponse.status}): ${errText}`);
+                    throw new ReceiptParseError(await this.describeFailure(proxyResponse), proxyResponse.status);
                 }
                 return this.extractParsedJson(await proxyResponse.json());
+            }
+            async describeFailure(response) {
+                const body = await response.text();
+                try {
+                    const parsed = JSON.parse(body);
+                    if (parsed?.error)
+                        return parsed.error;
+                }
+                catch {
+                }
+                return `Could not read this receipt (error ${response.status}).`;
             }
             extractParsedJson(json) {
                 const textResult = json?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -3991,8 +4015,8 @@ var ReceiptRing;
                 catch (error) {
                     console.error("Gemini receipt parsing failed:", error);
                     const message = error instanceof Error ? error.message : "Could not extract text from this receipt.";
-                    this.failedParseFile = file;
-                    this.setOcrStatus(message, 1);
+                    this.failedParseFile = this.canRetryParse(error) ? file : null;
+                    this.setOcrStatus(this.withRetryHint(message, this.failedParseFile !== null), 1);
                 }
                 finally {
                     this.isParsing = false;
@@ -4182,6 +4206,15 @@ var ReceiptRing;
                 const canRetry = this.failedParseFile !== null && !this.isParsing;
                 this.elements.retryParseButton.classList.toggle("hidden", !canRetry);
                 this.elements.retryParseButton.disabled = !canRetry;
+            }
+            canRetryParse(error) {
+                if (error instanceof ReceiptRing.Services.ReceiptParseError) {
+                    return ReceiptRing.Services.isRetryableParseFailure(error.status);
+                }
+                return true;
+            }
+            withRetryHint(message, canRetry) {
+                return canRetry ? `${message} This often clears up on a second try.` : message;
             }
             async retryParse() {
                 const file = this.failedParseFile;

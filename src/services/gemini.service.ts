@@ -1,4 +1,43 @@
 namespace ReceiptRing.Services {
+  /**
+   * A parse that failed, carrying the HTTP status so the caller can tell a
+   * blip from a dead end. A bare Error string could only be shown, not
+   * reasoned about.
+   *
+   * status is 0 when the request never reached the server at all -- offline,
+   * DNS, a dropped connection -- which is the most retryable failure there is.
+   */
+  export class ReceiptParseError extends Error {
+    constructor(
+      message: string,
+      readonly status: number
+    ) {
+      super(message);
+      this.name = "ReceiptParseError";
+    }
+  }
+
+  /**
+   * Whether trying the same photo again could plausibly work.
+   *
+   * Offering a retry that cannot succeed is worse than offering none: it costs
+   * the user a click, costs a paid API call, and teaches them the button does
+   * nothing.
+   *
+   * The interesting case is 503. Gemini answers 503 when it is busy -- exactly
+   * the transient failure this is for -- but the server maps every upstream
+   * failure to 502, and keeps 503 for its own "no Gemini key is configured".
+   * So a 503 arriving here means the app is not set up, which no amount of
+   * retrying will fix, while the busy-Gemini case shows up as 502.
+   */
+  export function isRetryableParseFailure(status: number): boolean {
+    // Never reached the server: offline, DNS, connection dropped mid-flight.
+    if (status === 0) return true;
+    // 408 request timeout, 429 rate limited, 502 upstream failed,
+    // 504 upstream took too long. All worth another go.
+    return status === 408 || status === 429 || status === 502 || status === 504;
+  }
+
   export interface GeminiConfig {
     model: string;
     hasServerKey: boolean;
@@ -90,10 +129,32 @@ namespace ReceiptRing.Services {
         body: JSON.stringify({ model, mimeType: file.type, imageBase64: base64Data })
       });
       if (!proxyResponse.ok) {
-        const errText = await proxyResponse.text();
-        throw new Error(`Receipt parsing failed (${proxyResponse.status}): ${errText}`);
+        throw new ReceiptParseError(
+          await this.describeFailure(proxyResponse),
+          proxyResponse.status
+        );
       }
       return this.extractParsedJson(await proxyResponse.json());
+    }
+
+    /**
+     * A failure worded for a person rather than for a log.
+     *
+     * The server sends {"error": "..."} for everything it refuses, so use that
+     * sentence when it is there. The old code pasted the raw response body
+     * next to a status code, which on an HTML error page meant a wall of
+     * markup where the explanation should be.
+     */
+    private async describeFailure(response: Response): Promise<string> {
+      const body = await response.text();
+      try {
+        const parsed = JSON.parse(body) as { error?: string };
+        if (parsed?.error) return parsed.error;
+      } catch {
+        // Not JSON -- fall through to the generic wording rather than showing
+        // whatever the proxy or gateway happened to return.
+      }
+      return `Could not read this receipt (error ${response.status}).`;
     }
 
     private extractParsedJson(json: any): any {
