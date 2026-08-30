@@ -86,6 +86,26 @@ const identifyLimiter = createRateLimiter({
   message: "Too many identification requests. Give it a minute."
 });
 
+// Receipt parsing is the most expensive route in the app: it accepts the
+// largest body of any endpoint (16mb), holds it in memory while base64 is
+// decoded, and spends a paid Gemini call per request. The blanket /api limit
+// of 300 is far too generous for that -- 300 requests is nearly 5GB of body
+// buffering and 300 paid calls per window, per IP.
+//
+// It went unnoticed while parsing was something a user did once per photo.
+// A "Try again" button turns it into something a user can hold down, so the
+// route gets a ceiling of its own, well above any real use of the app and far
+// below what a stuck retry loop or a script could otherwise spend.
+//
+// Mounted before the 16mb body parser below, so a refused request is rejected
+// without the server ever buffering the image it was carrying.
+const parseLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: "Too many receipt scans in a row. Give it a minute and try again."
+});
+app.use("/api/gemini/parse", parseLimiter);
+
 const auth = createAuth(prisma);
 const { requireAuth } = auth;
 
