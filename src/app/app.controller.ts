@@ -1068,9 +1068,14 @@ namespace ReceiptRing.App {
       this.elements.retryParseButton.disabled = waiting;
       // Counting down beats a button that is simply dead: the user can see the
       // app is pacing itself rather than ignoring them.
-      this.elements.retryParseButton.textContent = waiting
-        ? `Try again in ${Math.ceil(waitMs / 1000)}s`
-        : "Try again";
+      const label = waiting ? `Try again in ${Math.ceil(waitMs / 1000)}s` : "Try again";
+      // Only touch the DOM when the second actually changes. The countdown
+      // ticks four times a second and would otherwise rewrite the label on
+      // every tick, which assistive tech can pick up as a change worth
+      // reporting even from outside a live region.
+      if (this.elements.retryParseButton.textContent !== label) {
+        this.elements.retryParseButton.textContent = label;
+      }
     }
 
     /**

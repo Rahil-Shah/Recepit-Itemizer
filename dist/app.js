@@ -4228,9 +4228,10 @@ var ReceiptRing;
                 const waitMs = this.retryAvailableAt - Date.now();
                 const waiting = waitMs > 0;
                 this.elements.retryParseButton.disabled = waiting;
-                this.elements.retryParseButton.textContent = waiting
-                    ? `Try again in ${Math.ceil(waitMs / 1000)}s`
-                    : "Try again";
+                const label = waiting ? `Try again in ${Math.ceil(waitMs / 1000)}s` : "Try again";
+                if (this.elements.retryParseButton.textContent !== label) {
+                    this.elements.retryParseButton.textContent = label;
+                }
             }
             canRetryParse(error) {
                 if (error instanceof ReceiptRing.Services.ReceiptParseError) {

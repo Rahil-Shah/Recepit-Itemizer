@@ -85,8 +85,12 @@
                 <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">×</button>
               </figure>
 
-              <div class="ocr-status hidden" id="ocrStatus" aria-live="polite">
-                <span id="ocrStatusText">Reading receipt…</span>
+              <!-- aria-live sits on the message alone, not on this wrapper.
+                   With it on the wrapper, the retry button counted down inside
+                   the live region and re-announced the whole status four times
+                   a second. -->
+              <div class="ocr-status hidden" id="ocrStatus">
+                <span id="ocrStatusText" role="status" aria-live="polite">Reading receipt…</span>
                 <button class="btn btn-secondary btn-small ocr-retry hidden" id="retryParseButton" type="button">
                   Try again
                 </button>
