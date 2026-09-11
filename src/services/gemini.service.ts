@@ -136,6 +136,10 @@ namespace ReceiptRing.Services {
      * Parse a receipt image via the server proxy. The server owns the prompt
      * and calls Gemini with the resolved key (the user's own, or the shared
      * server key), so no key is ever exposed to the browser.
+     *
+     * The server also extracts and validates the model's reply before
+     * responding, so the body here is already the receipt object (storeName,
+     * items, ...) -- not the raw Gemini candidates/content/parts envelope.
      */
     async parseReceiptImage(file: File, model: string): Promise<any> {
       const base64Data = await this.fileToBase64(file);
@@ -152,7 +156,7 @@ namespace ReceiptRing.Services {
           proxyResponse.status
         );
       }
-      return this.extractParsedJson(await proxyResponse.json());
+      return proxyResponse.json();
     }
 
     /**
@@ -173,26 +177,6 @@ namespace ReceiptRing.Services {
         // whatever the proxy or gateway happened to return.
       }
       return `Could not read this receipt (error ${response.status}).`;
-    }
-
-    private extractParsedJson(json: any): any {
-      const textResult = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!textResult) {
-        console.error("Gemini response structure:", JSON.stringify(json, null, 2));
-        throw new Error("No response text returned from Gemini.");
-      }
-      let cleanedText = "";
-      try {
-        cleanedText = textResult.trim().replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
-        return JSON.parse(cleanedText);
-      } catch (e) {
-        console.error("Failed to parse Gemini JSON output.");
-        console.error("Raw text:", textResult);
-        console.error("Cleaned text:", cleanedText);
-        console.error("Parse error:", e instanceof Error ? e.message : String(e));
-        const errorMsg = e instanceof Error ? e.message : "Unknown error";
-        throw new Error(`Failed to parse receipt JSON from Gemini: ${errorMsg}. Check browser console for details.`);
-      }
     }
   }
 }

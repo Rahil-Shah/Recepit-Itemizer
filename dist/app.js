@@ -1631,7 +1631,7 @@ var ReceiptRing;
                 if (!proxyResponse.ok) {
                     throw new ReceiptParseError(await this.describeFailure(proxyResponse), proxyResponse.status);
                 }
-                return this.extractParsedJson(await proxyResponse.json());
+                return proxyResponse.json();
             }
             async describeFailure(response) {
                 const body = await response.text();
@@ -1643,26 +1643,6 @@ var ReceiptRing;
                 catch {
                 }
                 return `Could not read this receipt (error ${response.status}).`;
-            }
-            extractParsedJson(json) {
-                const textResult = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (!textResult) {
-                    console.error("Gemini response structure:", JSON.stringify(json, null, 2));
-                    throw new Error("No response text returned from Gemini.");
-                }
-                let cleanedText = "";
-                try {
-                    cleanedText = textResult.trim().replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
-                    return JSON.parse(cleanedText);
-                }
-                catch (e) {
-                    console.error("Failed to parse Gemini JSON output.");
-                    console.error("Raw text:", textResult);
-                    console.error("Cleaned text:", cleanedText);
-                    console.error("Parse error:", e instanceof Error ? e.message : String(e));
-                    const errorMsg = e instanceof Error ? e.message : "Unknown error";
-                    throw new Error(`Failed to parse receipt JSON from Gemini: ${errorMsg}. Check browser console for details.`);
-                }
             }
         }
         Services.GeminiService = GeminiService;
