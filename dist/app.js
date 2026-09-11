@@ -3604,6 +3604,7 @@ var ReceiptRing;
                 this.serverHasGeminiKey = false;
                 this.userHasGeminiKey = false;
                 this.receiptImage = null;
+                this.editingReceipt = null;
                 this.rentEntries = [];
                 this.rentMonths = new Set();
                 this.editingRentEntryId = null;
@@ -3786,8 +3787,10 @@ var ReceiptRing;
                 this.failedParseFile = null;
                 this.resetRetryBackoff();
                 this.hideOcrStatus();
+                this.stopEditing();
             }
             setItemsFromParse(items) {
+                this.stopEditing();
                 this.items = items;
                 this.receiptLines = this.items.map((item) => ({
                     id: item.id,
@@ -4370,6 +4373,7 @@ var ReceiptRing;
                 this.processReceiptImage(file);
             }
             processReceiptImage(file) {
+                this.stopEditing();
                 this.failedParseFile = null;
                 this.resetRetryBackoff();
                 this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
@@ -4515,10 +4519,21 @@ var ReceiptRing;
                 this.elements.saveReceiptButton.setAttribute("disabled", "true");
                 this.setSaveStatus("Saving...");
                 const imageDataUrl = this.receiptImage ? await this.receiptImage : null;
+                const editing = this.editingReceipt;
                 const payload = this.buildReceiptPayload(imageDataUrl);
                 try {
-                    await this.receiptApiService.save(payload);
-                    this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
+                    if (editing) {
+                        const saved = await this.receiptApiService.update(editing.id, payload);
+                        this.setSaveStatus("Changes saved.");
+                        if (this.editingReceipt?.id === saved.id) {
+                            this.editingReceipt = saved;
+                            this.renderEditingState();
+                        }
+                    }
+                    else {
+                        await this.receiptApiService.save(payload);
+                        this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
+                    }
                 }
                 catch (error) {
                     const message = error instanceof Error ? error.message : "Could not save receipt.";
@@ -4558,6 +4573,19 @@ var ReceiptRing;
                     imageDataUrl
                 };
             }
+            stopEditing() {
+                this.editingReceipt = null;
+                this.renderEditingState();
+            }
+            renderEditingState() {
+                const receipt = this.editingReceipt;
+                this.elements.editBanner.classList.toggle("hidden", receipt === null);
+                this.elements.saveReceiptButton.textContent = receipt ? "Save changes" : "Save to history";
+                if (!receipt)
+                    return;
+                this.elements.editBannerTitle.textContent = receipt.storeName || "Untitled receipt";
+                this.elements.editBannerMeta.textContent = `Saved ${new Date(receipt.createdAt).toLocaleDateString()}`;
+            }
             async loadHistory() {
                 try {
                     const receipts = await this.receiptApiService.list();
@@ -4582,6 +4610,8 @@ var ReceiptRing;
                 }
                 try {
                     await this.receiptApiService.remove(receipt.id);
+                    if (this.editingReceipt?.id === receipt.id)
+                        this.clearReceipt();
                     await this.loadHistory();
                 }
                 catch (error) {

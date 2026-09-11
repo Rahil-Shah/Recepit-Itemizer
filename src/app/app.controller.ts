@@ -57,6 +57,9 @@ namespace ReceiptRing.App {
     // promise is what's held here: a save that lands first waits for it instead
     // of storing the receipt without its image.
     private receiptImage: Promise<string | null> | null = null;
+    // The saved receipt the workspace was opened from, while it is being
+    // edited. Saving then updates that receipt instead of filing a new one.
+    private editingReceipt: Services.SavedReceiptSummary | null = null;
     private rentEntries: Domain.RentEntry[] = [];
     // Months ("YYYY-MM") that have at least one rent entry. Folded into the
     // month dropdown so rent-only months are reachable even when no receipt
@@ -308,9 +311,15 @@ namespace ReceiptRing.App {
       this.failedParseFile = null;
       this.resetRetryBackoff();
       this.hideOcrStatus();
+      // The lines are gone, so there is nothing left to save back to the
+      // receipt that was open.
+      this.stopEditing();
     }
 
     private setItemsFromParse(items: Domain.PurchaseItem[]): void {
+      // A freshly parsed receipt is a different receipt. Saving it over the one
+      // being edited would replace that receipt with something else entirely.
+      this.stopEditing();
       this.items = items;
       this.receiptLines = this.items.map((item) => ({
         id: item.id,
@@ -1172,6 +1181,10 @@ namespace ReceiptRing.App {
     }
 
     private processReceiptImage(file: File): void {
+      // A new photo is a new receipt. Stopped now rather than when its parse
+      // lands, so a save pressed in between can't put this photo on the
+      // receipt that was being edited.
+      this.stopEditing();
       // Whatever failed before is not what the user is looking at now.
       this.failedParseFile = null;
       this.resetRetryBackoff();
@@ -1349,11 +1362,22 @@ namespace ReceiptRing.App {
       // resolves to null and the receipt is saved without an image.
       const imageDataUrl = this.receiptImage ? await this.receiptImage : null;
 
+      const editing = this.editingReceipt;
       const payload = this.buildReceiptPayload(imageDataUrl);
 
       try {
-        await this.receiptApiService.save(payload);
-        this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
+        if (editing) {
+          const saved = await this.receiptApiService.update(editing.id, payload);
+          this.setSaveStatus("Changes saved.");
+          // Picks up the new store name for the banner.
+          if (this.editingReceipt?.id === saved.id) {
+            this.editingReceipt = saved;
+            this.renderEditingState();
+          }
+        } else {
+          await this.receiptApiService.save(payload);
+          this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Could not save receipt.";
         this.setSaveStatus(message, true);
@@ -1401,6 +1425,21 @@ namespace ReceiptRing.App {
       };
     }
 
+    private stopEditing(): void {
+      this.editingReceipt = null;
+      this.renderEditingState();
+    }
+
+    private renderEditingState(): void {
+      const receipt = this.editingReceipt;
+      this.elements.editBanner.classList.toggle("hidden", receipt === null);
+      this.elements.saveReceiptButton.textContent = receipt ? "Save changes" : "Save to history";
+      if (!receipt) return;
+
+      this.elements.editBannerTitle.textContent = receipt.storeName || "Untitled receipt";
+      this.elements.editBannerMeta.textContent = `Saved ${new Date(receipt.createdAt).toLocaleDateString()}`;
+    }
+
     private async loadHistory(): Promise<void> {
       try {
         const receipts = await this.receiptApiService.list();
@@ -1436,6 +1475,9 @@ namespace ReceiptRing.App {
       }
       try {
         await this.receiptApiService.remove(receipt.id);
+        // The copy open in Split would otherwise save back to a receipt that
+        // no longer exists.
+        if (this.editingReceipt?.id === receipt.id) this.clearReceipt();
         await this.loadHistory();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Please try again.";
