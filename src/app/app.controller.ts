@@ -559,28 +559,6 @@ namespace ReceiptRing.App {
       };
     }
 
-    /** A stored identification back in the shape the workspace works with. */
-    private fromStoredIdentification(
-      line: { id: string; label: string; itemCode?: string | null },
-      stored: Services.StoredIdentification | null | undefined
-    ): Domain.ItemIdentification | null {
-      if (!stored?.resolvedName) return null;
-
-      return {
-        lineId: line.id,
-        rawLabel: line.label,
-        ...(line.itemCode ? { itemCode: line.itemCode } : {}),
-        resolvedName: stored.resolvedName,
-        ...(stored.brand ? { brand: stored.brand } : {}),
-        ...(stored.size ? { size: stored.size } : {}),
-        confidence: Number(stored.confidence) || 0,
-        source: stored.source ?? "unresolved",
-        ...(stored.reasoning ? { reasoning: stored.reasoning } : {}),
-        alternatives: Array.isArray(stored.alternatives) ? stored.alternatives : [],
-        confirmed: Boolean(stored.confirmed)
-      };
-    }
-
     /**
      * Works out what every line on the receipt actually is.
      *

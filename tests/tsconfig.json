@@ -30,6 +30,7 @@
     "../src/services/split-calculator.service.ts",
     "../src/services/line-selection.service.ts",
     "../src/services/receipt-api.service.ts",
+    "../src/services/saved-receipt-workspace.service.ts",
     "../src/services/bank-api.service.ts",
     "../src/services/rent-api.service.ts",
     "../src/services/spending-aggregator.service.ts",

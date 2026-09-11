@@ -1745,6 +1745,80 @@ var ReceiptRing;
 (function (ReceiptRing) {
     var Services;
     (function (Services) {
+        const ASSIGNMENT_MODES = ["equal", "percentage", "amount"];
+        function workspaceFromSavedReceipt(receipt, createId) {
+            const assignments = [];
+            const lineModes = new Map();
+            const identifications = new Map();
+            const lines = receipt.lines.map((line) => {
+                const identification = identificationFromStored(line, line.identification);
+                if (identification)
+                    identifications.set(line.id, identification);
+                for (const share of line.assignments) {
+                    if (!share.personId)
+                        continue;
+                    const mode = ASSIGNMENT_MODES.includes(share.mode)
+                        ? share.mode
+                        : "equal";
+                    if (!lineModes.has(line.id))
+                        lineModes.set(line.id, mode);
+                    assignments.push({
+                        id: createId(),
+                        lineId: line.id,
+                        personId: share.personId,
+                        mode,
+                        value: Number(share.value) || 0
+                    });
+                }
+                return {
+                    id: line.id,
+                    label: line.label,
+                    amount: Number(line.amount) || 0,
+                    ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+                    confidence: 100,
+                    ignored: line.ignored ?? false,
+                    isFood: line.isFood ?? false
+                };
+            });
+            return {
+                storeName: receipt.storeName ?? "",
+                category: receipt.category,
+                tax: Number(receipt.tax) || 0,
+                lines,
+                assignments,
+                lineModes,
+                identifications,
+                people: receipt.people.map((person) => ({
+                    id: person.id,
+                    name: person.name,
+                    isSelf: Boolean(person.isSelf)
+                }))
+            };
+        }
+        Services.workspaceFromSavedReceipt = workspaceFromSavedReceipt;
+        function identificationFromStored(line, stored) {
+            if (!stored?.resolvedName)
+                return null;
+            return {
+                lineId: line.id,
+                rawLabel: line.label,
+                ...(line.itemCode ? { itemCode: line.itemCode } : {}),
+                resolvedName: stored.resolvedName,
+                ...(stored.brand ? { brand: stored.brand } : {}),
+                ...(stored.size ? { size: stored.size } : {}),
+                confidence: Number(stored.confidence) || 0,
+                source: stored.source ?? "unresolved",
+                ...(stored.reasoning ? { reasoning: stored.reasoning } : {}),
+                alternatives: Array.isArray(stored.alternatives) ? stored.alternatives : [],
+                confirmed: Boolean(stored.confirmed)
+            };
+        }
+    })(Services = ReceiptRing.Services || (ReceiptRing.Services = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var Services;
+    (function (Services) {
         class AuthApiService {
             async request(path, init) {
                 return fetch(path, { credentials: "same-origin", ...init });
@@ -3855,23 +3929,6 @@ var ReceiptRing;
                     reasoning: identification.reasoning ?? null,
                     alternatives: identification.alternatives,
                     confirmed: identification.confirmed
-                };
-            }
-            fromStoredIdentification(line, stored) {
-                if (!stored?.resolvedName)
-                    return null;
-                return {
-                    lineId: line.id,
-                    rawLabel: line.label,
-                    ...(line.itemCode ? { itemCode: line.itemCode } : {}),
-                    resolvedName: stored.resolvedName,
-                    ...(stored.brand ? { brand: stored.brand } : {}),
-                    ...(stored.size ? { size: stored.size } : {}),
-                    confidence: Number(stored.confidence) || 0,
-                    source: stored.source ?? "unresolved",
-                    ...(stored.reasoning ? { reasoning: stored.reasoning } : {}),
-                    alternatives: Array.isArray(stored.alternatives) ? stored.alternatives : [],
-                    confirmed: Boolean(stored.confirmed)
                 };
             }
             async identifyItems(lines) {

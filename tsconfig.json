@@ -34,6 +34,7 @@
     "src/services/receipt-image.service.ts",
     "src/services/gemini.service.ts",
     "src/services/receipt-api.service.ts",
+    "src/services/saved-receipt-workspace.service.ts",
     "src/services/auth-api.service.ts",
     "src/services/bank-api.service.ts",
     "src/services/people-api.service.ts",
