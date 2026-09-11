@@ -40,6 +40,10 @@ namespace ReceiptRing.UI {
     splitTotalsList: HTMLElement;
     saveReceiptButton: HTMLButtonElement;
     saveStatus: HTMLElement;
+    editBanner: HTMLElement;
+    editBannerTitle: HTMLElement;
+    editBannerMeta: HTMLElement;
+    cancelEditButton: HTMLButtonElement;
     itemCount: HTMLElement;
     receiptTotal: HTMLElement;
     tabButtons: HTMLButtonElement[];
@@ -162,6 +166,10 @@ namespace ReceiptRing.UI {
         splitTotalsList: this.getElement("#splitTotalsList", HTMLElement),
         saveReceiptButton: this.getElement("#saveReceiptButton", HTMLButtonElement),
         saveStatus: this.getElement("#saveStatus", HTMLElement),
+        editBanner: this.getElement("#editBanner", HTMLElement),
+        editBannerTitle: this.getElement("#editBannerTitle", HTMLElement),
+        editBannerMeta: this.getElement("#editBannerMeta", HTMLElement),
+        cancelEditButton: this.getElement("#cancelEditButton", HTMLButtonElement),
         itemCount: this.getElement("#itemCount", HTMLElement),
         receiptTotal: this.getElement("#receiptTotal", HTMLElement),
         tabButtons: Array.from(document.querySelectorAll(".tab-button")).filter(

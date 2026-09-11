@@ -1343,6 +1343,61 @@ input[type="number"] {
   color: var(--accent);
 }
 
+/* ---------------- Editing a saved receipt ---------------- */
+/* It changes what Save does, so it sits above the whole workspace in the
+   accent -- impossible to miss, without being another panel. */
+.edit-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 5px 5px 5px 16px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+
+.edit-banner-text {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.edit-banner-label {
+  flex: none;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.edit-banner-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-banner-meta {
+  flex: none;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .edit-banner-meta {
+    display: none;
+  }
+}
+
 /* ---------------- Save panel ---------------- */
 .save-panel {
   display: grid;

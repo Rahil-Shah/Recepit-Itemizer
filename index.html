@@ -57,6 +57,17 @@
 
     <main class="app-main">
       <div class="tab-view" id="receiptsView">
+        <!-- Shown while a receipt from History is open here: saving then
+             updates that receipt instead of filing a second copy. The live
+             region is the text alone, so the Cancel button isn't announced. -->
+        <div class="edit-banner hidden" id="editBanner">
+          <div class="edit-banner-text" role="status">
+            <span class="edit-banner-label">Editing</span>
+            <span class="edit-banner-title" id="editBannerTitle"></span>
+            <span class="edit-banner-meta" id="editBannerMeta"></span>
+          </div>
+          <button class="btn btn-ghost btn-small" id="cancelEditButton" type="button">Cancel</button>
+        </div>
         <div class="workspace" aria-label="Receipt workspace">
           <section class="panel" aria-label="Scan receipt">
             <header class="panel-header">
