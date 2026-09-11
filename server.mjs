@@ -324,17 +324,86 @@ function validateReceiptPayload(body) {
   return null;
 }
 
+function isReceiptTooLarge(body) {
+  return (
+    body.lines.length > MAX_LINES ||
+    (body.people ?? []).length > MAX_PEOPLE ||
+    (body.assignments ?? []).length > MAX_ASSIGNMENTS
+  );
+}
+
+// Writes a receipt's people, lines and assignments. Shared by create and
+// update, so an edited receipt is checked and stored exactly like a new one.
+// Throws BadRequestError to roll the surrounding transaction back.
+async function writeReceiptContents(tx, receiptId, userId, body) {
+  // Map clientId to accountPersonId; person.clientId now refers to accountPersonId
+  const personByClient = new Map();
+  const seenAccountPersonIds = new Set();
+  for (const person of body.people ?? []) {
+    // Prevent duplicate people in a single receipt
+    if (seenAccountPersonIds.has(person.clientId)) {
+      throw new BadRequestError("A person cannot appear twice in the same receipt.");
+    }
+    seenAccountPersonIds.add(person.clientId);
+
+    // Verify the accountPerson exists and belongs to this user
+    const accountPerson = await tx.accountPerson.findUnique({
+      where: { id: person.clientId }
+    });
+    if (!accountPerson || accountPerson.userId !== userId) {
+      throw new BadRequestError("Invalid person reference.");
+    }
+    // Create a Person record that references the AccountPerson
+    const created = await tx.person.create({
+      data: { receiptId, accountPersonId: person.clientId }
+    });
+    personByClient.set(person.clientId, created.id);
+  }
+
+  const lineByClient = new Map();
+  let sortOrder = 0;
+  for (const line of body.lines) {
+    const created = await tx.receiptLine.create({
+      data: {
+        receiptId,
+        label: line.label,
+        amount: line.amount ?? 0,
+        ignored: Boolean(line.ignored),
+        isFood: Boolean(line.isFood),
+        itemCode: normalizeStoredItemCode(line.itemCode),
+        sortOrder: sortOrder++,
+        ...identificationFields(line.identification)
+      }
+    });
+    lineByClient.set(line.clientId, created.id);
+  }
+
+  const assignmentData = (body.assignments ?? []).map((assignment) => ({
+    lineId: lineByClient.get(assignment.lineClientId),
+    personId: personByClient.get(assignment.personClientId),
+    mode: assignment.mode ?? "equal",
+    value: assignment.value ?? 0
+  }));
+  // An assignment pointing at a line or person that isn't in this payload
+  // used to be dropped here, so the caller got a 201 for a receipt that had
+  // quietly lost some of its splits. Fail the whole save instead; the
+  // transaction rolls back and the client can say something went wrong.
+  if (assignmentData.some((assignment) => !assignment.lineId || !assignment.personId)) {
+    throw new BadRequestError("An assignment referenced an unknown line or person.");
+  }
+
+  if (assignmentData.length > 0) {
+    await tx.lineAssignment.createMany({ data: assignmentData });
+  }
+}
+
 app.post("/api/receipts", requireAuth, async (req, res) => {
   const body = req.body ?? {};
   const invalid = validateReceiptPayload(body);
   if (invalid) {
     return res.status(400).json({ error: invalid });
   }
-  if (
-    body.lines.length > MAX_LINES ||
-    (body.people ?? []).length > MAX_PEOPLE ||
-    (body.assignments ?? []).length > MAX_ASSIGNMENTS
-  ) {
+  if (isReceiptTooLarge(body)) {
     return res.status(413).json({ error: "Receipt is too large." });
   }
 
@@ -355,65 +424,7 @@ app.post("/api/receipts", requireAuth, async (req, res) => {
         }
       });
 
-      // Map clientId to accountPersonId; person.clientId now refers to accountPersonId
-      const personByClient = new Map();
-      const seenAccountPersonIds = new Set();
-      for (const person of body.people ?? []) {
-        // Prevent duplicate people in a single receipt
-        if (seenAccountPersonIds.has(person.clientId)) {
-          throw new BadRequestError("A person cannot appear twice in the same receipt.");
-        }
-        seenAccountPersonIds.add(person.clientId);
-
-        // Verify the accountPerson exists and belongs to this user
-        const accountPerson = await tx.accountPerson.findUnique({
-          where: { id: person.clientId }
-        });
-        if (!accountPerson || accountPerson.userId !== req.userId) {
-          throw new BadRequestError("Invalid person reference.");
-        }
-        // Create a Person record that references the AccountPerson
-        const created = await tx.person.create({
-          data: { receiptId: receipt.id, accountPersonId: person.clientId }
-        });
-        personByClient.set(person.clientId, created.id);
-      }
-
-      const lineByClient = new Map();
-      let sortOrder = 0;
-      for (const line of body.lines) {
-        const created = await tx.receiptLine.create({
-          data: {
-            receiptId: receipt.id,
-            label: line.label,
-            amount: line.amount ?? 0,
-            ignored: Boolean(line.ignored),
-            isFood: Boolean(line.isFood),
-            itemCode: normalizeStoredItemCode(line.itemCode),
-            sortOrder: sortOrder++,
-            ...identificationFields(line.identification)
-          }
-        });
-        lineByClient.set(line.clientId, created.id);
-      }
-
-      const assignmentData = (body.assignments ?? []).map((assignment) => ({
-        lineId: lineByClient.get(assignment.lineClientId),
-        personId: personByClient.get(assignment.personClientId),
-        mode: assignment.mode ?? "equal",
-        value: assignment.value ?? 0
-      }));
-      // An assignment pointing at a line or person that isn't in this payload
-      // used to be dropped here, so the caller got a 201 for a receipt that had
-      // quietly lost some of its splits. Fail the whole save instead; the
-      // transaction rolls back and the client can say something went wrong.
-      if (assignmentData.some((assignment) => !assignment.lineId || !assignment.personId)) {
-        throw new BadRequestError("An assignment referenced an unknown line or person.");
-      }
-
-      if (assignmentData.length > 0) {
-        await tx.lineAssignment.createMany({ data: assignmentData });
-      }
+      await writeReceiptContents(tx, receipt.id, req.userId, body);
 
       return tx.receipt.findUnique({
         where: { id: receipt.id },
