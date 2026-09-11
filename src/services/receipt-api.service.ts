@@ -151,6 +151,24 @@ namespace ReceiptRing.Services {
       return (await response.json()) as SavedReceiptSummary;
     }
 
+    /**
+     * Rewrites a saved receipt with what the Split tab now holds. A null
+     * imageDataUrl leaves the photo already stored with it untouched -- the
+     * browser never has that image to send back.
+     */
+    async update(id: string, payload: SaveReceiptPayload): Promise<SavedReceiptSummary> {
+      const response = await fetch(`/api/receipts/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(`Update failed (${response.status}): ${message}`);
+      }
+      return (await response.json()) as SavedReceiptSummary;
+    }
+
     async list(): Promise<SavedReceiptSummary[]> {
       const response = await fetch("/api/receipts");
       if (!response.ok) {

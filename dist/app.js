@@ -1668,6 +1668,18 @@ var ReceiptRing;
                 }
                 return (await response.json());
             }
+            async update(id, payload) {
+                const response = await fetch(`/api/receipts/${encodeURIComponent(id)}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(`Update failed (${response.status}): ${message}`);
+                }
+                return (await response.json());
+            }
             async list() {
                 const response = await fetch("/api/receipts");
                 if (!response.ok) {
