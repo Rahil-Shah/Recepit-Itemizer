@@ -443,6 +443,74 @@ app.post("/api/receipts", requireAuth, async (req, res) => {
   }
 });
 
+// Rewrites a saved receipt with what the Split tab now holds, when it has been
+// reopened from History to fix a mistake.
+//
+// Updated in place rather than deleted and saved again: the receipt keeps its
+// id, so a bank transaction linked to it stays linked, and its createdAt, so it
+// stays in the budget month it was first saved in. Its people and lines are
+// replaced whole, and their assignments go with them (onDelete: Cascade).
+//
+// The photo is only touched when a new one is sent. The browser never holds
+// the stored image, so a null imageDataUrl means "unchanged", not "remove it".
+app.put("/api/receipts/:id", requireAuth, async (req, res) => {
+  const body = req.body ?? {};
+  const invalid = validateReceiptPayload(body);
+  if (invalid) {
+    return res.status(400).json({ error: invalid });
+  }
+  if (isReceiptTooLarge(body)) {
+    return res.status(413).json({ error: "Receipt is too large." });
+  }
+
+  const image = body.imageDataUrl ? parseImageDataUrl(body.imageDataUrl) : null;
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Scoped to the caller, so one user can't overwrite another's receipt.
+      const existing = await tx.receipt.findFirst({
+        where: { id: req.params.id, userId: req.userId },
+        select: { id: true }
+      });
+      if (!existing) return null;
+
+      await tx.receipt.update({
+        where: { id: existing.id },
+        data: {
+          storeName: body.storeName ?? null,
+          category: body.category ?? "Other",
+          subtotal: body.subtotal ?? null,
+          tax: body.tax ?? null,
+          total: body.total ?? null,
+          ...(image ? { imageData: image.data, imageMimeType: image.mimeType } : {})
+        },
+        // Otherwise the update hands back the base64 photo it just left alone.
+        select: { id: true }
+      });
+      await tx.person.deleteMany({ where: { receiptId: existing.id } });
+      await tx.receiptLine.deleteMany({ where: { receiptId: existing.id } });
+      await writeReceiptContents(tx, existing.id, req.userId, body);
+
+      return tx.receipt.findUnique({
+        where: { id: existing.id },
+        omit: omitImageData,
+        include: receiptInclude
+      });
+    });
+
+    if (!result) {
+      return res.status(404).json({ error: "Receipt not found." });
+    }
+    res.json(serializeReceipt(result));
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error("Failed to update receipt:", error);
+    res.status(500).json({ error: "Failed to update receipt." });
+  }
+});
+
 // The saved receipt photo, decoded back to binary. Scoped to the caller, and
 // deliberately not served from a static directory: the image can show a card's
 // last four, a loyalty number, or a home address, so it stays behind the
