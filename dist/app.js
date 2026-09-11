@@ -3094,7 +3094,7 @@ var ReceiptRing;
                 block.append(status);
                 return block;
             }
-            renderHistory(container, receipts, onDelete, onLineFood, onLinkTransaction, onUnlinkTransaction) {
+            renderHistory(container, receipts, onDelete, onLineFood, onLinkTransaction, onUnlinkTransaction, onEdit) {
                 container.innerHTML = "";
                 receipts.forEach((receipt) => {
                     const card = document.createElement("details");
@@ -3207,9 +3207,17 @@ var ReceiptRing;
                         detail.textContent = `Attached to ${what} · ${when} · ${this.currencyFormatService.format(linked.amount)}`;
                         body.append(detail);
                     }
-                    if (onDelete || onLinkTransaction || onUnlinkTransaction) {
+                    if (onEdit || onDelete || onLinkTransaction || onUnlinkTransaction) {
                         const actions = document.createElement("div");
                         actions.className = "history-actions";
+                        if (onEdit) {
+                            const edit = document.createElement("button");
+                            edit.type = "button";
+                            edit.className = "btn btn-secondary btn-small";
+                            edit.textContent = "Edit in Split";
+                            edit.addEventListener("click", () => onEdit(receipt));
+                            actions.append(edit);
+                        }
                         if (linked && onUnlinkTransaction) {
                             const unlink = document.createElement("button");
                             unlink.type = "button";
@@ -3670,6 +3678,7 @@ var ReceiptRing;
                 this.elements.closePasteJsonButton.addEventListener("click", () => this.closePasteJsonModal());
                 this.elements.importPasteJsonButton.addEventListener("click", () => this.importPastedJson());
                 this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
+                this.elements.cancelEditButton.addEventListener("click", () => this.cancelEditing());
                 this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
                 this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
                 this.elements.refreshTransactionsButton.addEventListener("click", () => void this.refreshTransactions());
@@ -3813,6 +3822,7 @@ var ReceiptRing;
             clearReceipt() {
                 this.elements.receiptText.value = "";
                 this.elements.storeNameInput.value = "";
+                this.elements.taxInput.value = "0";
                 this.items = [];
                 this.clearImage();
                 this.setSaveStatus("");
@@ -4573,6 +4583,35 @@ var ReceiptRing;
                     imageDataUrl
                 };
             }
+            editSavedReceipt(receipt) {
+                this.clearImage();
+                const workspace = ReceiptRing.Services.workspaceFromSavedReceipt(receipt, () => this.idService.create());
+                this.items = [];
+                this.elements.receiptText.value = "";
+                this.elements.storeNameInput.value = workspace.storeName;
+                this.elements.taxInput.value = String(workspace.tax);
+                this.setReceiptCategory(workspace.category);
+                this.receiptLines = workspace.lines;
+                this.assignments = workspace.assignments;
+                this.lineModes = workspace.lineModes;
+                this.identifications = workspace.identifications;
+                this.foodFlags = new Map(workspace.lines.map((line) => [line.id, line.isFood ?? false]));
+                const missing = workspace.people.filter((person) => !this.people.some((known) => known.id === person.id));
+                if (missing.length > 0)
+                    this.people = [...this.people, ...missing];
+                if (receipt.hasImage) {
+                    this.elements.receiptPreview.src = this.receiptApiService.imageUrl(receipt.id);
+                    this.elements.receiptPreviewWrap.classList.remove("hidden");
+                }
+                this.editingReceipt = receipt;
+                this.setSaveStatus("");
+                this.render();
+                this.renderEditingState();
+                this.switchTab("receipts");
+            }
+            cancelEditing() {
+                this.clearReceipt();
+            }
             stopEditing() {
                 this.editingReceipt = null;
                 this.renderEditingState();
@@ -4586,12 +4625,22 @@ var ReceiptRing;
                 this.elements.editBannerTitle.textContent = receipt.storeName || "Untitled receipt";
                 this.elements.editBannerMeta.textContent = `Saved ${new Date(receipt.createdAt).toLocaleDateString()}`;
             }
+            setReceiptCategory(category) {
+                const select = this.elements.receiptCategory;
+                if (!Array.from(select.options).some((option) => option.value === category)) {
+                    const option = document.createElement("option");
+                    option.textContent = category;
+                    select.append(option);
+                }
+                select.value = category;
+                this.receiptCategory = category;
+            }
             async loadHistory() {
                 try {
                     const receipts = await this.receiptApiService.list();
                     this.receipts = receipts;
                     this.elements.historyEmpty.classList.toggle("hidden", receipts.length > 0);
-                    this.splitWorkspaceView.renderHistory(this.elements.historyList, receipts, (receipt) => void this.deleteReceipt(receipt), (receiptId, lineId, isFood) => void this.updateLineFood(receiptId, lineId, isFood), (receipt) => this.openTransactionLinkModal(receipt.id), (receipt) => void this.unlinkReceiptFromHistory(receipt));
+                    this.splitWorkspaceView.renderHistory(this.elements.historyList, receipts, (receipt) => void this.deleteReceipt(receipt), (receiptId, lineId, isFood) => void this.updateLineFood(receiptId, lineId, isFood), (receipt) => this.openTransactionLinkModal(receipt.id), (receipt) => void this.unlinkReceiptFromHistory(receipt), (receipt) => this.editSavedReceipt(receipt));
                 }
                 catch (error) {
                     this.elements.historyEmpty.classList.remove("hidden");

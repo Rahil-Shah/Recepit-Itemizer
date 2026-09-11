@@ -799,7 +799,8 @@ namespace ReceiptRing.UI {
       onDelete?: (receipt: Services.SavedReceiptSummary) => void,
       onLineFood?: (receiptId: string, lineId: string, isFood: boolean) => void,
       onLinkTransaction?: (receipt: Services.SavedReceiptSummary) => void,
-      onUnlinkTransaction?: (receipt: Services.SavedReceiptSummary) => void
+      onUnlinkTransaction?: (receipt: Services.SavedReceiptSummary) => void,
+      onEdit?: (receipt: Services.SavedReceiptSummary) => void
     ): void {
       container.innerHTML = "";
       receipts.forEach((receipt) => {
@@ -942,9 +943,20 @@ namespace ReceiptRing.UI {
           body.append(detail);
         }
 
-        if (onDelete || onLinkTransaction || onUnlinkTransaction) {
+        if (onEdit || onDelete || onLinkTransaction || onUnlinkTransaction) {
           const actions = document.createElement("div");
           actions.className = "history-actions";
+
+          // Reopens the receipt in Split with every control it was made with,
+          // which is where a wrong assignment or food flag actually gets fixed.
+          if (onEdit) {
+            const edit = document.createElement("button");
+            edit.type = "button";
+            edit.className = "btn btn-secondary btn-small";
+            edit.textContent = "Edit in Split";
+            edit.addEventListener("click", () => onEdit(receipt));
+            actions.append(edit);
+          }
 
           // Linking from this side saves hunting for the receipt again from the
           // budgeting tab once it is already saved and in front of you.

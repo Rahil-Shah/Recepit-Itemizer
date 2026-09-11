@@ -168,6 +168,7 @@ namespace ReceiptRing.App {
       this.elements.closePasteJsonButton.addEventListener("click", () => this.closePasteJsonModal());
       this.elements.importPasteJsonButton.addEventListener("click", () => this.importPastedJson());
       this.elements.saveReceiptButton.addEventListener("click", () => void this.saveReceipt());
+      this.elements.cancelEditButton.addEventListener("click", () => this.cancelEditing());
       this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
       this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
       this.elements.refreshTransactionsButton.addEventListener("click", () => void this.refreshTransactions());
@@ -346,6 +347,9 @@ namespace ReceiptRing.App {
     private clearReceipt(): void {
       this.elements.receiptText.value = "";
       this.elements.storeNameInput.value = "";
+      // Reopening a saved receipt fills the tax in, and a figure left behind
+      // here would be charged to whatever receipt is entered next.
+      this.elements.taxInput.value = "0";
       this.items = [];
       // Also drops the photo and its preview: clearing the receipt must not
       // leave the previous image attached to whatever is entered next.
@@ -1425,6 +1429,52 @@ namespace ReceiptRing.App {
       };
     }
 
+    /**
+     * Opens a saved receipt in the Split tab, so a mistake is fixed with the
+     * controls it was made with. Saving then updates that receipt in place.
+     */
+    private editSavedReceipt(receipt: Services.SavedReceiptSummary): void {
+      // Start from an empty workspace, so nothing from the receipt that was
+      // there before -- its photo, a pending retry, a selection -- carries over.
+      this.clearImage();
+      const workspace = Services.workspaceFromSavedReceipt(receipt, () => this.idService.create());
+
+      this.items = [];
+      this.elements.receiptText.value = "";
+      this.elements.storeNameInput.value = workspace.storeName;
+      this.elements.taxInput.value = String(workspace.tax);
+      this.setReceiptCategory(workspace.category);
+      this.receiptLines = workspace.lines;
+      this.assignments = workspace.assignments;
+      this.lineModes = workspace.lineModes;
+      this.identifications = workspace.identifications;
+      this.foodFlags = new Map(
+        workspace.lines.map((line): [string, boolean] => [line.id, line.isFood ?? false])
+      );
+
+      // Someone on the receipt who isn't in the loaded list would leave their
+      // shares pointing at nobody, and the server would refuse the save.
+      const missing = workspace.people.filter(
+        (person) => !this.people.some((known) => known.id === person.id)
+      );
+      if (missing.length > 0) this.people = [...this.people, ...missing];
+
+      if (receipt.hasImage) {
+        this.elements.receiptPreview.src = this.receiptApiService.imageUrl(receipt.id);
+        this.elements.receiptPreviewWrap.classList.remove("hidden");
+      }
+
+      this.editingReceipt = receipt;
+      this.setSaveStatus("");
+      this.render();
+      this.renderEditingState();
+      this.switchTab("receipts");
+    }
+
+    private cancelEditing(): void {
+      this.clearReceipt();
+    }
+
     private stopEditing(): void {
       this.editingReceipt = null;
       this.renderEditingState();
@@ -1440,6 +1490,22 @@ namespace ReceiptRing.App {
       this.elements.editBannerMeta.textContent = `Saved ${new Date(receipt.createdAt).toLocaleDateString()}`;
     }
 
+    /**
+     * Receipts attached from a bank transaction are filed by keyword and can
+     * carry a category this menu doesn't list. It is added rather than left
+     * unselected, so the menu shows what the receipt is really filed under.
+     */
+    private setReceiptCategory(category: string): void {
+      const select = this.elements.receiptCategory;
+      if (!Array.from(select.options).some((option) => option.value === category)) {
+        const option = document.createElement("option");
+        option.textContent = category;
+        select.append(option);
+      }
+      select.value = category;
+      this.receiptCategory = category as Domain.ReceiptCategory;
+    }
+
     private async loadHistory(): Promise<void> {
       try {
         const receipts = await this.receiptApiService.list();
@@ -1453,7 +1519,8 @@ namespace ReceiptRing.App {
           (receipt) => void this.deleteReceipt(receipt),
           (receiptId, lineId, isFood) => void this.updateLineFood(receiptId, lineId, isFood),
           (receipt) => this.openTransactionLinkModal(receipt.id),
-          (receipt) => void this.unlinkReceiptFromHistory(receipt)
+          (receipt) => void this.unlinkReceiptFromHistory(receipt),
+          (receipt) => this.editSavedReceipt(receipt)
         );
       } catch (error) {
         this.elements.historyEmpty.classList.remove("hidden");
