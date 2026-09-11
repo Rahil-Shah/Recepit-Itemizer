@@ -1349,9 +1349,24 @@ namespace ReceiptRing.App {
       // resolves to null and the receipt is saved without an image.
       const imageDataUrl = this.receiptImage ? await this.receiptImage : null;
 
+      const payload = this.buildReceiptPayload(imageDataUrl);
+
+      try {
+        await this.receiptApiService.save(payload);
+        this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not save receipt.";
+        this.setSaveStatus(message, true);
+      } finally {
+        this.elements.saveReceiptButton.removeAttribute("disabled");
+      }
+    }
+
+    /** Everything a save writes, read off the workspace as it stands. */
+    private buildReceiptPayload(imageDataUrl: string | null): Services.SaveReceiptPayload {
       const subtotal = this.getSubtotal();
       const tax = this.getTaxAmount();
-      const payload: Services.SaveReceiptPayload = {
+      return {
         storeName: this.elements.storeNameInput.value.trim() || null,
         category: this.receiptCategory,
         subtotal,
@@ -1384,16 +1399,6 @@ namespace ReceiptRing.App {
         })),
         imageDataUrl
       };
-
-      try {
-        await this.receiptApiService.save(payload);
-        this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Could not save receipt.";
-        this.setSaveStatus(message, true);
-      } finally {
-        this.elements.saveReceiptButton.removeAttribute("disabled");
-      }
     }
 
     private async loadHistory(): Promise<void> {

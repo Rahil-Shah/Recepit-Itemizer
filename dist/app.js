@@ -4511,9 +4511,23 @@ var ReceiptRing;
                 this.elements.saveReceiptButton.setAttribute("disabled", "true");
                 this.setSaveStatus("Saving...");
                 const imageDataUrl = this.receiptImage ? await this.receiptImage : null;
+                const payload = this.buildReceiptPayload(imageDataUrl);
+                try {
+                    await this.receiptApiService.save(payload);
+                    this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : "Could not save receipt.";
+                    this.setSaveStatus(message, true);
+                }
+                finally {
+                    this.elements.saveReceiptButton.removeAttribute("disabled");
+                }
+            }
+            buildReceiptPayload(imageDataUrl) {
                 const subtotal = this.getSubtotal();
                 const tax = this.getTaxAmount();
-                const payload = {
+                return {
                     storeName: this.elements.storeNameInput.value.trim() || null,
                     category: this.receiptCategory,
                     subtotal,
@@ -4539,17 +4553,6 @@ var ReceiptRing;
                     })),
                     imageDataUrl
                 };
-                try {
-                    await this.receiptApiService.save(payload);
-                    this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
-                }
-                catch (error) {
-                    const message = error instanceof Error ? error.message : "Could not save receipt.";
-                    this.setSaveStatus(message, true);
-                }
-                finally {
-                    this.elements.saveReceiptButton.removeAttribute("disabled");
-                }
             }
             async loadHistory() {
                 try {
