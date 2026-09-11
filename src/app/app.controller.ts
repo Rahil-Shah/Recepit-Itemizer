@@ -60,6 +60,9 @@ namespace ReceiptRing.App {
     // The saved receipt the workspace was opened from, while it is being
     // edited. Saving then updates that receipt instead of filing a new one.
     private editingReceipt: Services.SavedReceiptSummary | null = null;
+    // What a save would have written when the workspace was last saved or
+    // opened, so leaving it can tell whether anything would be lost.
+    private savedSnapshot: string | null = null;
     private rentEntries: Domain.RentEntry[] = [];
     // Months ("YYYY-MM") that have at least one rent entry. Folded into the
     // month dropdown so rent-only months are reachable even when no receipt
@@ -1368,6 +1371,7 @@ namespace ReceiptRing.App {
 
       const editing = this.editingReceipt;
       const payload = this.buildReceiptPayload(imageDataUrl);
+      const snapshot = this.snapshotWorkspace();
 
       try {
         if (editing) {
@@ -1381,6 +1385,10 @@ namespace ReceiptRing.App {
         } else {
           await this.receiptApiService.save(payload);
           this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
+        }
+        // Unless a different receipt was opened while this one was saving.
+        if (this.editingReceipt?.id === editing?.id) {
+          this.savedSnapshot = snapshot;
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Could not save receipt.";
@@ -1434,6 +1442,13 @@ namespace ReceiptRing.App {
      * controls it was made with. Saving then updates that receipt in place.
      */
     private editSavedReceipt(receipt: Services.SavedReceiptSummary): void {
+      if (
+        this.hasUnsavedChanges() &&
+        !window.confirm("Replace the receipt in the Split tab? Anything you haven't saved will be lost.")
+      ) {
+        return;
+      }
+
       // Start from an empty workspace, so nothing from the receipt that was
       // there before -- its photo, a pending retry, a selection -- carries over.
       this.clearImage();
@@ -1468,15 +1483,20 @@ namespace ReceiptRing.App {
       this.setSaveStatus("");
       this.render();
       this.renderEditingState();
+      this.savedSnapshot = this.snapshotWorkspace();
       this.switchTab("receipts");
     }
 
     private cancelEditing(): void {
+      if (this.hasUnsavedChanges() && !window.confirm("Discard your changes to this receipt?")) {
+        return;
+      }
       this.clearReceipt();
     }
 
     private stopEditing(): void {
       this.editingReceipt = null;
+      this.savedSnapshot = null;
       this.renderEditingState();
     }
 
@@ -1504,6 +1524,18 @@ namespace ReceiptRing.App {
       }
       select.value = category;
       this.receiptCategory = category as Domain.ReceiptCategory;
+    }
+
+    // Whether leaving the workspace now would throw work away. Lines fresh off
+    // a parse have never been saved, so any at all count.
+    private hasUnsavedChanges(): boolean {
+      return this.receiptLines.length > 0 && this.snapshotWorkspace() !== this.savedSnapshot;
+    }
+
+    // Everything a save would write except the photo, which the workspace
+    // never edits.
+    private snapshotWorkspace(): string {
+      return JSON.stringify(this.buildReceiptPayload(null));
     }
 
     private async loadHistory(): Promise<void> {

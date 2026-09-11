@@ -3613,6 +3613,7 @@ var ReceiptRing;
                 this.userHasGeminiKey = false;
                 this.receiptImage = null;
                 this.editingReceipt = null;
+                this.savedSnapshot = null;
                 this.rentEntries = [];
                 this.rentMonths = new Set();
                 this.editingRentEntryId = null;
@@ -4531,6 +4532,7 @@ var ReceiptRing;
                 const imageDataUrl = this.receiptImage ? await this.receiptImage : null;
                 const editing = this.editingReceipt;
                 const payload = this.buildReceiptPayload(imageDataUrl);
+                const snapshot = this.snapshotWorkspace();
                 try {
                     if (editing) {
                         const saved = await this.receiptApiService.update(editing.id, payload);
@@ -4543,6 +4545,9 @@ var ReceiptRing;
                     else {
                         await this.receiptApiService.save(payload);
                         this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
+                    }
+                    if (this.editingReceipt?.id === editing?.id) {
+                        this.savedSnapshot = snapshot;
                     }
                 }
                 catch (error) {
@@ -4584,6 +4589,10 @@ var ReceiptRing;
                 };
             }
             editSavedReceipt(receipt) {
+                if (this.hasUnsavedChanges() &&
+                    !window.confirm("Replace the receipt in the Split tab? Anything you haven't saved will be lost.")) {
+                    return;
+                }
                 this.clearImage();
                 const workspace = ReceiptRing.Services.workspaceFromSavedReceipt(receipt, () => this.idService.create());
                 this.items = [];
@@ -4607,13 +4616,18 @@ var ReceiptRing;
                 this.setSaveStatus("");
                 this.render();
                 this.renderEditingState();
+                this.savedSnapshot = this.snapshotWorkspace();
                 this.switchTab("receipts");
             }
             cancelEditing() {
+                if (this.hasUnsavedChanges() && !window.confirm("Discard your changes to this receipt?")) {
+                    return;
+                }
                 this.clearReceipt();
             }
             stopEditing() {
                 this.editingReceipt = null;
+                this.savedSnapshot = null;
                 this.renderEditingState();
             }
             renderEditingState() {
@@ -4634,6 +4648,12 @@ var ReceiptRing;
                 }
                 select.value = category;
                 this.receiptCategory = category;
+            }
+            hasUnsavedChanges() {
+                return this.receiptLines.length > 0 && this.snapshotWorkspace() !== this.savedSnapshot;
+            }
+            snapshotWorkspace() {
+                return JSON.stringify(this.buildReceiptPayload(null));
             }
             async loadHistory() {
                 try {
