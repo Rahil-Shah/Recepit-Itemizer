@@ -56,6 +56,13 @@ export function createAuth(prisma) {
   // there is no account (or no stored hash) to compare against.
   const dummyHash = dummyPasswordHash();
 
+  // Temporary lock while the app is reachable through a public tunnel: with
+  // ALLOWED_LOGIN_EMAIL set, registration is closed and only that account can
+  // log in or keep using a session. Remove it from .env to reopen the app.
+  const allowedEmail = process.env.ALLOWED_LOGIN_EMAIL?.trim().toLowerCase() || null;
+  const isLockedOut = (email) => allowedEmail !== null && email !== allowedEmail;
+  if (allowedEmail) console.log(`Auth locked: registration closed, only ${allowedEmail} can sign in.`);
+
   // Expired sessions were only ever deleted if that exact token was presented
   // again after expiry -- which a browser never does, because the cookie's
   // maxAge matches the session TTL and it drops the cookie first. So the table
@@ -95,11 +102,19 @@ export function createAuth(prisma) {
       const token = req.cookies?.[SESSION_COOKIE];
       if (!token) return res.status(401).json({ error: "Authentication required." });
 
-      const session = await prisma.session.findUnique({ where: { tokenHash: hashToken(token) } });
+      const session = await prisma.session.findUnique({
+        where: { tokenHash: hashToken(token) },
+        include: { user: { select: { email: true } } }
+      });
       if (!session || session.expiresAt < new Date()) {
         if (session) await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
         res.clearCookie(SESSION_COOKIE, { path: "/" });
         return res.status(401).json({ error: "Session expired." });
+      }
+      // Sessions other accounts already hold must stop working too.
+      if (isLockedOut(session.user.email)) {
+        res.clearCookie(SESSION_COOKIE, { path: "/" });
+        return res.status(401).json({ error: "Authentication required." });
       }
 
       req.userId = session.userId;
@@ -115,6 +130,9 @@ export function createAuth(prisma) {
   // also used to gate middleware that runs before any route.
   function register(app) {
     app.post("/api/auth/register", async (req, res) => {
+      if (allowedEmail) {
+        return res.status(403).json({ error: "Registration is closed." });
+      }
       const email = String(req.body?.email ?? "").trim().toLowerCase();
       const password = String(req.body?.password ?? "");
       const name = req.body?.name ? String(req.body.name).trim() : null;
@@ -160,8 +178,10 @@ export function createAuth(prisma) {
         // straight into any account whose passwordHash was NULL.
         const stored = user?.passwordHash;
         const ok = await verifyPassword(password, stored ?? (await dummyHash));
-        // An account with no password set cannot be logged into with one.
-        if (!user || !stored || !ok) {
+        // An account with no password set cannot be logged into with one. While
+        // locked, any other account gets the same answer as a wrong password, so
+        // the response doesn't reveal which email the app is locked to.
+        if (!user || !stored || !ok || isLockedOut(user.email)) {
           return res.status(401).json({ error: "Invalid email or password." });
         }
         clearAttempts(throttleKey);

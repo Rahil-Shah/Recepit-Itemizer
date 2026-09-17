@@ -1,7 +1,7 @@
 /* ============================================================
    Receipt Ring — night ledger theme
    Near-black surfaces · hairline borders · one volt accent
-   Archivo (variable width) for UI · IBM Plex Mono for figures
+   Inter for UI · JetBrains Mono for figures
    ============================================================ */
 
 :root {
@@ -36,11 +36,26 @@
   --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
   --shadow-pop: 0 12px 28px rgba(0, 0, 0, 0.45), 0 32px 80px rgba(0, 0, 0, 0.5);
 
-  --font-ui: "Archivo", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Menlo", monospace;
+
+  /* One type scale for the whole app. Sizes used to be split across two
+     competing systems -- fractional px (10.5/11.5/12.5/13.5) and rem
+     (0.72rem-1rem) -- so rows that belonged together sat on slightly
+     different sizes and the UI read as uneven. Everything now lands on
+     these five steps. */
+  --fs-micro: 11px; /* uppercase tracked labels */
+  --fs-sm: 12px;    /* meta and secondary text */
+  --fs-base: 13px;  /* row text */
+  --fs-md: 14px;    /* body and emphasis */
+  --fs-lg: 16px;    /* headings inside cards */
 
   /* Uppercase tracked micro-label, used for panel titles and field labels */
   --label-tracking: 0.12em;
+
+  /* Smallest comfortable touch target. Applied on coarse pointers only, so
+     the desktop UI keeps its tighter rhythm. */
+  --tap: 44px;
 }
 
 * {
@@ -52,10 +67,18 @@ body {
   margin: 0;
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--fs-md);
   line-height: 1.5;
+  /* Inter runs a little wide at UI sizes; this is the optical tightening its
+     own design notes call for at 13-16px. */
+  letter-spacing: -0.006em;
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Stop iOS inflating text in rotated/narrow layouts, which silently broke
+     the column widths this file is careful about. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 button,
@@ -156,7 +179,6 @@ h2 {
 .brand-name {
   font-size: 13px;
   font-weight: 800;
-  font-stretch: 118%;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -182,7 +204,7 @@ h2 {
   border-radius: 999px;
   background: none;
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -271,6 +293,33 @@ h2 {
   padding: clamp(16px, 2.5vw, 28px) clamp(16px, 3vw, 32px) 48px;
 }
 
+/* Every single-column list in the app is a grid, and a grid track defaults to
+   `min-width: auto` -- it will not shrink below the widest thing inside it. So
+   one non-shrinking cell in one row (a store name, a date, a 96px amount) set a
+   hard floor under the whole column: the education list measured 821px wide no
+   matter how narrow the screen, the rent list 731px and the transaction list
+   699px. That floor, not the rows themselves, is what pushed those rows off the
+   side of the phone. Flooring each track at 0 lets the rows truncate
+   themselves, which is what their ellipses were always for. */
+.history-list,
+.history-lines,
+.history-body,
+.split-total-list,
+.people-panel,
+.education-sections,
+.education-section .section-content,
+.rent-entries-list,
+.transactions-list,
+.bank-connections,
+.food-receipt-items,
+.item-detail-body,
+.settings-form,
+.rent-form,
+.auth-form,
+.budget-legend-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .tab-view {
   /* `backwards`, never `forwards`/`both`: view-in ends on transform:
      translateY(0), and a fill mode that retains it leaves an identity transform
@@ -285,16 +334,27 @@ h2 {
   display: none !important;
 }
 
+/* Line items carries the densest content -- a name, a food tick, an assignment
+   and a price on one row -- so it gets the extra weight rather than splitting
+   the width near-evenly and wrapping every long item name onto four lines. */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(300px, 0.95fr) minmax(420px, 1.35fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(280px, 0.85fr) minmax(420px, 1.5fr) minmax(300px, 0.95fr);
   gap: 16px;
   align-items: start;
 }
 
-/* The budgeting workspace only has two panels — don't leave a dead column. */
-#budgetingView .workspace {
-  grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.5fr);
+/* The budgeting workspace only has two panels — don't leave a dead column.
+   Gated on width because this selector carries an id: at (0,1,1) it outranks
+   the plain `.workspace` rules in the responsive block below, so without the
+   query it kept forcing its own `minmax(420px, …)` two-column grid on every
+   screen. That min added up to a 756px-wide grid inside a 380px phone, which
+   is what pushed the budgeting panels, their headers and every food, rent and
+   transaction row off the side of the display. */
+@media (min-width: 861px) {
+  #budgetingView .workspace {
+    grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.5fr);
+  }
 }
 
 /* A panel that spans the full workspace width above the two-column row. */
@@ -311,11 +371,15 @@ h2 {
   box-shadow: var(--shadow-card);
 }
 
+/* Wraps rather than crushes: "Bank transactions" alongside two buttons, or
+   "Monthly spending" alongside a month picker, had no room left on a narrow
+   panel and the title broke mid-phrase against the control. */
 .panel-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   min-height: 52px;
   padding: 8px 20px;
   border-bottom: 1px solid var(--border);
@@ -329,9 +393,8 @@ h2 {
 
 .panel-header h2 {
   color: var(--ink-2);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 750;
-  font-stretch: 112%;
   letter-spacing: var(--label-tracking);
   text-transform: uppercase;
 }
@@ -385,7 +448,7 @@ h2 {
   display: block;
   margin-bottom: 7px;
   color: var(--ink-3);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -409,14 +472,14 @@ textarea {
   padding: 10px 12px;
   line-height: 1.55;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .table-input,
 .table-select {
   min-height: 38px;
   padding: 0 12px;
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 textarea::placeholder,
@@ -448,7 +511,7 @@ input[type="number"] {
 .field-note {
   margin: 6px 0 0;
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -459,9 +522,12 @@ input[type="number"] {
   margin-top: 16px;
 }
 
+/* Grows into the row but is allowed to give way on a narrow panel. The fixed
+   140px floor pushed this row wider than the card holding it, which is why
+   "Itemize receipt" ran past the panel edge on a phone. */
 .button-row .btn-primary {
-  flex: 1;
-  min-width: 140px;
+  flex: 1 1 140px;
+  min-width: 0;
 }
 
 /* ---------------- Dropzone ---------------- */
@@ -515,7 +581,7 @@ input[type="number"] {
 .dropzone-note,
 .people-hint {
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 /* ---------------- Receipt preview ---------------- */
@@ -560,7 +626,7 @@ input[type="number"] {
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -623,12 +689,6 @@ input[type="number"] {
   white-space: nowrap;
 }
 
-.btn-icon {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-}
-
 /* Reuses the OCR status treatment: same shape, same accent, because it is the
    same kind of message -- a job running on the receipt in front of you. */
 .identify-status {
@@ -640,7 +700,7 @@ input[type="number"] {
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -738,7 +798,7 @@ input[type="number"] {
   background: var(--well);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
@@ -793,9 +853,14 @@ input[type="number"] {
    ignore button wrapped onto an implicit second row and every cell after the
    label sat under the wrong header -- the food checkbox landed under
    "Assigned to". */
+/* The fixed minimums used to total 526px before padding, which is wider than
+   the middle column gets on a 1440px screen -- so the row overflowed its own
+   table and the ignore button was pushed under the amount. The flexible
+   columns now floor at 0 and shrink honestly; only the amount keeps a real
+   minimum, because a clipped price is worse than a clipped name. */
 .table-row {
   display: grid;
-  grid-template-columns: 22px minmax(150px, 1.2fr) 44px minmax(140px, 0.85fr) minmax(84px, 0.4fr) 36px;
+  grid-template-columns: 22px minmax(0, 1.35fr) 40px minmax(0, 0.9fr) minmax(74px, auto) 30px;
   gap: 10px;
   align-items: center;
   min-height: 48px;
@@ -818,7 +883,7 @@ input[type="number"] {
   padding-bottom: 0;
   background: var(--surface-2);
   color: var(--ink-3);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -889,7 +954,10 @@ input[type="number"] {
 .line-label {
   min-width: 0;
   font-weight: 500;
-  overflow-wrap: anywhere;
+  /* `anywhere` broke inside words, so a long item name came out as
+     "SUPERCALIFRAGILIS / TIC HOUSEHOLD". Break between words, and only split a
+     word that genuinely cannot fit on a line of its own. */
+  overflow-wrap: break-word;
 }
 
 /* What the line actually was. Deliberately quieter than the receipt text above
@@ -899,9 +967,9 @@ input[type="number"] {
 .line-resolved {
   min-width: 0;
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* An identification the user has confirmed is the one thing on the row that is
@@ -966,7 +1034,7 @@ input[type="number"] {
   border-radius: 999px;
   background: var(--well);
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   list-style: none;
@@ -1022,12 +1090,12 @@ input[type="number"] {
 .assign-hint {
   margin: 0;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .assign-mode {
   min-height: 32px;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .assign-person-row {
@@ -1060,7 +1128,7 @@ input[type="number"] {
   padding: 0 8px;
   text-align: right;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 /* ---------------- Icon button ---------------- */
@@ -1117,7 +1185,7 @@ input[type="number"] {
 
 .empty-state span {
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 /* ---------------- Summary / people ---------------- */
@@ -1136,7 +1204,7 @@ input[type="number"] {
 
 .stat-label {
   color: var(--ink-3);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: var(--label-tracking);
   text-transform: uppercase;
@@ -1181,7 +1249,7 @@ input[type="number"] {
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--surface-2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -1218,7 +1286,7 @@ input[type="number"] {
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1262,7 +1330,7 @@ input[type="number"] {
 
 .split-total-row strong {
   grid-column: 1;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -1326,7 +1394,7 @@ input[type="number"] {
 
 .split-reconcile-line b {
   font-family: var(--font-mono);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
@@ -1335,7 +1403,7 @@ input[type="number"] {
 .split-reconcile-status {
   margin-top: 4px;
   color: var(--amber);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -1368,7 +1436,7 @@ input[type="number"] {
 .edit-banner-label {
   flex: none;
   color: var(--accent);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 750;
   letter-spacing: var(--label-tracking);
   text-transform: uppercase;
@@ -1378,7 +1446,7 @@ input[type="number"] {
   min-width: 0;
   overflow: hidden;
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1410,7 +1478,7 @@ input[type="number"] {
 .save-status {
   min-height: 1.1em;
   color: var(--accent);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   text-align: center;
 }
@@ -1438,12 +1506,17 @@ input[type="number"] {
   display: none;
 }
 
+/* Draggable onto a bank transaction, hence the grab cursor. Both the cursor
+   and the opacity fade used to live in a second `.history-card` block near the
+   end of the file, whose `transition: opacity` replaced this list wholesale and
+   silently killed the hover fade. */
 .history-card {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
-  transition: border-color 120ms ease, background 120ms ease;
+  cursor: grab;
+  transition: border-color 120ms ease, background 120ms ease, opacity 120ms ease;
 }
 
 .history-card:hover {
@@ -1459,6 +1532,7 @@ input[type="number"] {
   padding: 12px 16px;
   cursor: pointer;
   list-style: none;
+  user-select: none;
 }
 
 .history-summary::-webkit-details-marker {
@@ -1516,19 +1590,22 @@ input[type="number"] {
   margin-top: 10px;
 }
 
+/* One definition only. This rule was previously written twice -- a grid here
+   and a flex row ~900 lines further down -- so a row took `display: flex` from
+   the later block while still inheriting this one's `border-top`, and every
+   divider between two history lines was drawn twice at double thickness. */
 .history-line {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr auto;
-  gap: 12px;
+  display: flex;
   align-items: center;
-  padding: 7px 0;
-  border-top: 1px solid var(--border);
-  font-size: 13px;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-base);
 }
 
-.history-line:first-child {
-  border-top: 0;
-  padding-top: 0;
+.history-line:last-child {
+  border-bottom: 0;
 }
 
 .history-line-people {
@@ -1538,7 +1615,7 @@ input[type="number"] {
 
 .history-line b {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -1570,7 +1647,7 @@ input[type="number"] {
   border-radius: var(--radius-sm);
   background: var(--well);
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .history-actions {
@@ -1610,7 +1687,7 @@ input[type="number"] {
 
 .btn-small {
   padding: 6px 12px;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .btn-danger {
@@ -1735,8 +1812,13 @@ input[type="number"] {
   cursor: pointer;
 }
 
+/* Wraps rather than widening the card. The settings dialog carries three
+   buttons, and every .btn is white-space: nowrap, so held on one line their
+   combined minimum measured wider than a 390px phone and pushed the card
+   itself past the edge of the screen. */
 .modal-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 20px;
@@ -1963,7 +2045,6 @@ input[type="number"] {
 .auth-wordmark {
   font-size: 13px;
   font-weight: 800;
-  font-stretch: 118%;
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
@@ -1990,7 +2071,7 @@ input[type="number"] {
   border-radius: var(--radius-sm);
   background: var(--red-soft);
   color: var(--red);
-  font-size: 0.9rem;
+  font-size: 13px;
 }
 
 .auth-switch {
@@ -1999,7 +2080,7 @@ input[type="number"] {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-size: 0.9rem;
+  font-size: 13px;
   color: var(--ink-2);
 }
 
@@ -2060,7 +2141,7 @@ input[type="number"] {
   grid-template-columns: 14px 1fr auto;
   align-items: center;
   gap: 10px;
-  font-size: 0.92rem;
+  font-size: 13px;
 }
 
 .budget-legend-swatch {
@@ -2169,7 +2250,7 @@ input[type="number"] {
   margin: 0 0 12px;
   min-height: 1.2em;
   color: var(--ink-2);
-  font-size: 0.9rem;
+  font-size: 13px;
 }
 
 .bank-connections {
@@ -2206,7 +2287,7 @@ input[type="number"] {
 }
 
 .bank-connection-meta {
-  font-size: 0.8rem;
+  font-size: 12px;
   color: var(--ink-3);
 }
 
@@ -2215,8 +2296,14 @@ input[type="number"] {
   gap: 2px;
 }
 
+/* The description takes the slack so the controls stay in a fixed cluster on
+   the right. Without the grow, space-between scattered them across the row and
+   the food checkbox floated in the middle with nothing to attach it to; without
+   min-width: 0 the long description refuses to shrink and pushes the amount
+   past the edge of the panel. */
 .transaction-main {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
@@ -2230,7 +2317,7 @@ input[type="number"] {
 }
 
 .transaction-meta {
-  font-size: 0.8rem;
+  font-size: 12px;
   color: var(--ink-3);
 }
 
@@ -2297,9 +2384,10 @@ input[type="number"] {
 
 .rent-entry-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 10px 4px;
   border-bottom: 1px solid var(--border);
   transition: background 100ms ease;
@@ -2321,17 +2409,24 @@ input[type="number"] {
   flex: 1;
 }
 
+/* Wraps so the property name keeps a readable width. Held on one line it was
+   squeezed to ~100px between the date and the paperclip and showed almost
+   nothing but an ellipsis. */
 .rent-entry-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 2px 8px;
   width: 100%;
+}
+
+.rent-entry-header .rent-entry-property {
+  flex: 1 1 auto;
 }
 
 .rent-entry-date {
   font-family: var(--font-mono);
-  font-size: 0.9rem;
+  font-size: 13px;
   color: var(--ink);
   white-space: nowrap;
 }
@@ -2341,11 +2436,11 @@ input[type="number"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.95rem;
+  font-size: 14px;
 }
 
 .rent-entry-meta {
-  font-size: 0.85rem;
+  font-size: 12px;
   color: var(--ink-3);
 }
 
@@ -2353,14 +2448,14 @@ input[type="number"] {
   display: inline-block;
   min-width: 14px;
   text-align: center;
-  font-size: 0.9rem;
+  font-size: 13px;
   opacity: 0.6;
   transition: opacity 120ms ease;
 }
 
 .rent-entry-amount {
   font-family: var(--font-mono);
-  font-size: 0.95rem;
+  font-size: 14px;
   color: var(--accent);
   font-weight: 600;
   white-space: nowrap;
@@ -2413,20 +2508,12 @@ input[type="number"] {
 
 /* ============ History Line Styling ============ */
 
-.history-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.history-line:last-child {
-  border-bottom: none;
-}
-
+/* `flex: 1` alone resolves to a 0% basis with an automatic minimum, so a long
+   item name could neither shrink below its longest word nor use the space it
+   had -- on a phone it collapsed into a one-word-per-line column. */
 .history-line > span:first-child {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .history-line .line-food-check {
@@ -2474,7 +2561,7 @@ input[type="number"] {
 }
 
 .receipt-link-main > strong {
-  font-size: 0.95rem;
+  font-size: 14px;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2482,7 +2569,7 @@ input[type="number"] {
 }
 
 .receipt-link-meta {
-  font-size: 0.8rem;
+  font-size: 12px;
   color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2491,7 +2578,7 @@ input[type="number"] {
 
 .receipt-link-amount {
   font-family: var(--font-mono);
-  font-size: 0.9rem;
+  font-size: 13px;
   color: var(--accent);
   font-weight: 600;
 }
@@ -2508,16 +2595,18 @@ input[type="number"] {
   padding: 24px 12px;
   text-align: center;
   color: var(--ink-3);
-  font-size: 0.95rem;
+  font-size: 14px;
 }
 
 /* ============ Education expenses (529) ============ */
 /* This whole block previously had no rules at all, so the stat cards stacked as
    full-width blocks at the 34px .stat-value size and the section headers, food
    rows and actions sat flush against the panel edge with nothing lining up. */
+/* Reflows on its own rather than snapping 3 -> 1 at a single breakpoint, which
+   left three cards crushed into a 383px panel at tablet width. */
 .education-expenses-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   margin-bottom: 18px;
 }
@@ -2570,7 +2659,7 @@ input[type="number"] {
   gap: 8px;
   margin: 0;
   color: var(--ink-2);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: var(--label-tracking);
   text-transform: uppercase;
@@ -2658,11 +2747,15 @@ input[type="number"] {
   white-space: nowrap;
 }
 
+/* Shrinkable rather than fixed. With flex-shrink: 0 this cell held the row open
+   at its full text width, so the amount beside it was pushed out of the panel
+   instead of the store name simply truncating. */
 .food-item-store {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 45%;
   color: var(--ink-3);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2751,17 +2844,19 @@ input[type="number"] {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Same reasoning as .food-item-store: truncate the note, never widen the row. */
 .food-receipt-item-note {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 50%;
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2772,7 +2867,7 @@ input[type="number"] {
   flex-shrink: 0;
   min-width: 96px;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
   text-align: right;
@@ -2789,12 +2884,6 @@ input[type="number"] {
   color: var(--ink-3);
 }
 
-@media (max-width: 720px) {
-  .education-expenses-stats {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* ============ Transaction Row Enhancements ============ */
 
 .transaction-row {
@@ -2809,13 +2898,6 @@ input[type="number"] {
 
 .transaction-row:last-child {
   border-bottom: none;
-}
-
-/* The description takes the slack so the controls stay in a fixed cluster on
-   the right. Without it, space-between scattered them across the row and the
-   food checkbox floated in the middle with nothing to attach it to. */
-.transaction-main {
-  flex: 1 1 auto;
 }
 
 .transaction-row.is-drag-over {
@@ -2846,7 +2928,7 @@ input[type="number"] {
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--ink-2);
-  font-size: 0.72rem;
+  font-size: 11px;
   letter-spacing: 0.02em;
   white-space: nowrap;
   overflow: hidden;
@@ -2880,7 +2962,7 @@ input[type="number"] {
 }
 
 .txn-food-label {
-  font-size: 0.75rem;
+  font-size: 12px;
   line-height: 1;
   letter-spacing: 0.02em;
 }
@@ -2911,7 +2993,7 @@ input[type="number"] {
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--ink-2);
-  font-size: 1rem;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
   list-style: none;
@@ -2954,7 +3036,7 @@ input[type="number"] {
   background: none;
   color: var(--ink);
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 12px;
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
@@ -2994,19 +3076,9 @@ input[type="number"] {
 
 /* ============ Receipt Cards in History - Draggable ============ */
 
-.history-card {
-  cursor: grab;
-  transition: opacity 120ms ease;
-}
-
 .history-card:active {
   cursor: grabbing;
   opacity: 0.8;
-}
-
-/* Make history card draggable */
-.history-summary {
-  user-select: none;
 }
 
 /* ============ Toast Notifications ============ */
@@ -3112,7 +3184,7 @@ input[type="number"] {
 }
 
 .transaction-link-main > strong {
-  font-size: 0.95rem;
+  font-size: 14px;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3121,7 +3193,7 @@ input[type="number"] {
 
 .transaction-link-meta {
   color: var(--ink-3);
-  font-size: 0.8rem;
+  font-size: 12px;
 }
 
 .transaction-link-amount {
@@ -3206,7 +3278,7 @@ input[type="number"] {
 
 .item-detail-facts dt {
   color: var(--ink-3);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: var(--label-tracking);
   text-transform: uppercase;
@@ -3216,7 +3288,7 @@ input[type="number"] {
 .item-detail-facts dd {
   margin: 0;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 
@@ -3225,13 +3297,13 @@ input[type="number"] {
   padding-top: 8px;
   border-top: 1px solid var(--border);
   color: var(--ink-2);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .item-detail-reasoning {
   margin: 0;
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: 12px;
   font-style: italic;
   line-height: 1.4;
 }
@@ -3249,7 +3321,7 @@ input[type="number"] {
 .item-detail-subhead {
   width: 100%;
   color: var(--ink-3);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: var(--label-tracking);
   text-transform: uppercase;
@@ -3302,4 +3374,125 @@ input[type="number"] {
   min-width: 0;
   flex-direction: column;
   gap: 2px;
+}
+
+/* --- Phone hardening ------------------------------------------------------ */
+/* The budgeting lists are the densest rows in the app: a label, a qualifier and
+   a figure, all on one line. At phone width there is no honest way to keep that
+   shape, so the label takes the full width and the figure sits beneath it --
+   legible, instead of three competing ellipses. */
+@media (max-width: 560px) {
+  .food-item-row,
+  .food-receipt-summary,
+  .food-receipt-item,
+  .transaction-row {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .food-item-label,
+  .food-receipt-item-label,
+  .transaction-main,
+  .rent-entry-main {
+    flex: 1 1 100%;
+  }
+
+  .food-item-store,
+  .food-receipt-item-note {
+    max-width: none;
+  }
+
+  /* These own the full width here, so a long grocery name should use a second
+     line rather than ending in an ellipsis with empty space beside it. */
+  .food-item-label,
+  .food-receipt-item-label {
+    overflow: visible;
+    white-space: normal;
+  }
+
+  /* Pushed to the right of its own row so the figures still form a column. */
+  .food-item-amount,
+  .food-receipt-item-amount,
+  .transaction-amount,
+  .rent-entry-amount {
+    min-width: 0;
+    margin-left: auto;
+  }
+
+  /* Buys back ~20px of row width on a 390px screen, which is the difference
+     between a truncated store name and a readable one. */
+  .panel-body {
+    padding: 16px 14px;
+  }
+
+  .panel-header {
+    padding: 8px 14px;
+  }
+
+  .education-section .section-content,
+  .education-section .section-actions {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .food-item-row,
+  .food-receipt-summary,
+  .food-receipt-items {
+    padding-left: 14px;
+  }
+
+  /* Give dialogs more of the screen. At 390px the 20px backdrop padding plus
+     24px of card padding left just 302px for the content inside. */
+  .modal-backdrop {
+    padding: 12px;
+  }
+
+  .modal-card {
+    padding: 20px 16px;
+  }
+}
+
+/* --- Touch ---------------------------------------------------------------- */
+@media (pointer: coarse) {
+  .btn {
+    min-height: var(--tap);
+  }
+
+  .btn-small {
+    min-height: 36px;
+  }
+
+  .tab-button {
+    min-height: 38px;
+  }
+
+  /* width/height, not min-height: these are square controls with both axes
+     already set, so a min-height alone would leave them 26px wide. */
+  .icon-button,
+  .txn-menu-trigger {
+    width: 34px;
+    height: 34px;
+  }
+
+  .line-select {
+    width: 20px;
+    height: 20px;
+  }
+
+  .line-food-check:not(.txn-food-toggle) {
+    width: 30px;
+    height: 30px;
+  }
+
+  .assign-summary {
+    min-height: 34px;
+  }
+
+  /* Safari zooms the entire page when a focused field is under 16px, which
+     rescales the layout mid-edit and strands the field off screen. */
+  textarea,
+  .table-input,
+  .table-select {
+    font-size: 16px;
+  }
 }

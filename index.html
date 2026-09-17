@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
@@ -350,7 +350,10 @@
             </div>
           </section>
 
-          <section class="panel" aria-label="Bank transactions">
+          <!-- Full width: as the fourth panel it would otherwise be stranded
+               alone in the left column of the two-column grid, with its rows
+               squeezed and an empty half-row beside it. -->
+          <section class="panel panel-wide" aria-label="Bank transactions">
             <header class="panel-header">
               <h2>Bank transactions</h2>
               <div class="panel-actions">
