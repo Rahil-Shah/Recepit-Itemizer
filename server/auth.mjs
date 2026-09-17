@@ -11,6 +11,8 @@ import {
   hashToken,
   dummyPasswordHash
 } from "./crypto.mjs";
+import { allowedLoginEmail, isLockedOut } from "./access.mjs";
+import { isProduction } from "./deployment.mjs";
 
 const SESSION_COOKIE = "rr_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -56,17 +58,19 @@ export function createAuth(prisma) {
   // there is no account (or no stored hash) to compare against.
   const dummyHash = dummyPasswordHash();
 
-  // Temporary lock while the app is reachable through a public tunnel: with
-  // ALLOWED_LOGIN_EMAIL set, registration is closed and only that account can
-  // log in or keep using a session. Remove it from .env to reopen the app.
-  const allowedEmail = process.env.ALLOWED_LOGIN_EMAIL?.trim().toLowerCase() || null;
-  const isLockedOut = (email) => allowedEmail !== null && email !== allowedEmail;
-  if (allowedEmail) console.log(`Auth locked: registration closed, only ${allowedEmail} can sign in.`);
+  // Single-account lock (see server/access.mjs): with ALLOWED_LOGIN_EMAIL set,
+  // only that address can register or log in, and every other session stops
+  // working. Production refuses to start without it unless open sign-up was
+  // asked for explicitly.
+  const allowedEmail = allowedLoginEmail();
+  if (allowedEmail) console.log(`Access locked to ${allowedEmail}: no other account can register or sign in.`);
 
   // Expired sessions were only ever deleted if that exact token was presented
   // again after expiry -- which a browser never does, because the cookie's
   // maxAge matches the session TTL and it drops the cookie first. So the table
-  // grew by one unreachable row per login, forever. Purge on a timer.
+  // grew by one unreachable row per login, forever. Purge on a timer, and on
+  // every login: the timer serves a long-running server, but never fires in a
+  // serverless function, whose process rarely lives an hour.
   const purgeExpiredSessions = async () => {
     try {
       const { count } = await prisma.session.deleteMany({
@@ -78,14 +82,18 @@ export function createAuth(prisma) {
     }
   };
   setInterval(purgeExpiredSessions, 60 * 60 * 1000).unref();
-  void purgeExpiredSessions();
 
   function cookieOptions(req) {
-    const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+    // Secure whenever the request arrived over TLS -- and always in
+    // production, where a session cookie that would travel over plain HTTP is
+    // a misconfiguration to fail loudly on (login stops working), not one to
+    // paper over.
+    const secure = isProduction() || req.secure || req.headers["x-forwarded-proto"] === "https";
     return { httpOnly: true, sameSite: "lax", secure, maxAge: SESSION_TTL_MS, path: "/" };
   }
 
   async function startSession(req, res, userId) {
+    await purgeExpiredSessions();
     const token = generateSessionToken();
     await prisma.session.create({
       data: {
@@ -130,10 +138,14 @@ export function createAuth(prisma) {
   // also used to gate middleware that runs before any route.
   function register(app) {
     app.post("/api/auth/register", async (req, res) => {
-      if (allowedEmail) {
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+      // On a locked deployment the one allowed address may still register --
+      // that is how the owner creates their account on a fresh database --
+      // and every other address is turned away before any validation that
+      // could hint at which address that is.
+      if (isLockedOut(email)) {
         return res.status(403).json({ error: "Registration is closed." });
       }
-      const email = String(req.body?.email ?? "").trim().toLowerCase();
       const password = String(req.body?.password ?? "");
       const name = req.body?.name ? String(req.body.name).trim() : null;
 

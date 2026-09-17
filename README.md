@@ -20,6 +20,7 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
      GEMINI_API_KEY=your_actual_api_key_here
      ```
 4. **Per-user keys**: Alternatively, you can add your own Gemini API key from the settings panel. It is stored server-side, encrypted at rest with AES-256-GCM, and is never sent back to the browser — the app only ever reports whether a key exists. Without one, requests fall back to the shared `GEMINI_API_KEY` from `.env`.
+5. **One account, one key**: Set `ALLOWED_LOGIN_EMAIL` to lock the whole deployment to your account. Only that address can create an account (once) or log in, every other session stops working, and the shared `GEMINI_API_KEY` is only ever spent on that account's requests. A production deployment (`NODE_ENV=production`, or anything on Vercel) refuses to start without it, unless you opt in to open sign-up explicitly with `ALLOW_PUBLIC_SIGNUP=true`.
 
 ---
 
@@ -39,7 +40,7 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 - **Bank Connection (Plaid)**: Securely link a bank through [Plaid Link](https://plaid.com/docs/link/) to import **read-only** transactions. Access tokens are exchanged server-side and stored AES-256-GCM encrypted at rest — they never reach the browser.
 - **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
-- **Landing Page**: Visitors without a session land on a page that explains the app, with **Log in** / **Get started** opening the account dialog. Signed-in users go straight to the workspace. The frontend is plain HTML + CSS (`styles.css` holds the design tokens and app components, `landing.css` the landing sections) and TypeScript compiled to `dist/app.js`.
+- **Landing Page**: Visitors without a session land on a page that explains the app, with **Log in** / **Get started** opening the account dialog. Signed-in users go straight to the workspace. Everything the browser loads lives in `public/`: plain HTML + CSS (`styles.css` holds the design tokens and app components, `landing.css` the landing sections) and `app.js`, the TypeScript under `src/` compiled by `npm run build`.
 
 ---
 
@@ -102,7 +103,10 @@ shows the names without paying for them again.
    cp .env.example .env
    ```
    Open `.env` and replace `your_gemini_api_key_here` with your real Gemini API key. The
-   `DATABASE_URL` is pre-filled to match the bundled Docker Postgres.
+   `DATABASE_URL` is pre-filled to match the bundled Docker Postgres. Set `ALLOWED_LOGIN_EMAIL`
+   to your own address to lock the app to one account (optional locally, required in
+   production — see [Security First](#-security-first-api-key-protection)), or leave it blank
+   to allow sign-ups.
 
    Then generate the two secrets the server refuses to start without —
    `AUTH_SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY`. The placeholders in
@@ -130,6 +134,16 @@ shows the names without paying for them again.
    npm run db:migrate
    ```
 
+   > **Databases created before September 2026**: one migration was renamed from
+   > `20260819230000_add_rent_entry_bank_transaction` to `20260820030100_…` so that it sorts after
+   > the migration that creates the table it alters (a fresh database could never get past it).
+   > `npm run db:deploy` takes the renamed migration as a no-op. `npm run db:migrate`, though, will
+   > see the old name in the database's history and offer a reset; to keep your data, remove that
+   > one history row first:
+   > ```sql
+   > DELETE FROM "_prisma_migrations" WHERE migration_name = '20260819230000_add_rent_entry_bank_transaction';
+   > ```
+
 3. Build the frontend bundle and start the server:
    ```bash
    npm run start
@@ -139,51 +153,63 @@ shows the names without paying for them again.
 
 Open `http://localhost:4173` in your browser.
 
-> The single Node/Express server serves the frontend **and** the `/api` routes. It never
-> exposes `.env` or source files over HTTP — the Gemini config is served via `/api/gemini-config`.
-
-### Database Management with pgweb
-
-To visually manage the Postgres database, pgweb provides a web-based PostgreSQL client:
-
-1. **Start pgweb** (runs in a separate Docker container):
-   ```bash
-   npm run pgweb:up
-   ```
-
-2. **Access pgweb** at `http://localhost:5050` in your browser.
-
-3. **Log in** with the following credentials:
-   - **Host**: `localhost`
-   - **Port**: `5433`
-   - **User**: `receipt`
-   - **Password**: `receipt`
-   - **Database**: `receipt_ring`
-
-4. Once logged in, you can:
-   - Browse tables and schemas
-   - Run SQL queries
-   - View and edit data directly
-   - Inspect the database structure
-
-5. To stop pgweb:
-   ```bash
-   npm run pgweb:down
-   ```
-
-> **Note**: pgweb runs independently of the main app and the Postgres container will continue running — it's just a GUI tool for database inspection and management.
+> The single Node/Express server serves `public/` **and** the `/api` routes. Nothing outside
+> `public/` is ever served — source, config and `.env` stay on disk — and the only Gemini
+> configuration the browser receives comes from `/api/gemini-config`, never a key.
 
 ### Architecture & Scaling
 
 ```
-Browser (dist/app.js)  ──fetch /api──▶  Express (server.mjs)  ──Prisma──▶  Postgres
-                                         └─ also serves the static frontend
+Browser (public/app.js)  ──fetch /api──▶  Express (server.mjs)  ──Prisma──▶  Postgres
+                                           └─ also serves public/ when self-hosted
 ```
 
 The database connection is a single `DATABASE_URL`. Locally it points at the Docker Postgres
 (`npm run db:up`); to scale, point it at a managed Postgres (Neon, Supabase, RDS, …) and run
 `npm run db:deploy` — no code changes required. Schema changes are versioned as Prisma
-migrations under `prisma/migrations/`.
+migrations under `prisma/migrations/`. When `DATABASE_URL` goes through a transaction-mode
+pooler, give migrations the direct connection as `DIRECT_DATABASE_URL`.
+
+### Deploying to Vercel
+
+The repository deploys to Vercel as it is: `vercel.json` serves `public/` from the CDN and runs
+the Express app as a single serverless function (`api/index.mjs`) behind `/api/*`. You need a
+hosted Postgres — the Vercel Postgres (Neon) integration is the least work, but any managed
+Postgres does.
+
+1. Import the repository into Vercel. Framework preset **Other**; build and output settings come
+   from `vercel.json`.
+2. Add the environment variables, for Production and Preview alike:
+
+   | Variable | Value |
+   | --- | --- |
+   | `DATABASE_URL` | the (pooled) connection string of your Postgres |
+   | `DIRECT_DATABASE_URL` | the direct / unpooled string, used only by migrations. Not needed with the Vercel Postgres integration, which sets `DATABASE_URL_UNPOOLED` |
+   | `ALLOWED_LOGIN_EMAIL` | your email address — locks the deployment to your account. **Required**: the function refuses to serve without it |
+   | `AUTH_SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY` | generated as described above |
+   | `GEMINI_API_KEY`, `GEMINI_MODEL` | your Gemini key (or save one in Settings after signing in) and the model |
+   | `PLAID_ENV`, `PLAID_CLIENT_ID`, `PLAID_SECRET` | optional, for bank import |
+
+3. Deploy. The build runs `npm run vercel-build`: it generates the Prisma client, applies pending
+   migrations with `prisma migrate deploy`, then compiles the frontend. A failed migration fails
+   the deploy, so the live site never runs against a schema it does not expect.
+4. Open the site and choose **Get started** with the address from `ALLOWED_LOGIN_EMAIL` to create
+   your account. Every other address is told that registration is closed.
+
+What the serverless shape changes:
+
+- **Request size.** Vercel caps a function request at 4.5 MB. The browser shrinks receipt photos
+  before upload (2400px JPEG for parsing, 1600px for the stored copy), so ordinary phone photos
+  fit with room to spare. A photo the browser cannot decode (HEIC outside Safari) is sent as it
+  is and may be refused as too large.
+- **Function duration.** `vercel.json` allows 120 seconds per request for the Gemini calls. Hobby
+  projects with Fluid compute allow up to 300; if your plan caps it lower, reduce the value.
+- **Rate limits are per instance.** The in-memory limiters and login throttle count within one
+  function instance, not across all of them. With the account lock on, login is the only
+  unauthenticated surface that does anything, and passwords are scrypt-hashed. Vercel's own DDoS
+  mitigation sits in front of everything.
+- **Health check.** `GET /api/health` answers `{ "ok": true }` when the function can reach the
+  database, for uptime monitors.
 
 ### Useful scripts
 
@@ -192,9 +218,12 @@ migrations under `prisma/migrations/`.
 | `npm run db:up` / `npm run db:down` | Start / stop the local Postgres container |
 | `npm run db:migrate` | Create & apply a migration (development) |
 | `npm run db:deploy` | Apply existing migrations (production) |
-| `npm run build` | Compile the TypeScript frontend to `dist/app.js` |
+| `npm run build` | Generate the Prisma client and compile the TypeScript frontend to `public/app.js` |
+| `npm run check` | Typecheck the frontend without emitting |
+| `npm test` | Build the test bundle and run the unit tests |
 | `npm run dev` | Run the server with `--watch` for reloads |
 | `npm run start` | Build the frontend and start the server |
+| `npm run vercel-build` | What Vercel runs on deploy: generate the client, `migrate deploy`, compile |
 
 ---
 

@@ -791,7 +791,10 @@ namespace ReceiptRing.App {
       this.elements.parseButton.setAttribute("disabled", "true");
 
       try {
-        const result = await this.geminiService.parseReceiptImage(file, model);
+        // Shrunk before upload: a phone's original is routinely 5-10 MB, and
+        // the parse route sits behind a request-size cap (4.5 MB on Vercel).
+        const image = await this.receiptImageService.toParseImage(file);
+        const result = await this.geminiService.parseReceiptImage(image, model);
 
         // Log the JSON output in the terminal/console when putting a photo
         console.log("Gemini parsed receipt output:", result);
