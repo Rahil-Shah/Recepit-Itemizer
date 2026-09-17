@@ -7,6 +7,7 @@
 // Either way the key stays server-side.
 
 import { encryptSecret, decryptSecret } from "./crypto.mjs";
+import { mayUseSharedGeminiKey } from "./access.mjs";
 
 const GEMINI_HOST = "https://generativelanguage.googleapis.com";
 // Gemini model ids are interpolated into the request URL, so constrain them to
@@ -159,49 +160,53 @@ export function serverGeminiModel() {
   return process.env.GEMINI_MODEL || DEFAULT_MODEL;
 }
 
-// Read a user's stored key. Returns the key, or null when they have none.
-// Throws UndecryptableKeyError when a key is stored but cannot be read.
-async function readUserKey(prisma, userId) {
-  if (!prisma || !userId) return null;
+// A user's stored key, with the address the account is under (which decides
+// whether the shared key is theirs to use). `key` is null when they have none;
+// `undecryptable` is set when one is stored but can no longer be read.
+async function readUserKeyRecord(prisma, userId) {
+  const none = { email: null, key: null, undecryptable: false };
+  if (!prisma || !userId) return none;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { geminiKeyCiphertext: true, geminiKeyIv: true, geminiKeyAuthTag: true }
+    select: { email: true, geminiKeyCiphertext: true, geminiKeyIv: true, geminiKeyAuthTag: true }
   });
-  if (!user?.geminiKeyCiphertext || !user.geminiKeyIv || !user.geminiKeyAuthTag) {
-    return null;
+  if (!user) return none;
+  const record = { email: user.email, key: null, undecryptable: false };
+  if (!user.geminiKeyCiphertext || !user.geminiKeyIv || !user.geminiKeyAuthTag) {
+    return record;
   }
   try {
-    return decryptSecret({
+    record.key = decryptSecret({
       ciphertext: user.geminiKeyCiphertext,
       iv: user.geminiKeyIv,
       authTag: user.geminiKeyAuthTag
     });
   } catch (error) {
     console.error("Failed to decrypt stored Gemini key:", error);
-    throw new UndecryptableKeyError();
+    record.undecryptable = true;
   }
+  return record;
+}
+
+// The shared key from the environment, when this account may spend it: an
+// admin's requests, and nobody else's (see server/access.mjs). Everyone else
+// parses with a personal key saved in Settings, or not at all.
+function sharedKeyFor(email) {
+  return hasServerGeminiKey() && mayUseSharedGeminiKey(email) ? process.env.GEMINI_API_KEY : "";
 }
 
 // Resolve the key to call Gemini with: the user's own key when they've saved
-// one, otherwise the shared server key. Returns "" when neither exists.
+// one, otherwise the shared server key when it is theirs to use. Returns ""
+// when neither applies.
 //
 // An undecryptable personal key used to fall through to the shared key while
 // the config endpoint kept reporting hasUserKey: true. After an encryption
 // key rotation that quietly moved every user onto the operator's key and
 // quota, with nothing but a log line to say so. Surface it instead.
 export async function resolveApiKey(prisma, userId) {
-  const userKey = await readUserKey(prisma, userId);
-  return userKey ?? process.env.GEMINI_API_KEY ?? "";
-}
-
-// Reports whether a usable personal key exists, so the UI cannot claim a key
-// is in use when it can no longer be read.
-async function userHasKey(prisma, userId) {
-  try {
-    return (await readUserKey(prisma, userId)) !== null;
-  } catch {
-    return false;
-  }
+  const { email, key, undecryptable } = await readUserKeyRecord(prisma, userId);
+  if (undecryptable) throw new UndecryptableKeyError();
+  return key ?? sharedKeyFor(email);
 }
 
 /**
@@ -323,14 +328,16 @@ export function parseJsonFromReply(text) {
 
 export function registerGemini(app, requireAuth, prisma) {
 
-  // Non-secret config for the browser: model, whether a shared server key
-  // exists, and whether this user has saved a personal key. The key values
-  // themselves are deliberately never returned.
+  // Non-secret config for the browser: the model, whether a shared key is
+  // available to *this* account, and whether it has saved a personal key that
+  // can still be read. The key values themselves are deliberately never
+  // returned.
   app.get("/api/gemini-config", requireAuth, async (req, res) => {
+    const { email, key } = await readUserKeyRecord(prisma, req.userId);
     res.json({
       GEMINI_MODEL: serverGeminiModel(),
-      hasServerKey: hasServerGeminiKey(),
-      hasUserKey: await userHasKey(prisma, req.userId)
+      hasServerKey: Boolean(sharedKeyFor(email)),
+      hasUserKey: key !== null
     });
   });
 
@@ -367,11 +374,12 @@ export function registerGemini(app, requireAuth, prisma) {
       return res.status(503).json({ error: "Key storage is unavailable." });
     }
     try {
-      await prisma.user.update({
+      const user = await prisma.user.update({
         where: { id: req.userId },
-        data: { geminiKeyCiphertext: null, geminiKeyIv: null, geminiKeyAuthTag: null }
+        data: { geminiKeyCiphertext: null, geminiKeyIv: null, geminiKeyAuthTag: null },
+        select: { email: true }
       });
-      res.json({ hasUserKey: false, hasServerKey: hasServerGeminiKey() });
+      res.json({ hasUserKey: false, hasServerKey: Boolean(sharedKeyFor(user.email)) });
     } catch (error) {
       console.error("Failed to clear Gemini key:", error);
       res.status(500).json({ error: "Could not clear the key." });

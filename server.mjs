@@ -14,24 +14,42 @@ import { identificationFields, normalizeStoredItemCode } from "./server/identifi
 import { createRateLimiter } from "./server/rate-limit.mjs";
 import { parseMonthParam, getMonthRange, getUtcMonthRange } from "./server/month.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
+import { assertAccessPolicy } from "./server/access.mjs";
+import { databaseUrl, isProduction, isVercel } from "./server/deployment.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL is not set. Copy .env.example to .env and start Postgres (npm run db:up).");
-  process.exit(1);
+// True when started as `node server.mjs`. False when imported: by the Vercel
+// function in api/index.mjs, where the platform owns the socket and the
+// process, so this module only builds the app and must not listen or exit.
+const isMain = Boolean(process.argv[1]) && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+// A configuration problem is fatal either way. As a process, say what is
+// wrong and stop; as a module, throw, so the import fails and the platform's
+// function logs carry the reason instead of a generic 500.
+function fatal(message) {
+  if (isMain) {
+    console.error(message);
+    process.exit(1);
+  }
+  throw new Error(message);
 }
 
-// Fail fast if the auth/encryption secrets are missing or malformed.
+if (!databaseUrl()) {
+  fatal("DATABASE_URL is not set. Copy .env.example to .env and start Postgres (npm run db:up).");
+}
+
+// Fail fast if the auth/encryption secrets are missing or malformed, or if a
+// public deployment would let anyone sign up (see server/access.mjs).
 try {
   assertCryptoEnv();
+  assertAccessPolicy({ production: isProduction() });
 } catch (error) {
-  console.error(error.message);
-  process.exit(1);
+  fatal(error.message);
 }
 
 // Prisma 7 connects through a driver adapter; swap DATABASE_URL to scale to managed Postgres.
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg({ connectionString: databaseUrl() });
 const prisma = new PrismaClient({ adapter });
 const app = express();
 const PORT = Number(process.env.PORT) || 4173;
@@ -40,9 +58,14 @@ const PORT = Number(process.env.PORT) || 4173;
 // only reflects the real client when Express is told to trust the proxy. Opt in
 // explicitly via env so forwarded headers aren't trusted by default (they are
 // spoofable when directly exposed). TRUST_PROXY=true, or a hop count / subnet.
-if (process.env.TRUST_PROXY) {
-  const value = process.env.TRUST_PROXY;
-  app.set("trust proxy", value === "true" ? 1 : /^\d+$/.test(value) ? Number(value) : value);
+//
+// On Vercel there is always exactly one proxy in front of the function, and it
+// overwrites X-Forwarded-For with the client address rather than appending to
+// whatever the client sent, so trusting that one hop is safe and needs no
+// configuration.
+const trustProxy = process.env.TRUST_PROXY || (isVercel() ? "1" : "");
+if (trustProxy) {
+  app.set("trust proxy", trustProxy === "true" ? 1 : /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
 }
 
 // Don't advertise the framework.
@@ -50,11 +73,14 @@ app.disable("x-powered-by");
 
 // Baseline security headers (conservative — no CSP, to avoid breaking the
 // Plaid Link script and Google Fonts the frontend loads).
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  // Only meaningful (and only honoured by browsers) over TLS. Vercel sets its
+  // own; this covers a self-hosted server behind a TLS-terminating proxy.
+  if (req.secure) res.setHeader("Strict-Transport-Security", "max-age=31536000");
   next();
 });
 
@@ -107,7 +133,7 @@ const parseLimiter = createRateLimiter({
 app.use("/api/gemini/parse", parseLimiter);
 
 const auth = createAuth(prisma);
-const { requireAuth } = auth;
+const { requireAuth, requireAdmin } = auth;
 
 // Cookies are parsed here rather than inside auth.register() because
 // requireAuth reads them, and it now gates a middleware that runs before the
@@ -126,10 +152,25 @@ app.use("/api/receipts", requireAuth, express.json({ limit: "12mb" }));
 app.use(express.json({ limit: "2mb" }));
 
 // Routes last, so every request reaching one has been limited and parsed.
+
+// For uptime monitors and the platform's own checks: is the process up, and
+// can it reach its database. Says nothing else, to nobody in particular.
+app.get("/api/health", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Health check failed:", error);
+    res.status(503).json({ ok: false });
+  }
+});
+
 auth.register(app);
 
+// Bank routes are admin-only (see server/access.mjs): the Plaid keys are the
+// operator's, and a regular account has no bank side at all.
 const bank = createBank(prisma);
-bank.register(app, requireAuth);
+bank.register(app, requireAuth, requireAdmin);
 
 // Gemini config + image-parsing proxy. Keys (shared or per-user) stay
 // server-side and are never returned to the browser (see server/gemini.mjs).
@@ -859,7 +900,10 @@ app.get("/api/receipts/food-summary", requireAuth, async (req, res) => {
         },
         orderBy: { createdAt: "desc" }
       }),
-      prisma.bankTransaction.findMany({ where: txnWhere, orderBy: { date: "desc" } })
+      // The bank side is admin-only, so a regular account's total is its
+      // receipts alone; an account demoted from admin keeps its rows but stops
+      // counting them.
+      req.isAdmin ? prisma.bankTransaction.findMany({ where: txnWhere, orderBy: { date: "desc" } }) : []
     ]);
 
     const selfAccountPersonId = selfPerson?.id ?? null;
@@ -917,7 +961,7 @@ app.get("/api/receipts/food-summary", requireAuth, async (req, res) => {
 });
 
 // PATCH /api/receipts/:receiptId/link-transaction - Link receipt to bank transaction
-app.patch("/api/receipts/:receiptId/link-transaction", requireAuth, async (req, res) => {
+app.patch("/api/receipts/:receiptId/link-transaction", requireAuth, requireAdmin, async (req, res) => {
   const body = req.body ?? {};
   const bankTransactionId = String(body.bankTransactionId ?? "").trim();
 
@@ -978,7 +1022,7 @@ app.patch("/api/receipts/:receiptId/link-transaction", requireAuth, async (req, 
 });
 
 // DELETE /api/receipts/:receiptId/link-transaction - Unlink receipt from transaction
-app.delete("/api/receipts/:receiptId/link-transaction", requireAuth, async (req, res) => {
+app.delete("/api/receipts/:receiptId/link-transaction", requireAuth, requireAdmin, async (req, res) => {
   try {
     // Verify receipt belongs to user
     const receipt = await prisma.receipt.findFirst({
@@ -1041,6 +1085,11 @@ app.post("/api/rent-entries", requireAuth, async (req, res) => {
   }
   if (bankTransactionId !== undefined && bankTransactionId !== null && !isShortString(bankTransactionId)) {
     return res.status(400).json({ error: "bankTransactionId must be a short string." });
+  }
+  // A rent entry backed by a bank transaction is a bank feature, so admin-only;
+  // a rent entry typed in by hand is for everyone.
+  if (bankTransactionId && !req.isAdmin) {
+    return res.status(403).json({ error: "Only admin accounts can log rent from a bank transaction." });
   }
 
   const photo = photoDataUrl ? parseImageDataUrl(photoDataUrl) : null;
@@ -1270,42 +1319,18 @@ app.get("/api/rent-entries/summary", requireAuth, async (req, res) => {
 
 // --- Static frontend -------------------------------------------------------
 
-// Never expose source, config, or dependency files over HTTP.
-const BLOCKED = [
-  /^\/src\//,
-  /^\/server\//,
-  /^\/server\.mjs$/,
-  /^\/package(-lock)?\.json$/,
-  /^\/tsconfig\.json$/,
-  /^\/prisma(\/|\.config\.ts$)/,
-  /^\/node_modules\//,
-  /^\/docker-compose\.yml$/,
-  // Never serve TLS material or private keys, even though Plaid needs none.
-  /^\/certs\//,
-  /\.(pem|key|crt|p12|pfx)$/i
-];
-
-// req.path is NOT url-decoded, but the static handler decodes before it touches
-// the disk. Matching the raw path therefore let a single percent-encoded
-// character walk straight past every rule here — /%73erver/crypto.mjs served
-// the file that /server/crypto.mjs refused. Match on the decoded path (and
-// reject anything that won't decode, or that smuggles a NUL) so the patterns
-// see the same string the filesystem will.
-app.use((req, res, next) => {
-  let decoded;
-  try {
-    decoded = decodeURIComponent(req.path);
-  } catch {
-    return res.status(400).end();
-  }
-  if (decoded.includes("\0") || BLOCKED.some((pattern) => pattern.test(decoded))) {
-    return res.status(404).end();
-  }
-  next();
+// A request under /api that no route claimed is answered here, as JSON, and
+// never falls through to the static handler's HTML 404.
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "Not found." });
 });
 
-// dotfiles: "ignore" makes .env (and other dotfiles) return 404.
-app.use(express.static(__dirname, { dotfiles: "ignore", index: "index.html" }));
+// Only public/ is ever served: the page, its stylesheets and the compiled
+// bundle. Source, server code, config and dependencies all live outside it,
+// so there is nothing to block -- which is the whole reason for the
+// directory. On Vercel the CDN serves it and this handler is never reached
+// (see vercel.json); dotfiles: "ignore" keeps any stray dotfile a 404 here.
+app.use(express.static(path.join(__dirname, "public"), { dotfiles: "ignore", index: "index.html" }));
 
 // Terminal error handler. Without one, Express's default handler renders the
 // stack trace into the response whenever NODE_ENV isn't "production" — so
@@ -1322,6 +1347,11 @@ app.use((error, _req, res, _next) => {
   res.status(status).json({ error: message });
 });
 
-app.listen(PORT, () => {
-  console.log(`Receipt Ring running at http://localhost:${PORT}`);
-});
+// Exported for the Vercel function (api/index.mjs). Run directly, it listens.
+export default app;
+
+if (isMain) {
+  app.listen(PORT, () => {
+    console.log(`Receipt Ring running at http://localhost:${PORT}`);
+  });
+}

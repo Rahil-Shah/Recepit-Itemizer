@@ -119,36 +119,24 @@ namespace ReceiptRing.Services {
       }
     }
 
-    private fileToBase64(file: File): Promise<string> {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          const base64 = result.split(",")[1];
-          resolve(base64);
-        };
-        reader.onerror = (error) => reject(error);
-        reader.readAsDataURL(file);
-      });
-    }
-
     /**
      * Parse a receipt image via the server proxy. The server owns the prompt
      * and calls Gemini with the resolved key (the user's own, or the shared
      * server key), so no key is ever exposed to the browser.
      *
+     * The image arrives already shrunk to upload size (see
+     * ReceiptImageService.toParseImage); this only carries it.
+     *
      * The server also extracts and validates the model's reply before
      * responding, so the body here is already the receipt object (storeName,
      * items, ...) -- not the raw Gemini candidates/content/parts envelope.
      */
-    async parseReceiptImage(file: File, model: string): Promise<any> {
-      const base64Data = await this.fileToBase64(file);
-
+    async parseReceiptImage(image: UploadImage, model: string): Promise<any> {
       const proxyResponse = await fetch("/api/gemini/parse", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, mimeType: file.type, imageBase64: base64Data })
+        body: JSON.stringify({ model, mimeType: image.mimeType, imageBase64: image.base64 })
       });
       if (!proxyResponse.ok) {
         throw new ReceiptParseError(
@@ -175,6 +163,12 @@ namespace ReceiptRing.Services {
       } catch {
         // Not JSON -- fall through to the generic wording rather than showing
         // whatever the proxy or gateway happened to return.
+      }
+      // A 413 with no JSON came from the platform in front of the server (a
+      // hosted function's request cap), not from the app: the photo could not
+      // be shrunk in this browser and the original was past the limit.
+      if (response.status === 413) {
+        return "That photo is too large to upload. Try a smaller or lower-resolution photo.";
       }
       return `Could not read this receipt (error ${response.status}).`;
     }

@@ -17,3 +17,10 @@ tests/dist/
 
 # Local Claude working notes
 CLAUDE.md
+
+# Compiled frontend bundle (built by npm run build; Vercel builds it on deploy)
+public/app.js
+dist/
+
+# Vercel CLI project link
+.vercel

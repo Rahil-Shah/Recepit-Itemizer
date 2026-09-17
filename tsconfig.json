@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "noImplicitOverride": true,
     "forceConsistentCasingInFileNames": true,
-    "outFile": "dist/app.js",
+    "outFile": "public/app.js",
     "removeComments": true
   },
   "files": [

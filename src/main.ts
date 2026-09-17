@@ -73,10 +73,10 @@ namespace ReceiptRing {
 
   // Gate the app behind authentication: nothing starts until a session exists.
   let started = false;
-  const startApp = (): void => {
+  const startApp = (user: Services.AuthUser): void => {
     if (started) return;
     started = true;
-    controller.start();
+    controller.start(user);
   };
 
   // Which surface the page shows. The stylesheet hides everything but the
@@ -89,10 +89,10 @@ namespace ReceiptRing {
 
   authView.init();
   landingView.init((mode) => authView.show(mode));
-  authView.onAuthenticated = () => {
+  authView.onAuthenticated = (user) => {
     authView.hide();
     setAuthState("user");
-    startApp();
+    startApp(user);
   };
   elements.logoutButton.addEventListener("click", () => {
     void authApiService.logout().finally(() => window.location.reload());
@@ -100,9 +100,9 @@ namespace ReceiptRing {
 
   void (async () => {
     try {
-      await authApiService.me();
+      const user = await authApiService.me();
       setAuthState("user");
-      startApp();
+      startApp(user);
     } catch {
       setAuthState("anon");
     }

@@ -230,10 +230,14 @@ export function createBank(prisma) {
     return { imported, cursor, pending: false, incomplete: skipped > 0 };
   }
 
-  function register(app, requireAuth) {
+  function register(app, requireAuth, requireAdmin) {
+    // Every route here is an admin feature: the Plaid credentials belong to
+    // the operator, and so does the decision of whose bank they are used on.
+    const guard = [requireAuth, requireAdmin];
+
     // Mint a short-lived Plaid Link token for the browser. Scoped to auth so
     // only a logged-in user can start a link, and to their own user id.
-    app.get("/api/plaid/link-token", requireAuth, async (req, res) => {
+    app.get("/api/plaid/link-token", ...guard, async (req, res) => {
       const { configured } = plaidConfig();
       if (!configured) {
         return res.status(400).json({ error: "Plaid is not configured on the server." });
@@ -250,7 +254,7 @@ export function createBank(prisma) {
     // Exchange the public token from Plaid Link for a permanent access token,
     // verify it by fetching accounts, then store it encrypted. Tokens are never
     // returned to the browser.
-    app.post("/api/plaid/exchange", requireAuth, async (req, res) => {
+    app.post("/api/plaid/exchange", ...guard, async (req, res) => {
       const publicToken = String(req.body?.publicToken ?? "").trim();
       if (!publicToken) {
         return res.status(400).json({ error: "publicToken is required." });
@@ -336,7 +340,7 @@ export function createBank(prisma) {
 
     // Pull transactions for all of the user's connections via cursor-based
     // sync, upserting them (deduped by Plaid's transaction id). Read-only.
-    app.post("/api/plaid/sync", requireAuth, async (req, res) => {
+    app.post("/api/plaid/sync", ...guard, async (req, res) => {
       try {
         const connections = await prisma.bankConnection.findMany({
           where: { userId: req.userId },
@@ -390,7 +394,7 @@ export function createBank(prisma) {
     // List the user's linked banks. Sanitized: no tokens, no Plaid item or
     // account ids — just enough for the UI to show what is connected and how
     // much data each link accounts for.
-    app.get("/api/plaid/connections", requireAuth, async (req, res) => {
+    app.get("/api/plaid/connections", ...guard, async (req, res) => {
       try {
         const connections = await prisma.bankConnection.findMany({
           where: { userId: req.userId },
@@ -419,7 +423,7 @@ export function createBank(prisma) {
 
     // Unlink a bank. Scoped to the caller, and cascades to that connection's
     // accounts and transactions so nothing is left stranded.
-    app.delete("/api/plaid/connections/:id", requireAuth, async (req, res) => {
+    app.delete("/api/plaid/connections/:id", ...guard, async (req, res) => {
       try {
         const connection = await prisma.bankConnection.findFirst({
           where: { id: req.params.id, userId: req.userId },
@@ -438,7 +442,7 @@ export function createBank(prisma) {
     });
 
     // Return the user's stored transactions (sanitized — no tokens/ids leaked).
-    app.get("/api/transactions", requireAuth, async (req, res) => {
+    app.get("/api/transactions", ...guard, async (req, res) => {
       try {
         const transactions = await prisma.bankTransaction.findMany({
           where: { account: { connection: { userId: req.userId } } },
@@ -469,7 +473,7 @@ export function createBank(prisma) {
 
     // PATCH /api/bank-transactions/:txnId/food - flag a whole transaction as
     // food so it counts toward the education-expense food total.
-    app.patch("/api/bank-transactions/:txnId/food", requireAuth, async (req, res) => {
+    app.patch("/api/bank-transactions/:txnId/food", ...guard, async (req, res) => {
       const body = req.body ?? {};
       if (typeof body.isFood !== "boolean") {
         return res.status(400).json({ error: "isFood must be a boolean." });

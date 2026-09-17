@@ -360,7 +360,7 @@
             <article class="feature-card">
               <span class="feature-icon"><svg><use href="#i-pie" /></svg></span>
               <h3>Bank imports and a budget ring</h3>
-              <p>Link a bank read-only through Plaid, attach receipts to transactions, and watch a monthly ring of spend by category.</p>
+              <p>Watch a monthly ring of spend by category. Admin accounts can also link a bank read-only through Plaid and attach receipts to transactions.</p>
             </article>
           </div>
         </section>
@@ -449,7 +449,7 @@
             <div class="trust-item">
               <span class="feature-icon"><svg><use href="#i-landmark" /></svg></span>
               <h3>Read-only bank access</h3>
-              <p>Plaid tokens are exchanged server-side and stored encrypted. Skip the bank entirely if you like.</p>
+              <p>Plaid tokens are exchanged server-side and stored encrypted, and only admin accounts can link a bank at all. Skip it entirely if you like.</p>
             </div>
             <div class="trust-item">
               <span class="feature-icon"><svg><use href="#i-database" /></svg></span>
@@ -477,9 +477,9 @@
                 <svg class="faq-chevron"><use href="#i-chevron" /></svg>
               </summary>
               <p>
-                Not necessarily. The server can run with one shared key from its environment. If you add your own in
-                Settings it is stored encrypted and used for your receipts instead. The app only ever reports whether
-                a key exists.
+                Admin accounts can use the shared key from the server's environment. Everyone else adds their own in
+                Settings, where it is stored encrypted and used only for their receipts. The app only ever reports
+                whether a key exists, never the key itself.
               </p>
             </details>
             <details class="faq-item">
@@ -489,7 +489,8 @@
               </summary>
               <p>
                 Bank links go through Plaid Link and are read-only. Access tokens are exchanged on the server and
-                encrypted at rest, so they never reach your browser. Everything else works without a bank connected.
+                encrypted at rest, so they never reach your browser. Only admin accounts can link a bank, and
+                everything else works without one.
               </p>
             </details>
             <details class="faq-item">
@@ -863,7 +864,10 @@
               </div>
             </section>
 
-            <section class="panel panel-wide" aria-label="Bank transactions">
+            <!-- Admin accounts only: the stylesheet hides it for everyone else
+                 (body[data-access="regular"]), and the server refuses the
+                 routes behind it regardless. -->
+            <section class="panel panel-wide admin-only" aria-label="Bank transactions">
               <header class="panel-header">
                 <h2>Bank transactions</h2>
                 <div class="panel-actions">
@@ -956,7 +960,8 @@
           </div>
           <p class="settings-note">
             Your key is sent once to the server, encrypted at rest, and never stored in or returned to the
-            browser. Leave the field blank to keep using the shared server key from <code>.env</code>.
+            browser. Leave the field blank to keep the key already in use. Admin accounts fall back to the
+            server's shared key; every other account needs its own.
           </p>
         </div>
         <div class="modal-actions">
@@ -1100,6 +1105,6 @@
     </div>
 
     <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-    <script src="dist/app.js"></script>
+    <script src="app.js"></script>
   </body>
 </html>

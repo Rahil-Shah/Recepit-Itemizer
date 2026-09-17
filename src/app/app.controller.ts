@@ -53,6 +53,9 @@ namespace ReceiptRing.App {
     private selectedMonth: string | null = null;
     private serverHasGeminiKey = false;
     private userHasGeminiKey = false;
+    // Whether the signed-in account is an admin (see server/access.mjs). Only
+    // admins get the bank side of budgeting; everything else is for everyone.
+    private isAdmin = false;
     // Downscaling the photo runs alongside the Gemini parse, so the pending
     // promise is what's held here: a save that lands first waits for it instead
     // of storing the receipt without its image.
@@ -111,7 +114,11 @@ namespace ReceiptRing.App {
       this.items = this.storageService.load();
     }
 
-    start(): void {
+    start(user: Services.AuthUser): void {
+      this.isAdmin = user.isAdmin;
+      // The stylesheet hides admin-only surfaces (the bank panel) for a
+      // regular account. The server refuses the same routes either way.
+      document.body.dataset.access = user.isAdmin ? "admin" : "regular";
       this.bindEvents();
       this.render();
       void this.initGeminiSettings();
@@ -791,7 +798,10 @@ namespace ReceiptRing.App {
       this.elements.parseButton.setAttribute("disabled", "true");
 
       try {
-        const result = await this.geminiService.parseReceiptImage(file, model);
+        // Shrunk before upload: a phone's original is routinely 5-10 MB, and
+        // the parse route sits behind a request-size cap (4.5 MB on Vercel).
+        const image = await this.receiptImageService.toParseImage(file);
+        const result = await this.geminiService.parseReceiptImage(image, model);
 
         // Log the JSON output in the terminal/console when putting a photo
         console.log("Gemini parsed receipt output:", result);
@@ -1550,8 +1560,10 @@ namespace ReceiptRing.App {
           receipts,
           (receipt) => void this.deleteReceipt(receipt),
           (receiptId, lineId, isFood) => void this.updateLineFood(receiptId, lineId, isFood),
-          (receipt) => this.openTransactionLinkModal(receipt.id),
-          (receipt) => void this.unlinkReceiptFromHistory(receipt),
+          // Attaching a receipt to a bank transaction is a bank feature, so a
+          // regular account gets no link buttons rather than ones that 403.
+          this.isAdmin ? (receipt) => this.openTransactionLinkModal(receipt.id) : undefined,
+          this.isAdmin ? (receipt) => void this.unlinkReceiptFromHistory(receipt) : undefined,
           (receipt) => this.editSavedReceipt(receipt)
         );
       } catch (error) {
@@ -1678,7 +1690,11 @@ namespace ReceiptRing.App {
       // (no bank linked, Plaid still preparing data) are non-fatal — we still
       // render whatever is already stored below. Callers that just synced pass
       // { sync: false } to avoid a redundant round-trip.
-      if (options.sync !== false) {
+      //
+      // A regular account has no bank side at all -- the server would answer
+      // 403 -- so it skips the three bank calls and budgets from receipts and
+      // rent entries alone.
+      if (this.isAdmin && options.sync !== false) {
         try {
           await this.bankApiService.sync();
         } catch {
@@ -1691,15 +1707,19 @@ namespace ReceiptRing.App {
       } catch {
         this.receipts = [];
       }
-      try {
-        this.bankTransactions = await this.bankApiService.listTransactions();
-      } catch {
-        this.bankTransactions = [];
-      }
-      try {
-        this.bankConnections = await this.bankApiService.listConnections();
-      } catch {
-        this.bankConnections = [];
+      this.bankTransactions = [];
+      this.bankConnections = [];
+      if (this.isAdmin) {
+        try {
+          this.bankTransactions = await this.bankApiService.listTransactions();
+        } catch {
+          this.bankTransactions = [];
+        }
+        try {
+          this.bankConnections = await this.bankApiService.listConnections();
+        } catch {
+          this.bankConnections = [];
+        }
       }
       this.monthlySpend = this.spendingAggregatorService.aggregate(
         this.receipts,

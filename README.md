@@ -19,7 +19,9 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
      ```env
      GEMINI_API_KEY=your_actual_api_key_here
      ```
-4. **Per-user keys**: Alternatively, you can add your own Gemini API key from the settings panel. It is stored server-side, encrypted at rest with AES-256-GCM, and is never sent back to the browser — the app only ever reports whether a key exists. Without one, requests fall back to the shared `GEMINI_API_KEY` from `.env`.
+4. **Per-user keys**: Any account can add its own Gemini API key from the settings panel. It is stored server-side, encrypted at rest with AES-256-GCM, and is never sent back to the browser — the app only ever reports whether a key exists.
+5. **Admin accounts and everyone else**: `ADMIN_EMAILS` lists the accounts that may spend the shared `GEMINI_API_KEY` from `.env` and use the Plaid integration (connect a bank, import transactions, attach receipts and rent to them). Every other account parses with a personal key, splits and saves receipts, and tracks education expenses by hand — food lines on receipts and rent entries still work, the bank side of Budgeting is hidden and its routes answer 403. Who may hold an account at all is a separate switch: `ALLOWED_LOGIN_EMAILS` (a closed list; admins are always on it) or `ALLOW_PUBLIC_SIGNUP=true` (anyone). A production deployment refuses to start with neither.
+6. **Row-level security**: every table has RLS enabled with no policies (migration `20260917120000`). The app connects as the table owner, which bypasses RLS, so nothing changes for it; on Supabase it means the project's REST API and anon key can read nothing, even before you close the API off in the dashboard.
 
 ---
 
@@ -39,7 +41,7 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 - **Bank Connection (Plaid)**: Securely link a bank through [Plaid Link](https://plaid.com/docs/link/) to import **read-only** transactions. Access tokens are exchanged server-side and stored AES-256-GCM encrypted at rest — they never reach the browser.
 - **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
-- **Landing Page**: Visitors without a session land on a page that explains the app, with **Log in** / **Get started** opening the account dialog. Signed-in users go straight to the workspace. The frontend is plain HTML + CSS (`styles.css` holds the design tokens and app components, `landing.css` the landing sections) and TypeScript compiled to `dist/app.js`.
+- **Landing Page**: Visitors without a session land on a page that explains the app, with **Log in** / **Get started** opening the account dialog. Signed-in users go straight to the workspace. Everything the browser loads lives in `public/`: plain HTML + CSS (`styles.css` holds the design tokens and app components, `landing.css` the landing sections) and `app.js`, the TypeScript under `src/` compiled by `npm run build`.
 
 ---
 
@@ -102,7 +104,10 @@ shows the names without paying for them again.
    cp .env.example .env
    ```
    Open `.env` and replace `your_gemini_api_key_here` with your real Gemini API key. The
-   `DATABASE_URL` is pre-filled to match the bundled Docker Postgres.
+   `DATABASE_URL` is pre-filled to match the bundled Docker Postgres. Put your own address in
+   `ADMIN_EMAILS` so your account can use the shared Gemini key and the bank integration; leave
+   `ALLOWED_LOGIN_EMAILS` blank locally for open sign-up (see
+   [Security First](#-security-first-api-key-protection) for what each switch does).
 
    Then generate the two secrets the server refuses to start without —
    `AUTH_SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY`. The placeholders in
@@ -130,6 +135,16 @@ shows the names without paying for them again.
    npm run db:migrate
    ```
 
+   > **Databases created before September 2026**: one migration was renamed from
+   > `20260819230000_add_rent_entry_bank_transaction` to `20260820030100_…` so that it sorts after
+   > the migration that creates the table it alters (a fresh database could never get past it).
+   > `npm run db:deploy` takes the renamed migration as a no-op. `npm run db:migrate`, though, will
+   > see the old name in the database's history and offer a reset; to keep your data, remove that
+   > one history row first:
+   > ```sql
+   > DELETE FROM "_prisma_migrations" WHERE migration_name = '20260819230000_add_rent_entry_bank_transaction';
+   > ```
+
 3. Build the frontend bundle and start the server:
    ```bash
    npm run start
@@ -139,51 +154,113 @@ shows the names without paying for them again.
 
 Open `http://localhost:4173` in your browser.
 
-> The single Node/Express server serves the frontend **and** the `/api` routes. It never
-> exposes `.env` or source files over HTTP — the Gemini config is served via `/api/gemini-config`.
-
-### Database Management with pgweb
-
-To visually manage the Postgres database, pgweb provides a web-based PostgreSQL client:
-
-1. **Start pgweb** (runs in a separate Docker container):
-   ```bash
-   npm run pgweb:up
-   ```
-
-2. **Access pgweb** at `http://localhost:5050` in your browser.
-
-3. **Log in** with the following credentials:
-   - **Host**: `localhost`
-   - **Port**: `5433`
-   - **User**: `receipt`
-   - **Password**: `receipt`
-   - **Database**: `receipt_ring`
-
-4. Once logged in, you can:
-   - Browse tables and schemas
-   - Run SQL queries
-   - View and edit data directly
-   - Inspect the database structure
-
-5. To stop pgweb:
-   ```bash
-   npm run pgweb:down
-   ```
-
-> **Note**: pgweb runs independently of the main app and the Postgres container will continue running — it's just a GUI tool for database inspection and management.
+> The single Node/Express server serves `public/` **and** the `/api` routes. Nothing outside
+> `public/` is ever served — source, config and `.env` stay on disk — and the only Gemini
+> configuration the browser receives comes from `/api/gemini-config`, never a key.
 
 ### Architecture & Scaling
 
 ```
-Browser (dist/app.js)  ──fetch /api──▶  Express (server.mjs)  ──Prisma──▶  Postgres
-                                         └─ also serves the static frontend
+Browser (public/app.js)  ──fetch /api──▶  Express (server.mjs)  ──Prisma──▶  Postgres
+                                           └─ also serves public/ when self-hosted
 ```
 
 The database connection is a single `DATABASE_URL`. Locally it points at the Docker Postgres
 (`npm run db:up`); to scale, point it at a managed Postgres (Neon, Supabase, RDS, …) and run
 `npm run db:deploy` — no code changes required. Schema changes are versioned as Prisma
-migrations under `prisma/migrations/`.
+migrations under `prisma/migrations/`. When `DATABASE_URL` goes through a transaction-mode
+pooler, give migrations the direct connection as `DIRECT_DATABASE_URL`.
+
+### Deploying to Vercel
+
+The repository deploys to Vercel as it is: `vercel.json` serves `public/` from the CDN and runs
+the Express app as a single serverless function (`api/index.mjs`) behind `/api/*`. You need a
+hosted Postgres — the Vercel Postgres (Neon) integration is the least work, but any managed
+Postgres does.
+
+1. Import the repository into Vercel. Framework preset **Other**; build and output settings come
+   from `vercel.json`.
+2. Add the environment variables, for Production and Preview alike:
+
+   | Variable | Value |
+   | --- | --- |
+   | `DATABASE_URL` | the (pooled) connection string of your Postgres |
+   | `DIRECT_DATABASE_URL` | the direct / unpooled string, used only by migrations. Not needed with the Vercel Postgres integration, which sets `DATABASE_URL_UNPOOLED` |
+   | `ADMIN_EMAILS` | your email address. Admins may use the shared Gemini key and the bank integration. **Required** unless sign-up is opened: the function refuses to serve when no account could sign in |
+   | `ALLOWED_LOGIN_EMAILS` | optional: other accounts allowed to sign in (comma-separated). Or set `ALLOW_PUBLIC_SIGNUP=true` to let anyone register as a regular account |
+   | `AUTH_SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY` | generated as described above |
+   | `GEMINI_API_KEY`, `GEMINI_MODEL` | your Gemini key (or save one in Settings after signing in) and the model |
+   | `PLAID_ENV`, `PLAID_CLIENT_ID`, `PLAID_SECRET` | optional, for bank import |
+
+3. Deploy. The build runs `npm run vercel-build`: it generates the Prisma client, applies pending
+   migrations with `prisma migrate deploy`, then compiles the frontend. A failed migration fails
+   the deploy, so the live site never runs against a schema it does not expect.
+4. Open the site and choose **Get started** with an address from `ADMIN_EMAILS` to create your
+   account. An address that is not allowed in is told that registration is closed.
+
+What the serverless shape changes:
+
+- **Request size.** Vercel caps a function request at 4.5 MB. The browser shrinks receipt photos
+  before upload (2400px JPEG for parsing, 1600px for the stored copy), so ordinary phone photos
+  fit with room to spare. A photo the browser cannot decode (HEIC outside Safari) is sent as it
+  is and may be refused as too large.
+- **Function duration.** `vercel.json` allows 120 seconds per request for the Gemini calls. Hobby
+  projects with Fluid compute allow up to 300; if your plan caps it lower, reduce the value.
+- **Rate limits are per instance.** The in-memory limiters and login throttle count within one
+  function instance, not across all of them. With the account lock on, login is the only
+  unauthenticated surface that does anything, and passwords are scrypt-hashed. Vercel's own DDoS
+  mitigation sits in front of everything.
+- **Health check.** `GET /api/health` answers `{ "ok": true }` when the function can reach the
+  database, for uptime monitors.
+
+### Moving an existing database to Supabase
+
+The app runs on any Postgres, and Supabase's free tier is a convenient host for a Vercel
+deployment. This moves the data from the local Docker Postgres without losing anything. Two
+things decide whether it is lossless:
+
+- **`TOKEN_ENCRYPTION_KEY` must be the same on the new server.** It encrypts saved Gemini keys and
+  Plaid bank tokens at rest. With a different key everything else still works, but the app asks
+  for the Gemini key again and the bank has to be reconnected.
+- **Sign in with the same email afterwards**, and list it in `ADMIN_EMAILS` so the existing account
+  keeps its bank access.
+
+1. Create the Supabase project and open **Connect**. You need two strings, both on the pooler host
+   (`aws-0-<region>.pooler.supabase.com`, user `postgres.<project-ref>`):
+   the **transaction pooler** (port 6543) for `DATABASE_URL`, and the **session pooler** (port
+   5432) for `DIRECT_DATABASE_URL`. Skip the direct `db.<ref>.supabase.co` host: it is IPv6-only,
+   which neither Vercel functions nor most home connections can reach.
+2. Create the schema with the repo's migrations:
+   ```bash
+   DIRECT_DATABASE_URL="postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require" npm run db:deploy
+   ```
+3. Copy the rows. Data only, without Prisma's history table (Supabase now has its own, correct
+   one), and run both tools inside the Docker container so their versions match:
+   ```bash
+   docker exec receipt-ring-db pg_dump -U receipt -d receipt_ring --data-only --no-owner --no-privileges --exclude-table=_prisma_migrations > receipt-ring-data.sql
+
+   docker exec -i receipt-ring-db psql "postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require" -v ON_ERROR_STOP=1 --single-transaction < receipt-ring-data.sql
+   ```
+   The restore is all-or-nothing: if it fails, nothing is written and it can be rerun. The schema
+   has no circular foreign keys, so the dump's own table order is correct.
+4. Compare counts on both sides:
+   ```sql
+   SELECT (SELECT count(*) FROM users) users, (SELECT count(*) FROM receipts) receipts,
+          (SELECT count(*) FROM receipt_lines) lines, (SELECT count(*) FROM line_assignments) assignments,
+          (SELECT count(*) FROM bank_transactions) transactions, (SELECT count(*) FROM rent_entries) rent,
+          (SELECT count(*) FROM item_aliases) aliases, (SELECT count(*) FROM account_people) people;
+   ```
+5. In Supabase, under Project Settings → API → *Exposed schemas*, remove `public`. The app never
+   uses Supabase's REST API, and the row-level security migration already blocks it, but there is
+   no reason to leave the door in place.
+6. On Vercel, set `DATABASE_URL` to the transaction pooler string (add `?sslmode=verify-full`),
+   `DIRECT_DATABASE_URL` to the session pooler string (`?sslmode=require`), and the rest of the
+   variables from the table above with `TOKEN_ENCRYPTION_KEY` copied from your local `.env`. Or
+   install the Supabase integration from the Vercel marketplace, which sets `POSTGRES_URL` and
+   `POSTGRES_URL_NON_POOLING` for you; both are picked up automatically. If the function logs show
+   a certificate error, change the suffix to `?uselibpqcompat=true&sslmode=require`, which keeps
+   the connection encrypted but skips certificate verification, as `psql` does.
+7. Deploy, then **Log in** (not Get started) with your existing email and password.
 
 ### Useful scripts
 
@@ -192,9 +269,12 @@ migrations under `prisma/migrations/`.
 | `npm run db:up` / `npm run db:down` | Start / stop the local Postgres container |
 | `npm run db:migrate` | Create & apply a migration (development) |
 | `npm run db:deploy` | Apply existing migrations (production) |
-| `npm run build` | Compile the TypeScript frontend to `dist/app.js` |
+| `npm run build` | Generate the Prisma client and compile the TypeScript frontend to `public/app.js` |
+| `npm run check` | Typecheck the frontend without emitting |
+| `npm test` | Build the test bundle and run the unit tests |
 | `npm run dev` | Run the server with `--watch` for reloads |
 | `npm run start` | Build the frontend and start the server |
+| `npm run vercel-build` | What Vercel runs on deploy: generate the client, `migrate deploy`, compile |
 
 ---
 

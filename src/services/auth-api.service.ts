@@ -3,6 +3,10 @@ namespace ReceiptRing.Services {
     id: string;
     email: string;
     name: string | null;
+    // Admin accounts may use the server's shared Gemini key and the bank side
+    // of budgeting. The server enforces this on every route; the flag only
+    // tells the page which surfaces to show.
+    isAdmin: boolean;
   }
 
   export class AuthApiService {
