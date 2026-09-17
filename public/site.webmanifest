@@ -1,0 +1,13 @@
+{
+  "name": "Receipt Ring",
+  "short_name": "Receipt Ring",
+  "description": "Reads a receipt from a photo, splits every line between the people who shared it, and keeps a monthly spending ring.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FDFCF8",
+  "theme_color": "#FDFCF8",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
