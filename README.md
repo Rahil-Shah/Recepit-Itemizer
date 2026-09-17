@@ -20,8 +20,9 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
      GEMINI_API_KEY=your_actual_api_key_here
      ```
 4. **Per-user keys**: Any account can add its own Gemini API key from the settings panel. It is stored server-side, encrypted at rest with AES-256-GCM, and is never sent back to the browser — the app only ever reports whether a key exists.
-5. **Admin accounts and everyone else**: `ADMIN_EMAILS` lists the accounts that may spend the shared `GEMINI_API_KEY` from `.env` and use the Plaid integration (connect a bank, import transactions, attach receipts and rent to them). Every other account parses with a personal key, splits and saves receipts, and tracks education expenses by hand — food lines on receipts and rent entries still work, the bank side of Budgeting is hidden and its routes answer 403. Who may hold an account at all is a separate switch: `ALLOWED_LOGIN_EMAILS` (a closed list; admins are always on it) or `ALLOW_PUBLIC_SIGNUP=true` (anyone). A production deployment refuses to start with neither.
-6. **Row-level security**: every table has RLS enabled with no policies (migration `20260917120000`). The app connects as the table owner, which bypasses RLS, so nothing changes for it; on Supabase it means the project's REST API and anon key can read nothing, even before you close the API off in the dashboard.
+5. **Capacity limits**: an instance holds at most `MAX_USERS` accounts (20 by default), and each non-admin account at most `MAX_RECEIPTS_PER_USER` receipts (20 by default). Registration past the account limit answers 403, as does saving past the receipt limit; editing or deleting existing receipts is unaffected. Admins are exempt from both, so a full instance never locks the owner out. A blank or malformed value falls back to the default rather than lifting the limit.
+6. **Admin accounts and everyone else**: `ADMIN_EMAILS` lists the accounts that may spend the shared `GEMINI_API_KEY` from `.env` and use the Plaid integration (connect a bank, import transactions, attach receipts and rent to them). Every other account parses with a personal key, splits and saves receipts, and tracks education expenses by hand — food lines on receipts and rent entries still work, the bank side of Budgeting is hidden and its routes answer 403. Who may hold an account at all is a separate switch: `ALLOWED_LOGIN_EMAILS` (a closed list; admins are always on it) or `ALLOW_PUBLIC_SIGNUP=true` (anyone). A production deployment refuses to start with neither.
+7. **Row-level security**: every table has RLS enabled with no policies (migration `20260917120000`). The app connects as the table owner, which bypasses RLS, so nothing changes for it; on Supabase it means the project's REST API and anon key can read nothing, even before you close the API off in the dashboard.
 
 ---
 
@@ -188,6 +189,7 @@ Postgres does.
    | `DIRECT_DATABASE_URL` | the direct / unpooled string, used only by migrations. Not needed with the Vercel Postgres integration, which sets `DATABASE_URL_UNPOOLED` |
    | `ADMIN_EMAILS` | your email address. Admins may use the shared Gemini key and the bank integration. **Required** unless sign-up is opened: the function refuses to serve when no account could sign in |
    | `ALLOWED_LOGIN_EMAILS` | optional: other accounts allowed to sign in (comma-separated). Or set `ALLOW_PUBLIC_SIGNUP=true` to let anyone register as a regular account |
+   | `MAX_USERS`, `MAX_RECEIPTS_PER_USER` | optional: both default to 20, and only matter when sign-up is open |
    | `AUTH_SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY` | generated as described above |
    | `GEMINI_API_KEY`, `GEMINI_MODEL` | your Gemini key (or save one in Settings after signing in) and the model |
    | `PLAID_ENV`, `PLAID_CLIENT_ID`, `PLAID_SECRET` | optional, for bank import |

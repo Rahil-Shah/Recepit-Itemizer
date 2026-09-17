@@ -29,6 +29,32 @@
 
 const LIST_SEPARATOR = /[,;\s]+/;
 
+// Ceilings for an instance anyone can sign up to. They exist to bound what a
+// public URL can cost: rows in a free-tier database, and receipt photos, which
+// are by far the largest thing stored. Admins are exempt from both -- they are
+// named in the environment, so the operator can always create their own
+// account and keep their own receipts on an otherwise full instance.
+const DEFAULT_MAX_USERS = 20;
+const DEFAULT_MAX_RECEIPTS_PER_USER = 20;
+
+// A positive whole number from the environment, or the default. Anything else
+// (blank, zero, negative, not a number) means "unset" rather than "unlimited":
+// a typo in a cap must not silently remove it.
+function positiveIntFromEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+/** How many accounts may exist. Admins may still register past it. */
+export function maxUsers() {
+  return positiveIntFromEnv("MAX_USERS", DEFAULT_MAX_USERS);
+}
+
+/** How many receipts one non-admin account may keep. */
+export function maxReceiptsPerUser() {
+  return positiveIntFromEnv("MAX_RECEIPTS_PER_USER", DEFAULT_MAX_RECEIPTS_PER_USER);
+}
+
 function normalize(email) {
   return String(email ?? "").trim().toLowerCase();
 }

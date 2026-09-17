@@ -7,6 +7,8 @@ import {
   isAdmin,
   isLocked,
   isLockedOut,
+  maxReceiptsPerUser,
+  maxUsers,
   mayUseSharedGeminiKey,
   publicSignupAllowed
 } from "../server/access.mjs";
@@ -126,4 +128,27 @@ test("outside production the policy never blocks startup", () => {
   withEnv(nothing, () => {
     assert.doesNotThrow(() => assertAccessPolicy({ production: false }));
   });
+});
+
+
+test("the caps default to 20 and can be raised or lowered from the environment", () => {
+  withEnv({ MAX_USERS: undefined, MAX_RECEIPTS_PER_USER: undefined }, () => {
+    assert.equal(maxUsers(), 20);
+    assert.equal(maxReceiptsPerUser(), 20);
+  });
+  withEnv({ MAX_USERS: "50", MAX_RECEIPTS_PER_USER: "5" }, () => {
+    assert.equal(maxUsers(), 50);
+    assert.equal(maxReceiptsPerUser(), 5);
+  });
+});
+
+test("a malformed cap falls back to the default rather than removing the limit", () => {
+  // Every one of these once meant "no limit" under a plain Number() check,
+  // which is the wrong way for a typo in a cap to fail.
+  for (const bad of ["", "   ", "0", "-5", "twenty", "20.5", "1e3x"]) {
+    withEnv({ MAX_USERS: bad, MAX_RECEIPTS_PER_USER: bad }, () => {
+      assert.equal(maxUsers(), 20, `MAX_USERS=${JSON.stringify(bad)}`);
+      assert.equal(maxReceiptsPerUser(), 20, `MAX_RECEIPTS_PER_USER=${JSON.stringify(bad)}`);
+    });
+  }
 });

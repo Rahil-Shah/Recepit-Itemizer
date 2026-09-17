@@ -14,7 +14,7 @@ import { identificationFields, normalizeStoredItemCode } from "./server/identifi
 import { createRateLimiter } from "./server/rate-limit.mjs";
 import { parseMonthParam, getMonthRange, getUtcMonthRange } from "./server/month.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
-import { assertAccessPolicy } from "./server/access.mjs";
+import { assertAccessPolicy, maxReceiptsPerUser } from "./server/access.mjs";
 import { databaseUrl, isProduction, isVercel } from "./server/deployment.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -451,6 +451,21 @@ app.post("/api/receipts", requireAuth, async (req, res) => {
   const image = body.imageDataUrl ? parseImageDataUrl(body.imageDataUrl) : null;
 
   try {
+    // A non-admin account keeps a bounded number of receipts (see
+    // server/access.mjs). Receipts carry photos, so this is what actually
+    // bounds the database on an instance anyone can join. Only creation is
+    // capped: editing a saved receipt (PUT below) adds nothing, so a user at
+    // the limit can still fix what they have.
+    if (!req.isAdmin) {
+      const limit = maxReceiptsPerUser();
+      const saved = await prisma.receipt.count({ where: { userId: req.userId } });
+      if (saved >= limit) {
+        return res.status(403).json({
+          error: `You have reached the limit of ${limit} saved receipts. Delete one to save another.`
+        });
+      }
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const receipt = await tx.receipt.create({
         data: {

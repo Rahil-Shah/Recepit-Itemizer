@@ -11,7 +11,14 @@ import {
   hashToken,
   dummyPasswordHash
 } from "./crypto.mjs";
-import { adminEmails, allowedEmails, isAdmin, isLockedOut, publicSignupAllowed } from "./access.mjs";
+import {
+  adminEmails,
+  allowedEmails,
+  isAdmin,
+  isLockedOut,
+  maxUsers,
+  publicSignupAllowed
+} from "./access.mjs";
 import { isProduction } from "./deployment.mjs";
 
 const SESSION_COOKIE = "rr_session";
@@ -178,6 +185,24 @@ export function createAuth(prisma) {
         if (existing) {
           return res.status(409).json({ error: "An account with that email already exists." });
         }
+
+        // The instance holds a bounded number of accounts (see
+        // server/access.mjs). Admins are exempt, so a full instance can never
+        // stop the operator from creating their own account.
+        //
+        // Counted and created outside one transaction: at this size the race
+        // needs two people registering in the same instant to land on 21
+        // accounts, and paying for serializable isolation on every signup to
+        // prevent that is not a trade worth making.
+        if (!isAdmin(email)) {
+          const limit = maxUsers();
+          if ((await prisma.user.count()) >= limit) {
+            return res.status(403).json({
+              error: `This app has reached its limit of ${limit} accounts.`
+            });
+          }
+        }
+
         const user = await prisma.user.create({
           data: { email, name, passwordHash: await hashPassword(password) }
         });
