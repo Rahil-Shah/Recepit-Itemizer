@@ -73,9 +73,15 @@ namespace ReceiptRing.UI {
     pasteJsonStatus: HTMLElement;
     closePasteJsonButton: HTMLButtonElement;
     importPasteJsonButton: HTMLButtonElement;
+    landingView: HTMLElement;
+    landingMenu: HTMLElement;
+    landingMenuToggle: HTMLButtonElement;
+    authActionButtons: HTMLButtonElement[];
     authOverlay: HTMLElement;
+    authCloseButton: HTMLButtonElement;
     authForm: HTMLFormElement;
     authTitle: HTMLElement;
+    authSubtitle: HTMLElement;
     authNameField: HTMLElement;
     authName: HTMLInputElement;
     authEmail: HTMLInputElement;
@@ -201,9 +207,17 @@ namespace ReceiptRing.UI {
         pasteJsonStatus: this.getElement("#pasteJsonStatus", HTMLElement),
         closePasteJsonButton: this.getElement("#closePasteJsonButton", HTMLButtonElement),
         importPasteJsonButton: this.getElement("#importPasteJsonButton", HTMLButtonElement),
+        landingView: this.getElement("#landingView", HTMLElement),
+        landingMenu: this.getElement("#landingMenu", HTMLElement),
+        landingMenuToggle: this.getElement("#landingMenuToggle", HTMLButtonElement),
+        authActionButtons: Array.from(document.querySelectorAll("[data-auth-action]")).filter(
+          (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
+        ),
         authOverlay: this.getElement("#authOverlay", HTMLElement),
+        authCloseButton: this.getElement("#authCloseButton", HTMLButtonElement),
         authForm: this.getElement("#authForm", HTMLFormElement),
         authTitle: this.getElement("#authTitle", HTMLElement),
+        authSubtitle: this.getElement("#authSubtitle", HTMLElement),
         authNameField: this.getElement("#authNameField", HTMLElement),
         authName: this.getElement("#authName", HTMLInputElement),
         authEmail: this.getElement("#authEmail", HTMLInputElement),

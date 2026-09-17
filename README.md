@@ -39,6 +39,7 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 - **Bank Connection (Plaid)**: Securely link a bank through [Plaid Link](https://plaid.com/docs/link/) to import **read-only** transactions. Access tokens are exchanged server-side and stored AES-256-GCM encrypted at rest — they never reach the browser.
 - **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
+- **Landing Page**: Visitors without a session land on a page that explains the app, with **Log in** / **Get started** opening the account dialog. Signed-in users go straight to the workspace. The frontend is plain HTML + CSS (`styles.css` holds the design tokens and app components, `landing.css` the landing sections) and TypeScript compiled to `dist/app.js`.
 
 ---
 

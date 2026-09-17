@@ -41,6 +41,7 @@ namespace ReceiptRing {
   const monthlyTrendView = new UI.MonthlyTrendView(currencyFormatService);
   const rentEntriesView = new UI.RentEntriesView(currencyFormatService);
   const authView = new UI.AuthView(elements, authApiService);
+  const landingView = new UI.LandingView(elements);
 
   const controller = new App.AppController(
     elements,
@@ -78,9 +79,19 @@ namespace ReceiptRing {
     controller.start();
   };
 
+  // Which surface the page shows. The stylesheet hides everything but the
+  // brand mark while this is "pending", the app while "anon", and the landing
+  // page while "user" -- so a signed-in visitor never sees the landing page
+  // flash, and a new one never sees an empty workspace.
+  const setAuthState = (state: "pending" | "anon" | "user"): void => {
+    document.body.dataset.auth = state;
+  };
+
   authView.init();
+  landingView.init((mode) => authView.show(mode));
   authView.onAuthenticated = () => {
     authView.hide();
+    setAuthState("user");
     startApp();
   };
   elements.logoutButton.addEventListener("click", () => {
@@ -90,10 +101,10 @@ namespace ReceiptRing {
   void (async () => {
     try {
       await authApiService.me();
-      authView.hide();
+      setAuthState("user");
       startApp();
     } catch {
-      authView.show();
+      setAuthState("anon");
     }
   })();
 }

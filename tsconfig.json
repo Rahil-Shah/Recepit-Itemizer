@@ -43,6 +43,7 @@
     "src/services/notification.service.ts",
     "src/ui/dom-registry.ts",
     "src/ui/auth.view.ts",
+    "src/ui/landing.view.ts",
     "src/ui/budget-ring.view.ts",
     "src/ui/monthly-trend.view.ts",
     "src/ui/split-workspace.view.ts",

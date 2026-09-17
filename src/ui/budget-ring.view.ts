@@ -45,7 +45,9 @@ namespace ReceiptRing.UI {
       track.setAttribute("cy", String(cy));
       track.setAttribute("r", String(radius));
       track.setAttribute("fill", "none");
-      track.setAttribute("stroke", "rgba(255,255,255,0.07)");
+      // Coloured by the stylesheet, so the track follows the theme's palette
+      // rather than carrying a colour of its own in here.
+      track.setAttribute("class", "budget-ring-track");
       track.setAttribute("stroke-width", String(stroke));
       svg.append(track);
 

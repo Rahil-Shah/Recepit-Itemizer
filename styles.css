@@ -1,50 +1,110 @@
 /* ============================================================
-   Receipt Ring — night ledger theme
-   Near-black surfaces · hairline borders · one volt accent
-   Archivo (variable width) for UI · IBM Plex Mono for figures
+   Receipt Ring — organic / natural theme
+   Rice paper · moss · clay · raw timber · a whisper of grain
+   Fraunces for headings and figures · Nunito for everything else
+   ============================================================
+
+   1. Design tokens        the single source of every colour, radius,
+                           shadow and font used below and in landing.css
+   2. Base                 resets, grain overlay, auth-state visibility
+   3. Primitives           buttons, badges, fields, icon buttons
+   4. App shell            floating pill nav, layout, panels
+   5. Split workspace      dropzone, table, batch bar, popovers, summary
+   6. History              saved receipt cards
+   7. Budgeting            ring, trend, bank, rent, education
+   8. Dialogs              modals, auth card, toasts
+   9. Motion & responsive
    ============================================================ */
 
+/* ---------------- 1. Design tokens ---------------- */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --bg: #0b0c0e;
-  --well: #0d0e11;
-  --surface: #131518;
-  --surface-2: #191c20;
-  --surface-3: #22262b;
+  /* Palette: forest floor, clay pottery, unbleached paper */
+  --bg: #fdfcf8; /* rice paper */
+  --surface: #fefefa; /* card */
+  --surface-2: #f7f4ee; /* a shade deeper: hover, wells */
+  --well: #f0ebe5; /* stone */
+  --sand: #e6dccd; /* sand / beige */
+  --timber: #ded8cf; /* raw timber */
 
-  --border: #24282d;
-  --border-strong: #363b42;
+  --ink: #2c2c24; /* deep loam */
+  --ink-2: #4a4a40; /* bark */
+  --ink-3: #78786c; /* dried grass */
 
-  --ink: #f2f3f4;
-  --ink-2: #a2a8b0;
-  --ink-3: #62686f;
+  --moss: #5d7052;
+  --moss-deep: #4d5e43;
+  --moss-mist: #f3f4f1; /* text on moss */
+  --clay: #c18c5d;
+  --clay-deep: #a9784d;
+  --clay-ink: #9a6437; /* clay dark enough for small text on paper */
+  --sienna: #a85448;
 
-  --accent: #c9f158;
-  --accent-strong: #daff70;
-  --accent-soft: rgba(201, 241, 88, 0.09);
-  --accent-border: rgba(201, 241, 88, 0.32);
-  --on-accent: #10140a;
+  /* Semantic aliases. Components speak in these, not in raw colours. */
+  --accent: var(--moss);
+  --accent-strong: var(--moss-deep);
+  --accent-soft: rgba(93, 112, 82, 0.1);
+  --accent-border: rgba(93, 112, 82, 0.32);
+  --on-accent: var(--moss-mist);
 
-  --red: #ff6b5e;
-  --red-soft: rgba(255, 107, 94, 0.12);
-  --amber: #ffc24b;
-  --amber-soft: rgba(255, 194, 75, 0.1);
+  --warm: var(--clay);
+  --warm-ink: var(--clay-ink);
+  --warm-soft: rgba(193, 140, 93, 0.14);
+  --warm-border: rgba(193, 140, 93, 0.4);
 
-  --radius: 16px;
-  --radius-sm: 10px;
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
-  --shadow-pop: 0 12px 28px rgba(0, 0, 0, 0.45), 0 32px 80px rgba(0, 0, 0, 0.5);
+  --red: var(--sienna);
+  --red-soft: rgba(168, 84, 72, 0.12);
+  --red-border: rgba(168, 84, 72, 0.35);
+  --amber: var(--clay-ink);
+  --amber-soft: var(--warm-soft);
 
-  --font-ui: "Archivo", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --border: rgba(222, 216, 207, 0.55);
+  --border-strong: var(--timber);
+  --border-hover: #cfc6b8;
 
-  /* Uppercase tracked micro-label, used for panel titles and field labels */
-  --label-tracking: 0.12em;
+  /* Shape. No straight lines in nature: even the small radius is generous. */
+  --radius-pill: 999px;
+  --radius-sm: 16px;
+  --radius: 24px;
+  --radius-card: 2rem;
+  --radius-card-lg: 3.25rem;
+  --blob-1: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  --blob-2: 30% 70% 70% 30% / 30% 30% 70% 70%;
+  --blob-3: 50% 50% 20% 80% / 25% 80% 20% 75%;
+  --blob-4: 40% 60% 60% 40% / 70% 30% 70% 30%;
+
+  /* Shadows carry a colour. Never pure black. */
+  --shadow-soft: 0 4px 20px -2px rgba(93, 112, 82, 0.15);
+  --shadow-soft-hover: 0 6px 24px -4px rgba(93, 112, 82, 0.25);
+  --shadow-lift: 0 20px 40px -10px rgba(93, 112, 82, 0.15);
+  --shadow-float: 0 10px 40px -10px rgba(193, 140, 93, 0.2);
+  --shadow-pop: 0 18px 50px -12px rgba(74, 74, 64, 0.28), 0 2px 8px -2px rgba(74, 74, 64, 0.08);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --font-ui: "Nunito", "Quicksand", ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Motion: gentle, eased, never a snap. */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur: 300ms;
+  --dur-slow: 500ms;
+
+  --label-tracking: 0.08em;
+
+  /* Shared layout measurements */
+  --nav-height: 64px;
+  --nav-gap: 12px;
 }
 
+/* ---------------- 2. Base ---------------- */
 * {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--nav-height) + var(--nav-gap) * 2);
 }
 
 body {
@@ -52,10 +112,26 @@ body {
   margin: 0;
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.55;
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Paper grain. A fixed layer over everything, multiplied in at a few percent,
+   so every surface, blob and shadow reads as ink on stock rather than light
+   on glass. pointer-events: none keeps it out of the way of every click. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.2 0 0 0 0 0.15 0 0 0 1 0'/></filter><rect width='240' height='240' filter='url(%23g)'/></svg>");
+  background-size: 240px 240px;
 }
 
 button,
@@ -75,19 +151,26 @@ button:disabled {
   opacity: 0.5;
 }
 
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
 ::selection {
-  background: var(--accent);
-  color: var(--on-accent);
+  background: rgba(193, 140, 93, 0.35);
+  color: var(--ink);
 }
 
 :focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: 3px;
+  border-radius: 6px;
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 ::-webkit-scrollbar-track {
@@ -95,264 +178,232 @@ button:disabled {
 }
 
 ::-webkit-scrollbar-thumb {
-  border: 3px solid var(--bg);
+  border: 4px solid var(--bg);
   border-radius: 999px;
-  background: var(--surface-3);
+  background: var(--timber);
 }
 
 .hidden {
   display: none !important;
 }
 
+/* Keeps the file picker reachable by the menu without showing an input nobody
+   is meant to click directly. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The icon sprite has to stay in the render tree for <use> to resolve, so it
+   is collapsed rather than display: none. */
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 h1,
-h2 {
+h2,
+h3 {
   margin: 0;
+  font-family: var(--font-display);
   font-weight: 600;
+  font-variation-settings: "SOFT" 60;
   letter-spacing: -0.01em;
+  line-height: 1.15;
 }
 
-/* ---------------- App bar ---------------- */
-.appbar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  border-bottom: 1px solid var(--border);
-  background: rgba(11, 12, 14, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+/* ---- Which surface is showing ----
+   pending: the session check is in flight, so nothing but the brand mark.
+   anon:    the landing page. user: the app. Set on <body> by main.ts. */
+body[data-auth="pending"] .landing,
+body[data-auth="pending"] .app-shell,
+body[data-auth="anon"] .app-shell,
+body[data-auth="user"] .landing,
+body:not([data-auth="pending"]) .boot-mark {
+  display: none;
 }
 
-.appbar-inner {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-  width: min(1480px, 100%);
-  min-height: 60px;
-  margin: 0 auto;
-  padding: 0 clamp(16px, 3vw, 32px);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.brand-logo {
+.boot-mark {
+  position: fixed;
+  inset: 0;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: var(--accent);
-  color: var(--on-accent);
 }
 
-.brand-logo svg {
-  width: 18px;
-  height: 18px;
+.boot-mark .brand-logo {
+  width: 52px;
+  height: 52px;
+  animation: breathe 2.4s ease-in-out infinite;
 }
 
-.brand-name {
-  font-size: 13px;
-  font-weight: 800;
-  font-stretch: 118%;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  white-space: nowrap;
+.boot-mark .brand-logo svg {
+  width: 26px;
+  height: 26px;
 }
 
-/* ---------------- Tabs ---------------- */
-.tab-nav {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-right: auto;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--well);
-}
+/* ---------------- 3. Primitives ---------------- */
 
-.tab-button {
-  display: inline-flex;
-  align-items: center;
-  padding: 7px 16px;
-  border: 0;
-  border-radius: 999px;
-  background: none;
-  color: var(--ink-3);
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  transition: color 120ms ease, background 120ms ease;
-}
-
-.tab-button:hover {
-  color: var(--ink-2);
-}
-
-.tab-button.is-active {
-  background: var(--surface-3);
-  color: var(--accent);
-}
-
-.appbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* ---------------- Buttons ---------------- */
+/* --- Buttons: pills, every one of them --- */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-height: 38px;
-  padding: 0 16px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 22px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: 0.005em;
+  line-height: 1;
+  text-decoration: none;
   white-space: nowrap;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  transform: scale(1.04);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+  transition-duration: 120ms;
 }
 
 .btn-icon {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   flex: none;
 }
 
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--moss);
+  border-color: var(--moss);
   color: var(--on-accent);
-  font-weight: 700;
+  box-shadow: var(--shadow-soft);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+  background: var(--moss-deep);
+  border-color: var(--moss-deep);
+  box-shadow: var(--shadow-soft-hover);
 }
 
+/* The quiet workhorse: a river stone. Used for every neutral action. */
 .btn-secondary {
-  background: var(--surface-2);
-  border-color: var(--border-strong);
-  color: var(--ink);
+  background: var(--well);
+  border-color: var(--border);
+  color: var(--ink-2);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--surface-3);
-  border-color: #454b53;
+  background: var(--sand);
+  border-color: rgba(193, 140, 93, 0.35);
+  color: var(--ink);
+}
+
+/* Terracotta outline: the invitation that isn't the main one. */
+.btn-outline {
+  background: transparent;
+  border-color: var(--clay);
+  color: var(--clay-ink);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--warm-soft);
+  color: var(--clay-deep);
 }
 
 .btn-ghost {
   background: transparent;
-  color: var(--ink-2);
+  color: var(--moss);
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background: var(--surface-2);
+  background: var(--accent-soft);
+  color: var(--moss-deep);
+}
+
+/* Ghost on a moss surface (the final call to action). */
+.btn-ghost-light {
+  background: transparent;
+  border-color: rgba(243, 244, 241, 0.35);
+  color: var(--moss-mist);
+}
+
+.btn-ghost-light:hover:not(:disabled) {
+  background: rgba(243, 244, 241, 0.12);
+  border-color: rgba(243, 244, 241, 0.6);
+}
+
+/* Sand-filled primary for dark surfaces. */
+.btn-sand {
+  background: var(--sand);
+  border-color: var(--sand);
   color: var(--ink);
+  box-shadow: 0 6px 24px -6px rgba(44, 44, 36, 0.35);
+}
+
+.btn-sand:hover:not(:disabled) {
+  background: #efe7da;
+  border-color: #efe7da;
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: var(--red-border);
+  color: var(--sienna);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--red-soft);
+  border-color: var(--sienna);
 }
 
 .btn-block {
   width: 100%;
 }
 
-/* ---------------- Layout ---------------- */
-.app-main {
-  width: min(1480px, 100%);
-  margin: 0 auto;
-  padding: clamp(16px, 2.5vw, 28px) clamp(16px, 3vw, 32px) 48px;
+.btn-small {
+  min-height: 38px;
+  padding: 0 16px;
+  font-size: 13.5px;
 }
 
-.tab-view {
-  /* `backwards`, never `forwards`/`both`: view-in ends on transform:
-     translateY(0), and a fill mode that retains it leaves an identity transform
-     applied for the life of the view. Any transform other than `none` makes the
-     element a containing block for position: fixed descendants, which re-based
-     the assignment popup's viewport coordinates onto this box and stranded it
-     further above its row the further the receipt was scrolled. */
-  animation: view-in 260ms ease backwards;
+.btn-lg {
+  min-height: 56px;
+  padding: 0 32px;
+  font-size: 16.5px;
 }
 
-.tab-view.hidden {
-  display: none !important;
-}
-
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(300px, 0.95fr) minmax(420px, 1.35fr) minmax(320px, 0.9fr);
-  gap: 16px;
-  align-items: start;
-}
-
-/* The budgeting workspace only has two panels — don't leave a dead column. */
-#budgetingView .workspace {
-  grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.5fr);
-}
-
-/* A panel that spans the full workspace width above the two-column row. */
-.panel-wide {
-  grid-column: 1 / -1;
-}
-
-/* ---------------- Panels ---------------- */
-.panel {
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 52px;
-  padding: 8px 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-.panel-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.panel-header h2 {
-  color: var(--ink-2);
-  font-size: 11.5px;
-  font-weight: 750;
-  font-stretch: 112%;
-  letter-spacing: var(--label-tracking);
-  text-transform: uppercase;
-}
-
-.panel-body {
-  padding: 20px;
-}
-
-/* ---------------- Badges ---------------- */
+/* --- Badges --- */
 .badge {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
   background: var(--well);
   color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 700;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -360,18 +411,16 @@ h2 {
 .badge-total {
   border-color: var(--accent-border);
   background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
-  font-size: 12px;
+  color: var(--moss);
 }
 
 .badge.is-warning {
-  border-color: rgba(255, 194, 75, 0.35);
-  background: var(--amber-soft);
-  color: var(--amber);
+  border-color: var(--warm-border);
+  background: var(--warm-soft);
+  color: var(--warm-ink);
 }
 
-/* ---------------- Fields ---------------- */
+/* --- Fields --- */
 .field {
   margin-top: 16px;
 }
@@ -384,10 +433,11 @@ h2 {
 .field-label {
   display: block;
   margin-bottom: 7px;
+  padding-left: 4px;
   color: var(--ink-3);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: var(--label-tracking);
   text-transform: uppercase;
 }
 
@@ -395,18 +445,21 @@ textarea,
 .table-input,
 .table-select {
   width: 100%;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--well);
+  border: 1px solid var(--timber);
+  background: rgba(255, 255, 255, 0.5);
   color: var(--ink);
   outline: none;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    background var(--dur) var(--ease);
 }
 
 textarea {
   resize: vertical;
   min-height: 150px;
-  padding: 10px 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius-sm);
   line-height: 1.55;
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -414,76 +467,328 @@ textarea {
 
 .table-input,
 .table-select {
-  min-height: 38px;
-  padding: 0 12px;
-  font-size: 13.5px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  font-size: 14.5px;
 }
 
 textarea::placeholder,
 input::placeholder {
   color: var(--ink-3);
+  opacity: 1;
 }
 
 textarea:focus,
 .table-input:focus,
 .table-select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--moss);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px rgba(93, 112, 82, 0.3);
 }
 
 .table-select {
   appearance: none;
   cursor: pointer;
-  padding-right: 30px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%23a2a8b0' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6' fill='none' stroke='%2378786c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 10px center;
+  background-position: right 16px center;
 }
 
 input[type="number"] {
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="file"].table-input {
+  padding-top: 9px;
+  padding-bottom: 9px;
+  line-height: 1.3;
+}
+
+input[type="date"].table-input {
   font-variant-numeric: tabular-nums;
 }
 
 .field-note {
-  margin: 6px 0 0;
+  margin: 6px 0 0 4px;
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.4;
 }
 
 .button-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 .button-row .btn-primary {
   flex: 1;
-  min-width: 140px;
+  min-width: 150px;
 }
 
-/* ---------------- Dropzone ---------------- */
+/* --- Icon button: a round pebble --- */
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 16px;
+  line-height: 1;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.icon-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-button:hover {
+  background: var(--red-soft);
+  color: var(--sienna);
+  transform: scale(1.08);
+}
+
+/* ---------------- 4. App shell ---------------- */
+
+/* --- Floating pill navigation --- */
+.appbar {
+  position: sticky;
+  top: var(--nav-gap);
+  z-index: 30;
+  padding: var(--nav-gap) 16px 0;
+}
+
+.appbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: min(1480px, 100%);
+  min-height: var(--nav-height);
+  margin: 0 auto;
+  padding: 8px 10px 8px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand-logo {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--moss);
+  color: var(--moss-mist);
+  box-shadow: var(--shadow-soft);
+}
+
+.brand-logo svg {
+  width: 20px;
+  height: 20px;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  font-variation-settings: "SOFT" 80;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+/* --- Tabs: a pill inside the pill --- */
+.tab-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: auto;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--well);
+}
+
+.tab-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--ink-3);
+  font-size: 14px;
+  font-weight: 700;
+  transition:
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.tab-button:hover {
+  color: var(--ink);
+}
+
+.tab-button.is-active {
+  background: var(--moss);
+  color: var(--moss-mist);
+  box-shadow: var(--shadow-soft);
+}
+
+.appbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.appbar-actions .btn {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+/* --- Layout --- */
+.app-main {
+  width: min(1480px, 100%);
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 32px) clamp(16px, 3vw, 32px) 64px;
+}
+
+.tab-view {
+  /* `backwards`, never `forwards`/`both`: view-in ends on transform:
+     translateY(0), and a fill mode that retains it leaves an identity transform
+     applied for the life of the view. Any transform other than `none` makes the
+     element a containing block for position: fixed descendants, which re-based
+     the assignment popup's viewport coordinates onto this box and stranded it
+     further above its row the further the receipt was scrolled. */
+  animation: view-in 360ms var(--ease) backwards;
+}
+
+.tab-view.hidden {
+  display: none !important;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.95fr) minmax(420px, 1.35fr) minmax(320px, 0.9fr);
+  gap: 20px;
+  align-items: start;
+}
+
+/* The budgeting workspace pairs its two middle panels; the trend chart and
+   the bank list span the width above and below them. */
+#budgetingView .workspace {
+  grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.5fr);
+}
+
+.panel-wide {
+  grid-column: 1 / -1;
+}
+
+/* --- Panels: hand-shaped cards --- */
+.panel {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft), var(--shadow-card);
+}
+
+/* No two neighbouring cards share a silhouette: each takes one large corner,
+   the way stones in a wall are never quite the same shape. */
+.workspace > .panel:nth-child(3n + 1) {
+  border-top-left-radius: var(--radius-card-lg);
+}
+
+.workspace > .panel:nth-child(3n + 2) {
+  border-top-right-radius: var(--radius-card-lg);
+}
+
+.workspace > .panel:nth-child(3n + 3) {
+  border-bottom-right-radius: var(--radius-card-lg);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 24px 12px 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-header h2 {
+  font-size: 19px;
+  color: var(--ink);
+}
+
+.panel-header .table-select {
+  width: auto;
+  min-width: 160px;
+}
+
+.panel-body {
+  padding: 22px 24px 26px;
+}
+
+/* ---------------- 5. Split workspace ---------------- */
+
+/* --- Dropzone: a pebble to drop things on --- */
 .dropzone {
   position: relative;
   display: grid;
   place-items: center;
   gap: 4px;
-  min-height: 148px;
-  padding: 24px;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: 12px;
-  background: var(--well);
+  min-height: 160px;
+  padding: 26px;
+  border: 2px dashed var(--timber);
+  border-radius: 2.5rem 1.5rem 2.5rem 1.5rem / 1.5rem 2.5rem 1.5rem 2.5rem;
+  background: rgba(240, 235, 229, 0.45);
   text-align: center;
   cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease;
+  transition:
+    border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .dropzone:hover,
 .dropzone.is-dragging {
-  border-color: var(--accent-border);
+  border-color: var(--moss);
   background: var(--accent-soft);
+  transform: translateY(-2px);
 }
 
 .dropzone input {
@@ -495,37 +800,45 @@ input[type="number"] {
 }
 
 .dropzone-icon {
-  width: 26px;
-  height: 26px;
-  margin-bottom: 4px;
-  color: var(--ink-3);
-  transition: color 140ms ease;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 6px;
+  color: var(--moss);
+  transition: transform var(--dur) var(--ease);
 }
 
 .dropzone:hover .dropzone-icon,
 .dropzone.is-dragging .dropzone-icon {
-  color: var(--accent);
+  transform: translateY(-3px);
 }
 
 .dropzone-title {
-  font-size: 14px;
+  font-family: var(--font-display);
+  font-size: 17px;
   font-weight: 600;
 }
 
 .dropzone-note,
 .people-hint {
-  color: var(--ink-2);
-  font-size: 12.5px;
+  color: var(--ink-3);
+  font-size: 13.5px;
 }
 
-/* ---------------- Receipt preview ---------------- */
+/* --- Receipt preview: a photo laid on the table --- */
 .receipt-preview {
   position: relative;
   overflow: hidden;
-  margin: 14px 0 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  margin: 18px 6px 6px;
+  border: 4px solid #fff;
+  border-radius: 18px;
   background: var(--well);
+  box-shadow: var(--shadow-float);
+  transform: rotate(-1.5deg);
+  transition: transform var(--dur-slow) var(--ease);
+}
+
+.receipt-preview:hover {
+  transform: rotate(0deg);
 }
 
 .receipt-preview img {
@@ -537,34 +850,41 @@ input[type="number"] {
 
 .receipt-preview .icon-button {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(33, 37, 31, 0.72);
-  border-color: transparent;
+  top: 10px;
+  right: 10px;
+  background: rgba(44, 44, 36, 0.55);
   color: #fff;
-  backdrop-filter: blur(3px);
+  backdrop-filter: blur(4px);
 }
 
 .receipt-preview .icon-button:hover {
-  background: var(--red);
-  color: #fff;
+  background: var(--sienna);
 }
 
-/* ---------------- OCR status ---------------- */
-.ocr-status {
+/* --- Status blocks: a job running on the receipt in front of you --- */
+.ocr-status,
+.identify-status {
   display: grid;
   gap: 8px;
-  margin-top: 14px;
-  padding: 11px 13px;
+  padding: 12px 16px;
   border: 1px solid var(--accent-border);
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 12.5px;
-  font-weight: 600;
+  color: var(--moss-deep);
+  font-size: 13.5px;
+  font-weight: 700;
 }
 
-.ocr-status.hidden {
+.ocr-status {
+  margin-top: 16px;
+}
+
+.identify-status {
+  margin-bottom: 16px;
+}
+
+.ocr-status.hidden,
+.identify-status.hidden {
   display: none !important;
 }
 
@@ -578,44 +898,35 @@ input[type="number"] {
   display: none !important;
 }
 
-.ocr-progress {
+.ocr-progress,
+.identify-progress {
+  display: block;
   overflow: hidden;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(201, 241, 88, 0.16);
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: rgba(93, 112, 82, 0.16);
 }
 
-.ocr-progress span {
+.ocr-progress span,
+.identify-progress span {
   display: block;
   width: 0%;
   height: 100%;
-  border-radius: 999px;
-  background: var(--accent);
-  transition: width 220ms ease;
+  border-radius: var(--radius-pill);
+  background: var(--moss);
+  transition: width 260ms var(--ease);
 }
 
-/* ---------------- Items table ---------------- */
-/* Three columns now that identification lives up here: store, category, and
-   the button that names the items. The button sits in the toolbar rather than
-   the panel header because it acts on the receipt's contents, which is what
-   the other two controls do. */
+/* --- Toolbar above the table --- */
+/* Store, category, and the button that names the items. The button sits in
+   the toolbar rather than the panel header because it acts on the receipt's
+   contents, which is what the other two controls do. */
 .split-toolbar {
   display: grid;
   grid-template-columns: 1.4fr 1fr auto;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   align-items: end;
-}
-
-@media (max-width: 720px) {
-  .split-toolbar {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  /* Full width on its own row rather than squeezed beside the category. */
-  .identify-field {
-    grid-column: 1 / -1;
-  }
 }
 
 .identify-field .btn {
@@ -623,75 +934,29 @@ input[type="number"] {
   white-space: nowrap;
 }
 
-.btn-icon {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-}
-
-/* Reuses the OCR status treatment: same shape, same accent, because it is the
-   same kind of message -- a job running on the receipt in front of you. */
-.identify-status {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 14px;
-  padding: 11px 13px;
-  border: 1px solid var(--accent-border);
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.identify-status.hidden {
-  display: none !important;
-}
-
-.identify-progress {
-  overflow: hidden;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(201, 241, 88, 0.16);
-}
-
-.identify-progress span {
-  display: block;
-  width: 0%;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--accent);
-  transition: width 220ms ease;
-}
-
-/* ---------------- Batch bar ---------------- */
+/* --- Batch bar --- */
 /* Sits directly above the table and only while lines are ticked, so it reads
-   as a lid on the selection rather than as another permanent toolbar. The one
-   place in the workspace that carries the accent as a surface: it is the only
-   thing on screen that is temporarily true. */
-/* Two rows on purpose. The column is rarely wide enough for the count, a
-   name per person, the flag buttons and Clear on one line, and letting them
-   wrap where they fell put the count alongside the second row of buttons,
-   reading as a label for them. Count and Clear own the first row; everything
-   that acts on the selection sits under it. */
+   as a lid on the selection rather than as another permanent toolbar. Clay
+   rather than moss: the one temporarily-true thing on screen gets the warm
+   colour, so it cannot be mistaken for a saved state. */
 .batch-bar {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px 10px;
   align-items: center;
-  margin-bottom: 10px;
-  padding: 9px 10px 9px 12px;
-  border: 1px solid var(--accent-border);
-  border-radius: 12px;
-  background: var(--accent-soft);
+  margin-bottom: 12px;
+  padding: 10px 10px 10px 16px;
+  border: 1px solid var(--warm-border);
+  border-radius: 22px;
+  background: var(--warm-soft);
 }
 
 .batch-count {
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  color: var(--warm-ink);
+  font-size: 12.5px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
@@ -713,17 +978,18 @@ input[type="number"] {
    lines themselves, not on who is paying for them. */
 .batch-flags {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-left: 4px;
   padding-left: 10px;
-  border-left: 1px solid var(--accent-border);
+  border-left: 1px solid var(--warm-border);
 }
 
 .batch-label,
 .batch-hint {
-  color: var(--ink-2);
+  color: var(--ink-3);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 800;
   letter-spacing: var(--label-tracking);
   text-transform: uppercase;
 }
@@ -731,56 +997,56 @@ input[type="number"] {
 /* One tap per person: the whole point of the bar is that naming someone is a
    single click no matter how many lines are held. */
 .batch-person {
-  min-height: 26px;
-  padding: 0 11px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--well);
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--timber);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.7);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.batch-person:hover {
+  border-color: var(--moss);
+  color: var(--moss-deep);
+  transform: scale(1.05);
 }
 
 /* Already on every selected line: filled, and a click takes them off. */
 .batch-person.is-all {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 600;
+  border-color: var(--moss);
+  background: var(--moss);
+  color: var(--moss-mist);
+}
+
+.batch-person.is-all:hover {
+  border-color: var(--moss-deep);
+  background: var(--moss-deep);
+  color: var(--moss-mist);
 }
 
 /* On some of them. Outlined rather than filled, so "partly" never gets
    mistaken for "done" at a glance. */
 .batch-person.is-some {
-  border-color: var(--accent-border);
-  color: var(--accent);
+  border-color: var(--moss);
+  color: var(--moss-deep);
+  background: var(--accent-soft);
 }
 
-.batch-person:hover {
-  border-color: var(--accent-border);
-  background: var(--surface-2);
-  color: var(--accent);
-}
-
-.batch-person.is-all:hover {
-  border-color: var(--accent-strong);
-  background: var(--accent-strong);
-  color: var(--on-accent);
-}
-
-.batch-person:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
+/* --- Items table --- */
 .items-table {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 22px;
   background: var(--surface);
 }
 
@@ -789,23 +1055,20 @@ input[type="number"] {
 }
 
 /* Six columns, matching the six cells every row renders: select, label, food
-   check, assignment, amount, ignore. The grid used to declare only four, so the
-   ignore button wrapped onto an implicit second row and every cell after the
-   label sat under the wrong header -- the food checkbox landed under
-   "Assigned to". */
+   check, assignment, amount, ignore. */
 .table-row {
   display: grid;
   grid-template-columns: 22px minmax(150px, 1.2fr) 44px minmax(140px, 0.85fr) minmax(84px, 0.4fr) 36px;
   gap: 10px;
   align-items: center;
-  min-height: 48px;
-  padding: 8px 12px;
+  min-height: 54px;
+  padding: 8px 14px;
   border-top: 1px solid var(--border);
-  transition: background 100ms ease;
+  transition: background var(--dur) var(--ease);
 }
 
 .table-row:not(.table-head):hover {
-  background: var(--surface-2);
+  background: rgba(240, 235, 229, 0.5);
 }
 
 .table-row:first-child {
@@ -813,14 +1076,14 @@ input[type="number"] {
 }
 
 .table-head {
-  min-height: 34px;
+  min-height: 38px;
   padding-top: 0;
   padding-bottom: 0;
-  background: var(--surface-2);
+  background: var(--well);
   color: var(--ink-3);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: var(--label-tracking);
   text-transform: uppercase;
 }
 
@@ -850,26 +1113,25 @@ input[type="number"] {
   justify-self: center;
 }
 
-/* The tick that puts a row in the batch selection. Sized and coloured like
-   the assignment checkboxes so the two read as the same control. */
+/* The tick that puts a row in the batch selection. */
 .line-select {
-  width: 15px;
-  height: 15px;
+  width: 17px;
+  height: 17px;
   margin: 0;
-  accent-color: var(--accent);
+  accent-color: var(--moss);
   cursor: pointer;
 }
 
-/* Selected rows stay legible rather than shouting: a hairline of accent down
-   the left edge and the faintest wash, so a run of ticked lines reads as one
-   block without the table turning into a field of colour. */
+/* Selected rows stay legible rather than shouting: a soft moss wash and a
+   rounded bar down the left edge, so a run of ticked lines reads as one block
+   without the table turning into a field of colour. */
 .table-row.is-selected {
   background: var(--accent-soft);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: inset 4px 0 0 var(--moss);
 }
 
 .table-row.is-selected:hover {
-  background: rgba(201, 241, 88, 0.13);
+  background: rgba(93, 112, 82, 0.14);
 }
 
 .table-row.is-ignored {
@@ -880,46 +1142,42 @@ input[type="number"] {
   text-decoration: line-through;
 }
 
-/* The item cell holds the label stack, and -- once a line has been identified
-   -- the popup wrapper around it. */
 .line-label-cell {
   min-width: 0;
 }
 
 .line-label {
   min-width: 0;
-  font-weight: 500;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
 /* What the line actually was. Deliberately quieter than the receipt text above
    it: that line is what the user can check against the paper in their hand,
-   and this one is support. Monospace would be wrong here -- it is a product
-   name, not a code. */
+   and this one is support. */
 .line-resolved {
   min-width: 0;
-  color: var(--ink-2);
-  font-size: 12px;
+  color: var(--ink-3);
+  font-size: 12.5px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 /* An identification the user has confirmed is the one thing on the row that is
-   known rather than guessed, so it gets the accent -- sparingly, as a text
-   colour and nothing more. */
+   known rather than guessed, so it gets the moss, as a text colour and nothing
+   more. */
 .line-resolved.is-confirmed {
-  color: var(--accent);
+  color: var(--moss);
+  font-weight: 600;
 }
 
-/* How sure the app is, shown only where it changes what the reader should do:
-   never on a name the user confirmed, never on one the app is confident about.
-   A chip on every row is noise, and once everything is marked nothing is. */
+/* How sure the app is, shown only where it changes what the reader should do. */
 .confidence-chip {
   display: inline-block;
-  padding: 0 5px;
-  border-radius: 5px;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  font-size: 10.5px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 15px;
   vertical-align: 1px;
@@ -927,27 +1185,25 @@ input[type="number"] {
   cursor: help;
 }
 
-/* Amber for "probably right, worth a glance", red for "go and look". Both are
-   already in the palette for exactly this kind of warning, so identification
-   does not introduce a colour of its own. */
+/* Clay for "probably right, worth a glance", sienna for "go and look". */
 .confidence-chip.is-likely {
-  background: var(--amber-soft);
-  color: var(--amber);
+  background: var(--warm-soft);
+  color: var(--warm-ink);
 }
 
 .confidence-chip.is-unsure {
   background: var(--red-soft);
-  color: var(--red);
+  color: var(--sienna);
 }
 
 .amount-cell {
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
-/* ---------------- Assignment dropdown ---------------- */
+/* --- Assignment dropdown --- */
 .assign-cell {
   min-width: 0;
 }
@@ -960,20 +1216,23 @@ input[type="number"] {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
-  min-height: 28px;
-  padding: 0 11px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--well);
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--timber);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.6);
   color: var(--ink-2);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   list-style: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  transition:
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
 }
 
 .assign-summary::-webkit-details-marker {
@@ -981,14 +1240,14 @@ input[type="number"] {
 }
 
 .assign-summary:hover {
-  border-color: var(--accent-border);
+  border-color: var(--moss);
   color: var(--ink);
 }
 
 .assign-dropdown[open] .assign-summary {
-  border-color: var(--accent-border);
+  border-color: var(--moss);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--moss-deep);
 }
 
 .assign-panel-pop,
@@ -996,56 +1255,53 @@ input[type="number"] {
   /* Positioned (top/left/width/max-height) in JS on open via position: fixed
      so the popup escapes the .items-table overflow clip and viewport edges. */
   position: fixed;
-  /* Hidden until JS has anchored it to its summary. `toggle` fires
-     asynchronously, so between the panel becoming visible and the handler
-     running there was a frame where a fixed element with no top/left painted at
-     its static position projected into the viewport -- halfway up the screen for
-     a row far down a scrolled receipt. Re-rendering the rows on every
-     assignment click re-opened the dropdown and flashed it there each time. */
+  /* Hidden until JS has anchored it to its summary; see split-workspace.view. */
   visibility: hidden;
   z-index: 50;
-  min-width: 230px;
+  min-width: 240px;
   display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  background: var(--surface-2);
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
   box-shadow: var(--shadow-pop);
 }
 
 .assign-panel-pop.is-anchored,
 .item-detail-pop.is-anchored {
   visibility: visible;
+  animation: pop 220ms var(--ease) both;
 }
 
 .assign-hint {
   margin: 0;
-  color: var(--ink-2);
-  font-size: 12.5px;
+  color: var(--ink-3);
+  font-size: 13px;
 }
 
 .assign-mode {
-  min-height: 32px;
-  font-size: 12.5px;
+  min-height: 38px;
+  font-size: 13px;
 }
 
 .assign-person-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 8px;
-  padding: 2px 1px;
-  font-size: 13px;
-  font-weight: 500;
+  gap: 10px;
+  padding: 3px 2px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .assign-person-row input[type="checkbox"],
 .checkbox-row input {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--accent);
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--moss);
 }
 
 .assign-person-name {
@@ -1055,106 +1311,284 @@ input[type="number"] {
 }
 
 .assign-value {
-  width: 72px;
-  min-height: 28px;
-  padding: 0 8px;
+  width: 80px;
+  min-height: 34px;
+  padding: 0 12px;
   text-align: right;
-  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Item identification popup --- */
+/* The label is the summary of its own popup: the thing a reader wants to
+   interrogate is the ambiguous name itself, so that is what they click. */
+.item-detail-dropdown {
+  min-width: 0;
+}
+
+.item-detail-summary {
+  display: block;
+  min-width: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.item-detail-summary::-webkit-details-marker {
+  display: none;
+}
+
+.item-detail-summary:hover .line-label {
+  text-decoration: underline;
+  text-decoration-color: var(--clay);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.line-label-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item-detail-pop {
+  width: 320px;
+  max-width: min(320px, calc(100vw - 24px));
+  overflow-y: auto;
+}
+
+.item-detail-body {
+  display: grid;
+  gap: 10px;
+}
+
+.item-detail-name {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* Label/value pairs as a two-column grid. The receipt's own text comes first. */
+.item-detail-facts {
+  display: grid;
+  margin: 0;
+  gap: 4px 12px;
+  grid-template-columns: auto 1fr;
+}
+
+.item-detail-facts dt {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  align-self: center;
+}
+
+.item-detail-facts dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.item-detail-source {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--ink-2);
   font-size: 12.5px;
 }
 
-/* ---------------- Icon button ---------------- */
-.icon-button {
-  display: inline-grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
+.item-detail-reasoning {
+  margin: 0;
   color: var(--ink-3);
+  font-family: var(--font-display);
   font-size: 13px;
-  line-height: 1;
-  transition: background 120ms ease, color 120ms ease;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.45;
 }
 
-.icon-button:hover {
-  background: var(--red-soft);
-  color: var(--red);
+/* The runners-up, one click each. */
+.item-detail-alternatives {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
-.table-row.is-ignored .icon-button:hover {
+.item-detail-subhead {
+  width: 100%;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.item-detail-alternative {
+  padding: 6px 12px;
+  border: 1px solid var(--timber);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+
+.item-detail-alternative:hover {
+  border-color: var(--moss);
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--moss-deep);
 }
 
-/* ---------------- Empty states ---------------- */
+/* Where a correction is made. */
+.item-detail-form {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.item-detail-form .table-input {
+  width: 100%;
+}
+
+.item-detail-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.item-detail-actions .btn {
+  flex: 1;
+}
+
+/* --- Food checkbox on a line --- */
+.line-food-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform var(--dur) var(--ease);
+}
+
+.line-food-check:hover:not(:disabled) {
+  transform: scale(1.12);
+}
+
+.line-food-check:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.food-check-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--moss);
+  transition: color var(--dur) var(--ease);
+}
+
+.line-food-check:hover:not(:disabled) .food-check-icon {
+  color: var(--moss-deep);
+}
+
+/* --- Empty states --- */
 .empty-state {
   display: grid;
   align-content: center;
   justify-items: center;
-  gap: 3px;
-  min-height: 200px;
-  padding: 24px;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: 12px;
-  background: var(--well);
+  gap: 4px;
+  min-height: 220px;
+  padding: 28px;
+  border: 2px dashed var(--timber);
+  border-radius: 2rem 3rem 2rem 3rem / 3rem 2rem 3rem 2rem;
+  background: rgba(240, 235, 229, 0.4);
   text-align: center;
+}
+
+.empty-icon-wrap {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 8px;
+  border-radius: var(--blob-1);
+  background: var(--accent-soft);
+  color: var(--moss);
 }
 
 .empty-icon {
   width: 28px;
   height: 28px;
-  margin-bottom: 6px;
-  color: var(--ink-3);
+  color: var(--moss);
 }
 
 .empty-state strong {
-  font-size: 14px;
+  font-family: var(--font-display);
+  font-size: 17px;
   font-weight: 600;
 }
 
 .empty-state span {
-  color: var(--ink-2);
-  font-size: 12.5px;
+  color: var(--ink-3);
+  font-size: 13.5px;
 }
 
-/* ---------------- Summary / people ---------------- */
+/* --- Summary / people --- */
 .summary-panel {
   position: sticky;
-  top: 76px;
+  top: calc(var(--nav-height) + var(--nav-gap) * 2);
 }
 
 .stat-hero {
   display: grid;
-  gap: 5px;
-  margin-bottom: 18px;
-  padding-bottom: 18px;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
   border-bottom: 1px solid var(--border);
 }
 
 .stat-label {
   color: var(--ink-3);
-  font-size: 10.5px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
   letter-spacing: var(--label-tracking);
   text-transform: uppercase;
 }
 
 .stat-value {
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 34px;
-  font-weight: 600;
+  color: var(--moss);
+  font-family: var(--font-display);
+  font-size: 42px;
+  font-weight: 700;
+  font-variation-settings: "SOFT" 100, "opsz" 72;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
-  line-height: 1.1;
+  line-height: 1.05;
 }
 
 .people-panel {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .person-form {
@@ -1166,7 +1600,7 @@ input[type="number"] {
 .people-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .people-list:empty {
@@ -1176,50 +1610,57 @@ input[type="number"] {
 .person-chip {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px 5px 4px 11px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface-2);
-  font-size: 12.5px;
-  font-weight: 600;
+  gap: 4px;
+  padding: 6px 6px 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--well);
+  font-size: 13.5px;
+  font-weight: 700;
+  transition: transform var(--dur) var(--ease);
+}
+
+.person-chip:hover {
+  transform: translateY(-1px) rotate(-1deg);
 }
 
 .person-chip button {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border: 0;
   border-radius: 50%;
   background: transparent;
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
 }
 
 .person-chip button:hover {
   background: var(--red-soft);
-  color: var(--red);
+  color: var(--sienna);
 }
 
-/* The account owner's own chip. Accented so it is obvious which share of the
+/* The account owner's own chip: moss, so it is obvious which share of the
    split is the one that lands in your own budget. */
 .person-chip.is-self {
-  padding-right: 5px;
+  padding-right: 6px;
   border-color: var(--accent-border);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--moss-deep);
 }
 
 .person-chip-you {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--moss);
+  color: var(--moss-mist);
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1231,15 +1672,15 @@ input[type="number"] {
 
 .people-hint strong {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 700;
 }
 
-/* ---------------- Split totals ---------------- */
+/* --- Split totals --- */
 .split-total-list {
   display: grid;
-  margin-top: 16px;
+  margin-top: 18px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 22px;
   overflow: hidden;
 }
 
@@ -1251,9 +1692,9 @@ input[type="number"] {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0 12px;
-  padding: 11px 14px;
+  padding: 12px 18px;
   border-top: 1px solid var(--border);
-  background: var(--surface-2);
+  background: rgba(240, 235, 229, 0.35);
 }
 
 .split-total-row:first-child {
@@ -1262,53 +1703,47 @@ input[type="number"] {
 
 .split-total-row strong {
   grid-column: 1;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 14.5px;
+  font-weight: 700;
 }
 
 .split-total-row span {
   grid-column: 1;
   color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
-/* Spans however many detail lines the row happens to have -- the food line is
-   only present on receipts where something was flagged. */
+/* Spans however many detail lines the row happens to have. */
 .split-total-row b {
   grid-column: 2;
   grid-row: 1 / -1;
   align-self: center;
-  font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--accent);
+  color: var(--moss);
 }
 
-/* Money on assigned lines that the entered amounts don't cover. Warning-toned
-   so it reads as something to fix, not as another person's share. */
+/* Money on assigned lines that the entered amounts don't cover. */
 .split-total-row.is-unallocated strong,
 .split-total-row.is-unallocated b {
-  color: var(--amber);
+  color: var(--warm-ink);
 }
 
-/* The food slice of a person's items, tinted so it reads as a subset of the
-   line above it rather than another charge. */
+/* The food slice of a person's items. */
 .split-total-row .is-food-line {
-  color: var(--accent);
-  opacity: 0.75;
+  color: var(--moss);
+  opacity: 0.85;
 }
 
-/* ---------------- Split reconciliation ---------------- */
-/* Closes the loop on a split: what everyone owes, what the receipt says, and
-   whether those agree. Sits under the per-person rows as a summary footer. */
+/* --- Split reconciliation --- */
 .split-reconcile {
   display: grid;
   gap: 4px;
-  padding: 12px 14px;
-  border-top: 1px solid var(--border-strong);
+  padding: 14px 18px;
+  border-top: 1px solid var(--timber);
   background: var(--well);
 }
 
@@ -1321,40 +1756,40 @@ input[type="number"] {
 
 .split-reconcile-line span {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .split-reconcile-line b {
-  font-family: var(--font-mono);
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
 
 .split-reconcile-status {
   margin-top: 4px;
-  color: var(--amber);
-  font-size: 11.5px;
+  color: var(--warm-ink);
+  font-size: 12.5px;
+  font-weight: 600;
   line-height: 1.4;
 }
 
 .split-reconcile.is-balanced .split-reconcile-status {
-  color: var(--accent);
+  color: var(--moss);
 }
 
-/* ---------------- Editing a saved receipt ---------------- */
-/* It changes what Save does, so it sits above the whole workspace in the
-   accent -- impossible to miss, without being another panel. */
+/* --- Editing a saved receipt --- */
+/* It changes what Save does, so it sits above the whole workspace as a warm
+   pill: impossible to miss, without being another panel. */
 .edit-banner {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
-  padding: 5px 5px 5px 16px;
-  border: 1px solid var(--accent-border);
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
+  margin-bottom: 18px;
+  padding: 6px 6px 6px 20px;
+  border: 1px solid var(--warm-border);
+  border-radius: var(--radius-pill);
+  background: var(--warm-soft);
 }
 
 .edit-banner-text {
@@ -1367,9 +1802,9 @@ input[type="number"] {
 
 .edit-banner-label {
   flex: none;
-  color: var(--accent);
-  font-size: 10.5px;
-  font-weight: 750;
+  color: var(--warm-ink);
+  font-size: 11px;
+  font-weight: 800;
   letter-spacing: var(--label-tracking);
   text-transform: uppercase;
 }
@@ -1378,7 +1813,8 @@ input[type="number"] {
   min-width: 0;
   overflow: hidden;
   color: var(--ink);
-  font-size: 13.5px;
+  font-family: var(--font-display);
+  font-size: 15px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1386,48 +1822,41 @@ input[type="number"] {
 
 .edit-banner-meta {
   flex: none;
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  color: var(--ink-3);
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 560px) {
-  .edit-banner-meta {
-    display: none;
-  }
-}
-
-/* ---------------- Save panel ---------------- */
+/* --- Save panel --- */
 .save-panel {
   display: grid;
   gap: 8px;
-  margin-top: 18px;
-  padding-top: 16px;
+  margin-top: 20px;
+  padding-top: 18px;
   border-top: 1px solid var(--border);
 }
 
 .save-status {
   min-height: 1.1em;
-  color: var(--accent);
-  font-size: 12.5px;
-  font-weight: 600;
+  color: var(--moss);
+  font-size: 13px;
+  font-weight: 700;
   text-align: center;
 }
 
 .save-status.is-error {
-  color: var(--red);
+  color: var(--sienna);
 }
 
-/* ---------------- History ---------------- */
+/* ---------------- 6. History ---------------- */
 .history-panel {
-  max-width: 860px;
+  max-width: 880px;
   margin: 0 auto;
 }
 
 .history-list {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .history-list:empty {
@@ -1441,24 +1870,59 @@ input[type="number"] {
 .history-card {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 22px;
   background: var(--surface);
-  transition: border-color 120ms ease, background 120ms ease;
+  box-shadow: var(--shadow-soft);
+  cursor: grab;
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+}
+
+/* Six silhouettes, cycling, so a long list never reads as a column of
+   identical boxes. */
+.history-card:nth-child(6n + 1) {
+  border-top-left-radius: 2.75rem;
+}
+
+.history-card:nth-child(6n + 2) {
+  border-bottom-right-radius: 2.75rem;
+}
+
+.history-card:nth-child(6n + 3) {
+  border-top-right-radius: 2.75rem;
+}
+
+.history-card:nth-child(6n + 4) {
+  border-bottom-left-radius: 2.75rem;
+}
+
+.history-card:nth-child(6n + 5) {
+  border-top-left-radius: 2.75rem;
+  border-bottom-right-radius: 2.75rem;
 }
 
 .history-card:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-2);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift);
+}
+
+.history-card:active {
+  cursor: grabbing;
+  opacity: 0.85;
 }
 
 .history-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 14px;
+  padding: 16px 20px;
   cursor: pointer;
   list-style: none;
+  user-select: none;
 }
 
 .history-summary::-webkit-details-marker {
@@ -1467,13 +1931,14 @@ input[type="number"] {
 
 .history-summary::before {
   content: "";
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   flex: none;
-  border-right: 1.5px solid var(--ink-3);
-  border-bottom: 1.5px solid var(--ink-3);
+  border-right: 2px solid var(--clay);
+  border-bottom: 2px solid var(--clay);
+  border-radius: 1px;
   transform: rotate(-45deg);
-  transition: transform 140ms ease;
+  transition: transform var(--dur) var(--ease);
 }
 
 .history-card[open] .history-summary::before {
@@ -1482,32 +1947,33 @@ input[type="number"] {
 
 .history-heading {
   display: grid;
-  gap: 1px;
+  gap: 2px;
   margin-right: auto;
 }
 
 .history-heading strong {
-  font-size: 14px;
+  font-family: var(--font-display);
+  font-size: 17px;
   font-weight: 600;
 }
 
 .history-meta {
-  color: var(--ink-2);
-  font-size: 12px;
+  color: var(--ink-3);
+  font-size: 12.5px;
 }
 
 .history-total {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--accent);
+  color: var(--moss);
 }
 
 .history-body {
   display: grid;
-  gap: 12px;
-  padding: 4px 16px 16px;
+  gap: 14px;
+  padding: 6px 20px 20px;
   border-top: 1px solid var(--border);
 }
 
@@ -1517,41 +1983,61 @@ input[type="number"] {
 }
 
 .history-line {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr auto;
-  gap: 12px;
+  display: flex;
   align-items: center;
-  padding: 7px 0;
-  border-top: 1px solid var(--border);
-  font-size: 13px;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
 }
 
-.history-line:first-child {
-  border-top: 0;
-  padding-top: 0;
+.history-line:last-child {
+  border-bottom: none;
+}
+
+.history-line > span:first-child {
+  flex: 1;
+}
+
+.history-line .line-food-check {
+  margin: 0 4px;
+}
+
+/* History rows stack the same way the workspace rows do. */
+.history-line-label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .history-line-people {
-  color: var(--ink-2);
-  font-size: 12px;
+  color: var(--ink-3);
+  font-size: 12.5px;
 }
 
 .history-line b {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .history-image {
   display: block;
-  margin-top: 10px;
+  margin: 12px 4px 4px;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: 4px solid #fff;
+  border-radius: 18px;
   background: var(--well);
+  box-shadow: var(--shadow-float);
   line-height: 0;
+  transform: rotate(1deg);
+  transition: transform var(--dur-slow) var(--ease);
+}
+
+.history-image:hover {
+  transform: rotate(0deg) scale(1.01);
 }
 
 .history-image img {
@@ -1561,16 +2047,12 @@ input[type="number"] {
   object-fit: contain;
 }
 
-.history-image:hover {
-  border-color: var(--accent);
-}
-
 .history-people {
-  padding: 8px 11px;
+  padding: 10px 14px;
   border-radius: var(--radius-sm);
   background: var(--well);
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .history-actions {
@@ -1580,17 +2062,17 @@ input[type="number"] {
   gap: 8px;
 }
 
-/* --- A receipt already attached to a bank transaction --------------------- */
+/* A receipt already attached to a bank transaction. */
 .history-linked-tag {
   justify-self: start;
   margin-top: 3px;
-  padding: 1px 7px;
+  padding: 2px 9px;
   border: 1px solid var(--accent-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--moss-deep);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1600,410 +2082,17 @@ input[type="number"] {
 }
 
 .history-linked-detail {
-  padding: 8px 10px;
+  padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--well);
   color: var(--ink-2);
-  font-size: 12px;
-}
-
-.btn-small {
-  padding: 6px 12px;
   font-size: 12.5px;
 }
 
-.btn-danger {
-  background: transparent;
-  border-color: rgba(255, 107, 107, 0.32);
-  color: #ff8a8a;
-}
+/* ---------------- 7. Budgeting ---------------- */
 
-.btn-danger:hover:not(:disabled) {
-  background: rgba(255, 107, 107, 0.12);
-  border-color: rgba(255, 107, 107, 0.5);
-  color: #ffb0b0;
-}
-
-/* ---------------- Coming soon ---------------- */
-.coming-soon {
-  display: grid;
-  gap: 10px;
-  place-items: center;
-  padding: 72px 24px;
-  text-align: center;
-}
-
-.coming-soon-badge {
-  padding: 3px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--ink-2);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.coming-soon h2 {
-  font-size: 18px;
-}
-
-.coming-soon p {
-  max-width: 420px;
-  margin: 0;
-  color: var(--ink-2);
-}
-
-/* ---------------- Modals ---------------- */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(5, 6, 7, 0.72);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  animation: fade 160ms ease;
-}
-
-.modal-backdrop.hidden {
-  display: none !important;
-}
-
-.modal-card {
-  width: min(440px, 100%);
-  padding: 24px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  box-shadow: var(--shadow-pop);
-  animation: pop 200ms cubic-bezier(0.2, 1, 0.3, 1) both;
-}
-
-.modal-card-wide {
-  width: min(680px, 100%);
-}
-
-.modal-heading {
-  margin-bottom: 18px;
-}
-
-.modal-heading h2 {
-  font-size: 16px;
-}
-
-.modal-heading p {
-  margin: 4px 0 0;
-  color: var(--ink-2);
-  font-size: 13px;
-}
-
-.prompt-item {
-  display: grid;
-  gap: 2px;
-  margin-bottom: 14px;
-  padding: 11px 13px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--well);
-}
-
-.prompt-item span {
-  color: var(--ink-2);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.prompt-item strong {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.checkbox-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: 14px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 20px;
-}
-
-.settings-form,
-.rent-form {
-  display: grid;
-}
-
-.settings-note {
-  margin: 12px 0 0;
-  color: var(--ink-2);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.settings-status {
-  margin: 6px 0 0;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--ink-2);
-}
-
-.settings-status.is-active {
-  color: var(--accent);
-}
-
-.settings-status.is-error {
-  color: var(--red);
-}
-
-.settings-note code {
-  padding: 1px 5px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--well);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.camera-modal video,
-.modal-card video {
-  width: 100%;
-  max-height: 65vh;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: #000;
-  object-fit: contain;
-}
-
-/* ---------------- Animations ---------------- */
-@keyframes view-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes pop {
-  from {
-    opacity: 0;
-    transform: scale(0.97) translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    transition-duration: 0.001ms !important;
-  }
-}
-
-/* ---------------- Responsive ---------------- */
-@media (max-width: 1140px) {
-  .workspace {
-    grid-template-columns: minmax(280px, 1fr) minmax(380px, 1.3fr);
-  }
-
-  .summary-panel {
-    position: static;
-    grid-column: 1 / -1;
-  }
-}
-
-@media (max-width: 860px) {
-  .appbar-inner {
-    flex-wrap: wrap;
-    gap: 0 16px;
-    padding-top: 10px;
-    padding-bottom: 0;
-  }
-
-  .brand {
-    min-height: 36px;
-  }
-
-  .appbar-actions {
-    margin-left: auto;
-    min-height: 36px;
-  }
-
-  .tab-nav {
-    order: 3;
-    width: 100%;
-    min-height: 42px;
-    overflow-x: auto;
-  }
-
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 560px) {
-  .split-toolbar {
-    grid-template-columns: 1fr;
-  }
-
-  .batch-bar {
-    padding: 10px 12px;
-  }
-
-  /* Narrow screens stack the label over its controls: row 1 is the item name
-     across the full width, row 2 is food / assignment / amount / ignore. Every
-     cell is placed explicitly because the header (which is what normally
-     explains the column order) is hidden here. */
-  .table-row {
-    grid-template-columns: auto 1fr auto auto;
-    gap: 6px 10px;
-    padding: 10px 12px;
-  }
-
-  /* The tick sits with the item name it selects, ahead of the label. */
-  .table-row .line-select {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .table-head {
-    display: none;
-  }
-
-  .table-row .line-label {
-    grid-column: 2 / -1;
-    grid-row: 1;
-  }
-
-  .table-row .line-food-check {
-    grid-column: 1;
-    grid-row: 2;
-    justify-self: start;
-  }
-
-  .assign-cell {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
-  .amount-cell {
-    grid-column: 3;
-    grid-row: 2;
-  }
-
-  .delete-row {
-    grid-column: 4;
-    grid-row: 2;
-    justify-self: end;
-  }
-}
-
-/* --- Auth overlay --------------------------------------------------------- */
-.auth-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background:
-    radial-gradient(640px 420px at 50% -80px, rgba(201, 241, 88, 0.05), transparent 70%),
-    var(--bg);
-}
-
-.auth-overlay.hidden {
-  display: none !important;
-}
-
-.auth-card {
-  width: min(380px, 100%);
-  padding: 28px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  animation: pop 260ms cubic-bezier(0.2, 1, 0.3, 1) both;
-}
-
-.auth-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 26px;
-}
-
-.auth-wordmark {
-  font-size: 13px;
-  font-weight: 800;
-  font-stretch: 118%;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.auth-title {
-  margin-bottom: 18px;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-}
-
-.auth-form {
-  display: grid;
-  gap: 14px;
-}
-
-.auth-form .field {
-  margin-top: 0;
-}
-
-.auth-error {
-  margin: 0;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--red-soft);
-  color: var(--red);
-  font-size: 0.9rem;
-}
-
-.auth-switch {
-  margin: 14px 0 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: 0.9rem;
-  color: var(--ink-2);
-}
-
-/* --- Budgeting: ring, legend, transactions -------------------------------- */
+/* --- Ring and legend --- */
 .budget-ring-wrap {
   display: flex;
   flex-wrap: wrap;
@@ -2022,15 +2111,22 @@ input[type="number"] {
   height: auto;
 }
 
+.budget-ring-track {
+  stroke: rgba(93, 112, 82, 0.1);
+}
+
 .budget-ring-total {
-  font-family: var(--font-mono);
-  font-size: 22px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   fill: var(--ink);
 }
 
 .budget-ring-caption {
+  font-family: var(--font-ui);
   font-size: 11px;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   fill: var(--ink-3);
@@ -2057,28 +2153,29 @@ input[type="number"] {
 
 .budget-legend-item {
   display: grid;
-  grid-template-columns: 14px 1fr auto;
+  grid-template-columns: 16px 1fr auto;
   align-items: center;
-  gap: 10px;
-  font-size: 0.92rem;
+  gap: 12px;
+  font-size: 14px;
 }
 
 .budget-legend-swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--blob-4);
 }
 
 .budget-legend-label {
   color: var(--ink);
+  font-weight: 600;
 }
 
 .budget-legend-value {
-  font-family: var(--font-mono);
-  color: var(--ink-2);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---------------- Monthly trend chart ---------------- */
+/* --- Monthly trend chart --- */
 .monthly-trend {
   overflow-x: auto;
 }
@@ -2086,14 +2183,14 @@ input[type="number"] {
 .trend-chart {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
-  min-height: 200px;
+  gap: 12px;
+  min-height: 210px;
   padding-top: 8px;
 }
 
 .trend-bar-col {
   flex: 1 1 0;
-  min-width: 40px;
+  min-width: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2107,17 +2204,18 @@ input[type="number"] {
 }
 
 .trend-bar-col:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: 2px solid var(--moss);
+  outline-offset: 4px;
   border-radius: var(--radius-sm);
 }
 
 .trend-bar-value {
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--ink-3);
   white-space: nowrap;
-  transition: color 0.15s ease;
+  transition: color var(--dur) var(--ease);
 }
 
 .trend-bar-track {
@@ -2131,45 +2229,51 @@ input[type="number"] {
 .trend-bar-fill {
   width: 100%;
   max-width: 44px;
-  min-height: 3px;
-  border-radius: var(--radius-sm) var(--radius-sm) 3px 3px;
-  background: var(--surface-3);
-  transition: background 0.15s ease, height 0.2s ease;
+  min-height: 4px;
+  border-radius: 14px 14px 8px 8px;
+  background: var(--sand);
+  transition:
+    background var(--dur) var(--ease),
+    height var(--dur-slow) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .trend-bar-label {
   font-size: 11px;
-  letter-spacing: 0.04em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3);
-  transition: color 0.15s ease;
+  transition: color var(--dur) var(--ease);
 }
 
 .trend-bar-col:hover .trend-bar-fill {
-  background: var(--border-strong);
+  background: var(--clay);
+  transform: scaleX(1.06);
 }
 
 .trend-bar-col:hover .trend-bar-value {
-  color: var(--ink-2);
+  color: var(--ink);
 }
 
 .trend-bar-col.is-selected .trend-bar-fill {
-  background: var(--accent);
+  background: var(--moss);
 }
 
 .trend-bar-col.is-selected .trend-bar-value {
-  color: var(--accent);
+  color: var(--moss);
 }
 
 .trend-bar-col.is-selected .trend-bar-label {
   color: var(--ink);
 }
 
+/* --- Bank --- */
 .bank-status {
   margin: 0 0 12px;
   min-height: 1.2em;
-  color: var(--ink-2);
-  font-size: 0.9rem;
+  color: var(--ink-3);
+  font-size: 13.5px;
 }
 
 .bank-connections {
@@ -2179,7 +2283,7 @@ input[type="number"] {
 
 .bank-connections:not(:empty) {
   margin-bottom: 14px;
-  padding-bottom: 6px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -2200,13 +2304,14 @@ input[type="number"] {
 
 .bank-connection-name {
   color: var(--ink);
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .bank-connection-meta {
-  font-size: 0.8rem;
+  font-size: 12.5px;
   color: var(--ink-3);
 }
 
@@ -2215,31 +2320,53 @@ input[type="number"] {
   gap: 2px;
 }
 
+.transaction-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 6px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 14px;
+  transition: background var(--dur) var(--ease);
+}
+
+.transaction-row:last-child {
+  border-bottom: none;
+}
+
+.transaction-row:hover {
+  background: rgba(240, 235, 229, 0.5);
+}
+
+/* The description takes the slack so the controls stay in a fixed cluster on
+   the right. */
 .transaction-main {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
 .transaction-desc {
   color: var(--ink);
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .transaction-meta {
-  font-size: 0.8rem;
+  font-size: 12.5px;
   color: var(--ink-3);
 }
 
-/* Fixed width and right-aligned so the amounts form a straight column instead
-   of ending wherever each string happens to run out. */
+/* Fixed width and right-aligned so the amounts form a straight column. */
 .transaction-amount {
   flex-shrink: 0;
   min-width: 96px;
-  font-family: var(--font-mono);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   text-align: right;
@@ -2255,14 +2382,50 @@ input[type="number"] {
   min-width: 0;
 }
 
+.transaction-row.is-drag-over {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent-border);
+}
+
+.transaction-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.transaction-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transaction-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--well);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .transaction-tag-icon {
   display: inline-flex;
   flex-shrink: 0;
 }
 
 .transaction-tag-icon svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
 }
 
 .transaction-tag-text {
@@ -2271,28 +2434,155 @@ input[type="number"] {
   white-space: nowrap;
 }
 
-/* An attached receipt is the one status worth spotting from across the list,
-   so it takes the accent and the row gets an edge marker to match. */
+/* An attached receipt is the one status worth spotting from across the list. */
 .transaction-tag.is-receipt {
   gap: 5px;
   border-color: var(--accent-border);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--moss-deep);
+}
+
+.transaction-tag.is-rent {
+  border-color: var(--warm-border);
+  background: var(--warm-soft);
+  color: var(--warm-ink);
 }
 
 .transaction-row.has-receipt {
-  box-shadow: inset 2px 0 0 var(--accent);
-  padding-left: 10px;
+  box-shadow: inset 4px 0 0 var(--moss);
+  padding-left: 14px;
 }
 
-/* --- Rent entries --------------------------------------------------------- */
+/* A checkbox with its label attached, so the control says what ticking it
+   does. */
+.txn-food-toggle {
+  width: auto;
+  height: 30px;
+  gap: 6px;
+  padding: 0 11px 0 8px;
+  border: 1px solid var(--timber);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink-3);
+}
+
+.txn-food-toggle .food-check-icon {
+  width: 15px;
+  height: 15px;
+  color: inherit;
+}
+
+.txn-food-label {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.txn-food-toggle:hover:not(:disabled) {
+  border-color: var(--moss);
+  color: var(--ink);
+}
+
+.txn-food-toggle.is-on {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--moss-deep);
+}
+
+/* --- Per-transaction menu --- */
+.txn-menu {
+  position: relative;
+}
+
+.txn-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--timber);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink-2);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition:
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+
+.txn-menu-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.txn-menu-trigger:hover,
+.txn-menu[open] .txn-menu-trigger {
+  border-color: var(--moss);
+  background: var(--accent-soft);
+  color: var(--moss-deep);
+}
+
+.txn-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 220px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  animation: pop 220ms var(--ease) both;
+}
+
+.txn-menu-item {
+  padding: 10px 12px;
+  border: none;
+  border-radius: 12px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+
+.txn-menu-item:hover {
+  background: var(--well);
+}
+
+.txn-menu-item.is-danger {
+  color: var(--ink-2);
+}
+
+.txn-menu-item.is-danger:hover {
+  background: var(--red-soft);
+  color: var(--sienna);
+}
+
+.txn-menu-item:focus-visible {
+  outline: 2px solid var(--moss);
+  outline-offset: -2px;
+}
+
+/* --- Rent entries --- */
 .rent-entries-list {
   display: grid;
   gap: 2px;
 }
 
 .rent-entries-list .empty-state {
-  padding: 32px 12px;
+  min-height: 0;
+  padding: 28px 12px;
 }
 
 .rent-entry-row {
@@ -2300,13 +2590,14 @@ input[type="number"] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 4px;
+  padding: 10px 6px;
   border-bottom: 1px solid var(--border);
-  transition: background 100ms ease;
+  border-radius: 14px;
+  transition: background var(--dur) var(--ease);
 }
 
 .rent-entry-row:hover {
-  background: var(--surface-2);
+  background: rgba(240, 235, 229, 0.5);
 }
 
 .rent-entry-row:last-child {
@@ -2330,22 +2621,24 @@ input[type="number"] {
 }
 
 .rent-entry-date {
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
   white-space: nowrap;
 }
 
 .rent-entry-property {
   color: var(--ink);
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.95rem;
+  font-size: 14px;
 }
 
 .rent-entry-meta {
-  font-size: 0.85rem;
+  font-size: 12.5px;
   color: var(--ink-3);
 }
 
@@ -2353,16 +2646,16 @@ input[type="number"] {
   display: inline-block;
   min-width: 14px;
   text-align: center;
-  font-size: 0.9rem;
-  opacity: 0.6;
-  transition: opacity 120ms ease;
+  font-size: 13px;
+  opacity: 0.7;
 }
 
 .rent-entry-amount {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  color: var(--accent);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--moss);
   white-space: nowrap;
   min-width: 80px;
   text-align: right;
@@ -2370,101 +2663,47 @@ input[type="number"] {
 
 .rent-entry-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   white-space: nowrap;
 }
 
-/* ============ Food Item Selection Checkboxes ============ */
-
-.line-food-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.line-food-check:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.food-check-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--accent);
-  transition: color 120ms ease, opacity 120ms ease;
-}
-
-.line-food-check:hover:not(:disabled) .food-check-icon {
-  color: var(--accent-strong);
-}
-
-.line-food-check:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* ============ History Line Styling ============ */
-
-.history-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.history-line:last-child {
-  border-bottom: none;
-}
-
-.history-line > span:first-child {
-  flex: 1;
-}
-
-.history-line .line-food-check {
-  margin: 0 4px;
-}
-
-/* ============ Receipt Link Modal ============ */
-
+/* --- Receipt picker (attach to a transaction) --- */
 .receipt-link-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
   max-height: 400px;
   overflow-y: auto;
+  padding: 4px;
 }
 
 .receipt-link-item {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
   text-align: left;
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 
 .receipt-link-item:hover {
-  background: var(--surface-3);
-  border-color: var(--border-strong);
+  transform: translateY(-2px) rotate(-0.5deg);
+  box-shadow: var(--shadow-lift);
+  border-color: var(--accent-border);
 }
 
 .receipt-link-item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  outline: 2px solid var(--moss);
+  outline-offset: 2px;
 }
 
 .receipt-link-main {
@@ -2474,7 +2713,8 @@ input[type="number"] {
 }
 
 .receipt-link-main > strong {
-  font-size: 0.95rem;
+  font-family: var(--font-display);
+  font-size: 15px;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2482,7 +2722,7 @@ input[type="number"] {
 }
 
 .receipt-link-meta {
-  font-size: 0.8rem;
+  font-size: 12.5px;
   color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2490,50 +2730,128 @@ input[type="number"] {
 }
 
 .receipt-link-amount {
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  color: var(--accent);
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--moss);
 }
 
 .receipt-link-thumb {
   width: 100%;
   height: 120px;
   object-fit: cover;
-  border-radius: 6px;
-  background: var(--surface);
+  border-radius: 12px;
+  background: var(--well);
 }
 
 .receipt-link-empty {
   padding: 24px 12px;
   text-align: center;
   color: var(--ink-3);
-  font-size: 0.95rem;
+  font-size: 14px;
 }
 
-/* ============ Education expenses (529) ============ */
-/* This whole block previously had no rules at all, so the stat cards stacked as
-   full-width blocks at the 34px .stat-value size and the section headers, food
-   rows and actions sat flush against the panel edge with nothing lining up. */
+/* --- Transaction picker (link from History) --- */
+.transaction-link-list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  margin-bottom: 16px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.transaction-link-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.transaction-link-item:hover {
+  background: var(--well);
+  border-color: var(--accent-border);
+  transform: translateX(3px);
+}
+
+.transaction-link-item:focus-visible {
+  outline: 2px solid var(--moss);
+  outline-offset: 2px;
+}
+
+.transaction-link-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.transaction-link-main > strong {
+  font-size: 14.5px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-link-meta {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.transaction-link-amount {
+  flex-shrink: 0;
+  min-width: 96px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-align: right;
+}
+
+/* --- Education expenses (529) --- */
 .education-expenses-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
 .expense-stat {
   display: grid;
   gap: 6px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 20px;
   background: var(--well);
+  transition: transform var(--dur) var(--ease);
 }
 
-/* Three across, so the shared 34px .stat-value would overflow its card. */
+.expense-stat:hover {
+  transform: translateY(-2px);
+}
+
+.expense-stat:nth-child(1) {
+  border-top-left-radius: 2rem;
+}
+
+.expense-stat:nth-child(3) {
+  border-bottom-right-radius: 2rem;
+}
+
+/* Three across, so the shared 42px .stat-value would overflow its card. */
 .education-expenses-stats .stat-value {
-  font-size: 22px;
+  font-size: 24px;
   color: var(--ink);
 }
 
@@ -2543,7 +2861,7 @@ input[type="number"] {
 }
 
 .education-expenses-stats .stat-combined .stat-value {
-  color: var(--accent);
+  color: var(--moss);
 }
 
 .education-sections {
@@ -2553,15 +2871,15 @@ input[type="number"] {
 
 .education-section {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 22px;
   background: var(--surface);
   overflow: hidden;
 }
 
 .education-section .section-header {
-  padding: 10px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--surface-2);
+  background: var(--well);
 }
 
 .education-section .section-header h3 {
@@ -2569,41 +2887,41 @@ input[type="number"] {
   align-items: center;
   gap: 8px;
   margin: 0;
-  color: var(--ink-2);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: var(--label-tracking);
-  text-transform: uppercase;
+  color: var(--ink);
+  font-size: 16px;
 }
 
 .section-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: none;
-  background: none;
+  border-radius: 50%;
+  background: transparent;
   color: var(--ink-3);
-  font-size: 9px;
   line-height: 1;
   cursor: pointer;
-  transition: transform 140ms ease, color 140ms ease;
+  transition:
+    transform var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+
+.section-toggle svg {
+  width: 16px;
+  height: 16px;
 }
 
 .section-toggle:hover {
-  color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--moss);
 }
 
 .section-toggle[aria-expanded="false"] {
   transform: rotate(-90deg);
-}
-
-.section-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 4px;
 }
 
 /* Collapsing hides the rows and the section's own actions, but never the empty
@@ -2616,7 +2934,7 @@ input[type="number"] {
 .education-section .section-content {
   display: grid;
   gap: 2px;
-  padding: 6px 14px;
+  padding: 6px 16px;
 }
 
 .education-section .section-content:empty {
@@ -2626,11 +2944,15 @@ input[type="number"] {
 .education-section .section-actions {
   display: flex;
   justify-content: flex-start;
-  padding: 4px 14px 12px;
+  padding: 6px 16px 14px;
 }
 
 .education-section .empty-state {
-  padding: 14px;
+  min-height: 0;
+  padding: 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .food-item-row {
@@ -2639,8 +2961,8 @@ input[type="number"] {
   gap: 12px;
   /* Left padding matches .food-receipt-summary, which needs the room for its
      chevron, so bank rows and receipt rows start their labels on the same
-     line rather than one list sitting 18px proud of the other. */
-  padding: 7px 0 7px 18px;
+     line. */
+  padding: 8px 0 8px 18px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -2652,7 +2974,8 @@ input[type="number"] {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 13.5px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2662,7 +2985,7 @@ input[type="number"] {
   flex-shrink: 0;
   max-width: 45%;
   color: var(--ink-3);
-  font-size: 0.8rem;
+  font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2673,8 +2996,8 @@ input[type="number"] {
 .food-item-amount {
   flex-shrink: 0;
   min-width: 96px;
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 13.5px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   text-align: right;
@@ -2682,13 +3005,10 @@ input[type="number"] {
 
 /* A reimbursement that cancels out food spend, rather than more spending. */
 .food-item-row.is-credit .food-item-amount {
-  color: var(--accent);
+  color: var(--moss);
 }
 
-/* ---- One receipt, collapsed to a single food figure ---- */
-/* The education expense is the owner's food total per receipt, so that is the
-   row; the individual items sit behind the disclosure rather than turning a
-   grocery run into thirty rows in the budgeting list. */
+/* One receipt, collapsed to a single food figure. */
 .food-receipt {
   border-bottom: 1px solid var(--border);
 }
@@ -2701,7 +3021,7 @@ input[type="number"] {
   display: flex;
   align-items: baseline;
   gap: 12px;
-  padding: 7px 0 7px 18px;
+  padding: 8px 0 8px 18px;
   cursor: pointer;
   list-style: none;
   position: relative;
@@ -2711,19 +3031,18 @@ input[type="number"] {
   display: none;
 }
 
-/* Own chevron, so the row keeps the same baseline grid as .food-item-row and
-   the amounts stay in one column across both lists. */
+/* Own chevron, so the row keeps the same baseline grid as .food-item-row. */
 .food-receipt-summary::before {
   content: "";
   position: absolute;
   left: 3px;
-  top: 12px;
+  top: 13px;
   width: 5px;
   height: 5px;
-  border-right: 1.5px solid var(--ink-3);
-  border-bottom: 1.5px solid var(--ink-3);
+  border-right: 2px solid var(--clay);
+  border-bottom: 2px solid var(--clay);
   transform: rotate(-45deg);
-  transition: transform 140ms ease;
+  transition: transform var(--dur) var(--ease);
 }
 
 .food-receipt[open] > .food-receipt-summary::before {
@@ -2731,7 +3050,7 @@ input[type="number"] {
 }
 
 .food-receipt-summary:hover .food-item-label {
-  color: var(--accent);
+  color: var(--moss);
 }
 
 .food-receipt-items {
@@ -2751,7 +3070,7 @@ input[type="number"] {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2761,18 +3080,16 @@ input[type="number"] {
   flex-shrink: 0;
   max-width: 50%;
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Same 96px column as .food-item-amount and the transaction list. */
 .food-receipt-item-amount {
   flex-shrink: 0;
   min-width: 96px;
-  font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
   text-align: right;
@@ -2789,228 +3106,246 @@ input[type="number"] {
   color: var(--ink-3);
 }
 
-@media (max-width: 720px) {
-  .education-expenses-stats {
-    grid-template-columns: 1fr;
-  }
+/* ---------------- 8. Dialogs ---------------- */
+
+/* --- Modals --- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(44, 44, 36, 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fade 220ms var(--ease);
 }
 
-/* ============ Transaction Row Enhancements ============ */
+.modal-backdrop.hidden {
+  display: none !important;
+}
 
-.transaction-row {
-  position: relative;
+.modal-card {
+  width: min(460px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  border-top-left-radius: var(--radius-card-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  animation: pop 320ms var(--ease) both;
+}
+
+.modal-card-wide {
+  width: min(700px, 100%);
+}
+
+.modal-heading {
+  margin-bottom: 20px;
+}
+
+.modal-heading h2 {
+  font-size: 23px;
+}
+
+.modal-heading p {
+  margin: 6px 0 0;
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+.prompt-item {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--well);
+}
+
+.prompt-item span {
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.prompt-item strong {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.checkbox-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
-  transition: background 120ms ease;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.transaction-row:last-child {
-  border-bottom: none;
-}
-
-/* The description takes the slack so the controls stay in a fixed cluster on
-   the right. Without it, space-between scattered them across the row and the
-   food checkbox floated in the middle with nothing to attach it to. */
-.transaction-main {
-  flex: 1 1 auto;
-}
-
-.transaction-row.is-drag-over {
-  background: var(--accent-soft);
-  border-bottom-color: var(--accent-border);
-}
-
-.transaction-actions {
+.modal-actions {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
-  flex-shrink: 0;
+  margin-top: 24px;
 }
 
-.transaction-tags {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.settings-form,
+.rent-form {
+  display: grid;
 }
 
-.transaction-tag {
-  display: inline-flex;
-  align-items: center;
-  max-width: 180px;
-  height: 22px;
-  padding: 0 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--ink-2);
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.settings-note {
+  margin: 14px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.transaction-tag.is-rent {
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-/* A checkbox with its label attached, so the control says what ticking it
-   does. The bare icon button used on receipt lines has a column header to
-   explain it; a bank row does not. */
-.txn-food-toggle {
-  width: auto;
-  height: 26px;
-  gap: 6px;
-  padding: 0 9px 0 7px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface-2);
+.settings-status {
+  margin: 6px 0 0 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
   color: var(--ink-3);
 }
 
-.txn-food-toggle .food-check-icon {
-  width: 14px;
-  height: 14px;
-  color: inherit;
+.settings-status.is-active {
+  color: var(--moss);
 }
 
-.txn-food-label {
-  font-size: 0.75rem;
-  line-height: 1;
-  letter-spacing: 0.02em;
+.settings-status.is-error {
+  color: var(--sienna);
 }
 
-.txn-food-toggle:hover:not(:disabled) {
-  border-color: var(--accent-border);
+.settings-note code {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--well);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.modal-card video {
+  width: 100%;
+  max-height: 65vh;
+  border: 4px solid #fff;
+  border-radius: 18px;
+  background: #2c2c24;
+  box-shadow: var(--shadow-float);
+  object-fit: contain;
+}
+
+/* --- Auth card: a dialog over the landing page --- */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow-y: auto;
+  background: rgba(44, 44, 36, 0.32);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fade 220ms var(--ease);
+}
+
+.auth-overlay.hidden {
+  display: none !important;
+}
+
+.auth-card {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 34px 32px 28px;
+  border: 1px solid var(--border);
+  border-radius: 2.5rem;
+  border-top-left-radius: 4rem;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  animation: pop 320ms var(--ease) both;
+}
+
+.auth-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+}
+
+.auth-close:hover {
+  background: var(--well);
   color: var(--ink);
 }
 
-.txn-food-toggle.is-on {
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
-  color: var(--accent);
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
 }
 
-/* --- Per-transaction menu ------------------------------------------------- */
-.txn-menu {
-  position: relative;
+.auth-wordmark {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  font-variation-settings: "SOFT" 80;
 }
 
-.txn-menu-trigger {
-  display: inline-flex;
+.auth-title {
+  margin-bottom: 4px;
+  font-size: 28px;
+  font-weight: 700;
+  font-variation-settings: "SOFT" 100;
+  letter-spacing: -0.015em;
+}
+
+.auth-subtitle {
+  margin: 0 0 22px;
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-form .field {
+  margin-top: 0;
+}
+
+.auth-error {
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--red-soft);
+  color: var(--sienna);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.auth-switch {
+  margin: 16px 0 0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--ink-2);
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--ink-3);
 }
 
-.txn-menu-trigger::-webkit-details-marker {
-  display: none;
-}
-
-.txn-menu-trigger:hover,
-.txn-menu[open] .txn-menu-trigger {
-  border-color: var(--accent-border);
-  color: var(--accent);
-}
-
-.txn-menu-trigger:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.txn-menu-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 30;
-  display: grid;
-  min-width: 210px;
-  padding: 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  box-shadow: var(--shadow-card);
-}
-
-.txn-menu-item {
-  padding: 8px 10px;
-  border: none;
-  border-radius: 8px;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  font-size: 0.85rem;
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.txn-menu-item:hover {
-  background: var(--surface-3);
-}
-
-.txn-menu-item.is-danger {
-  color: var(--ink-2);
-}
-
-.txn-menu-item.is-danger:hover {
-  color: #ff9a8b;
-}
-
-.txn-menu-item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-/* Keeps the file picker reachable by the menu without showing an input nobody
-   is meant to click directly. */
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* ============ Receipt Cards in History - Draggable ============ */
-
-.history-card {
-  cursor: grab;
-  transition: opacity 120ms ease;
-}
-
-.history-card:active {
-  cursor: grabbing;
-  opacity: 0.8;
-}
-
-/* Make history card draggable */
-.history-summary {
-  user-select: none;
-}
-
-/* ============ Toast Notifications ============ */
-
+/* --- Toasts --- */
 .toast-container {
   position: fixed;
   top: 16px;
@@ -3024,37 +3359,164 @@ input[type="number"] {
 
 .toast {
   pointer-events: auto;
-  padding: 12px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   max-width: 400px;
+  padding: 12px 18px 12px 20px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--shadow-pop), inset 5px 0 0 var(--moss);
   word-wrap: break-word;
-  opacity: 0;
-  transform: translateX(100%);
-  transition: all 300ms ease;
   white-space: normal;
+  opacity: 0;
+  transform: translateX(24px) scale(0.98);
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur-slow) var(--ease);
 }
 
 .toast-visible {
   opacity: 1;
-  transform: translateX(0);
+  transform: translateX(0) scale(1);
 }
 
 .toast-success {
-  background-color: #10b981;
-  color: white;
+  box-shadow: var(--shadow-pop), inset 5px 0 0 var(--moss);
 }
 
 .toast-error {
-  background-color: #ef4444;
-  color: white;
+  box-shadow: var(--shadow-pop), inset 5px 0 0 var(--sienna);
 }
 
 .toast-info {
-  background-color: #3b82f6;
-  color: white;
+  box-shadow: var(--shadow-pop), inset 5px 0 0 var(--clay);
+}
+
+/* ---------------- 9. Motion & responsive ---------------- */
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: var(--shadow-soft);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: var(--shadow-soft-hover);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@media (max-width: 1140px) {
+  .workspace {
+    grid-template-columns: minmax(280px, 1fr) minmax(380px, 1.3fr);
+  }
+
+  .summary-panel {
+    position: static;
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 860px) {
+  .appbar-inner {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 10px 10px 10px 14px;
+    border-radius: 2rem;
+  }
+
+  .appbar-actions {
+    margin-left: auto;
+  }
+
+  .tab-nav {
+    order: 3;
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .tab-button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .workspace,
+  #budgetingView .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace > .panel {
+    border-radius: var(--radius-card);
+  }
+}
+
+@media (max-width: 720px) {
+  .split-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Full width on its own row rather than squeezed beside the category. */
+  .identify-field {
+    grid-column: 1 / -1;
+  }
+
+  .education-expenses-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-header {
+    padding: 12px 20px;
+  }
+
+  .panel-body {
+    padding: 18px 18px 22px;
+  }
 }
 
 @media (max-width: 600px) {
@@ -3068,238 +3530,140 @@ input[type="number"] {
   }
 }
 
-/* ---------------- Transaction picker (link from History) ---------------- */
-/* One column rather than the receipt picker's card grid: these rows are text
-   with an amount, and a list keeps the amounts in a readable column. */
-.transaction-link-list {
-  display: grid;
-  gap: 6px;
-  max-height: 420px;
-  margin-bottom: 16px;
-  overflow-y: auto;
-}
+@media (max-width: 560px) {
+  .appbar {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
 
-.transaction-link-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: background 120ms ease, border-color 120ms ease;
-}
+  .brand-name {
+    font-size: 17px;
+  }
 
-.transaction-link-item:hover {
-  background: var(--surface-3);
-  border-color: var(--border-strong);
-}
+  .appbar-actions .btn {
+    padding: 0 12px;
+  }
 
-.transaction-link-item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
+  /* The gear speaks for itself at this width; the label stays for readers. */
+  .appbar .btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
 
-.transaction-link-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1 1 auto;
-  min-width: 0;
-}
+  .split-toolbar {
+    grid-template-columns: 1fr;
+  }
 
-.transaction-link-main > strong {
-  font-size: 0.95rem;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+  .edit-banner-meta {
+    display: none;
+  }
 
-.transaction-link-meta {
-  color: var(--ink-3);
-  font-size: 0.8rem;
-}
+  .batch-bar {
+    padding: 10px 12px;
+  }
 
-.transaction-link-amount {
-  flex-shrink: 0;
-  min-width: 96px;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  text-align: right;
-}
+  /* Narrow screens stack the label over its controls: row 1 is the item name
+     across the full width, row 2 is food / assignment / amount / ignore. Every
+     cell is placed explicitly because the header (which is what normally
+     explains the column order) is hidden here. */
+  .table-row {
+    grid-template-columns: auto 1fr auto auto;
+    gap: 6px 10px;
+    padding: 12px 14px;
+  }
 
-/* --- Item identification -------------------------------------------------- */
+  .table-row .line-select {
+    grid-column: 1;
+    grid-row: 1;
+  }
 
-/* The label is the summary of its own popup: the thing a reader wants to
-   interrogate is the ambiguous name itself, so that is what they click. A
-   separate icon would put the target somewhere other than the question. */
-.item-detail-dropdown {
-  min-width: 0;
-}
+  .table-head {
+    display: none;
+  }
 
-.item-detail-summary {
-  display: block;
-  min-width: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  list-style: none;
-}
+  .table-row .line-label-cell,
+  .table-row > .line-label {
+    grid-column: 2 / -1;
+    grid-row: 1;
+  }
 
-.item-detail-summary::-webkit-details-marker {
-  display: none;
-}
+  .table-row .line-food-check {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+  }
 
-/* Underlined on hover rather than boxed. The row is already dense, and a
-   button outline around every item name would read as forty buttons. */
-.item-detail-summary:hover .line-label {
-  text-decoration: underline;
-  text-decoration-color: var(--border-strong);
-  text-underline-offset: 3px;
-}
+  .assign-cell {
+    grid-column: 2;
+    grid-row: 2;
+  }
 
-.item-detail-summary:focus-visible {
-  outline: 2px solid var(--accent-border);
-  outline-offset: 2px;
-}
+  .amount-cell {
+    grid-column: 3;
+    grid-row: 2;
+  }
 
-.line-label-stack {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
+  .delete-row {
+    grid-column: 4;
+    grid-row: 2;
+    justify-self: end;
+  }
 
-.item-detail-pop {
-  width: 300px;
-  max-width: min(300px, calc(100vw - 24px));
-  overflow-y: auto;
-}
+  /* A header's controls drop under its title rather than squeezing it: the
+     bank panel carries two buttons and the ring panel a month picker, and
+     neither fits beside a serif title at phone width. */
+  .panel-header {
+    flex-wrap: wrap;
+  }
 
-.item-detail-body {
-  display: grid;
-  gap: 10px;
-}
+  .panel-header > .panel-actions,
+  .panel-header > .table-select {
+    flex: 1 1 100%;
+    width: 100%;
+  }
 
-.item-detail-name {
-  margin: 0;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
+  .panel-header > .panel-actions {
+    justify-content: flex-end;
+  }
 
-/* Label/value pairs as a two-column grid. The receipt's own text comes first:
-   everything below is derived from it, and a reader should be able to see what
-   it was derived from without leaving the popup. */
-.item-detail-facts {
-  display: grid;
-  margin: 0;
-  gap: 4px 10px;
-  grid-template-columns: auto 1fr;
-}
+  /* List rows fold their controls under the text at phone width. The rent
+     row put a date, a property, an amount and two buttons on one line, and
+     the last two ran off the card. */
+  .rent-entry-row,
+  .transaction-row {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
 
-.item-detail-facts dt {
-  color: var(--ink-3);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: var(--label-tracking);
-  text-transform: uppercase;
-  align-self: center;
-}
+  .rent-entry-main,
+  .transaction-main {
+    flex: 1 1 100%;
+  }
 
-.item-detail-facts dd {
-  margin: 0;
-  color: var(--ink-2);
-  font-size: 12.5px;
-  overflow-wrap: anywhere;
-}
+  .rent-entry-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
 
-.item-detail-source {
-  margin: 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-  color: var(--ink-2);
-  font-size: 11.5px;
-}
+  .transaction-actions {
+    margin-right: auto;
+  }
 
-.item-detail-reasoning {
-  margin: 0;
-  color: var(--ink-3);
-  font-size: 11.5px;
-  font-style: italic;
-  line-height: 1.4;
-}
+  .modal-card,
+  .auth-card {
+    padding: 24px 20px;
+    border-top-left-radius: var(--radius-card);
+  }
 
-/* The runners-up, one click each. A wrong first guess usually has the right
-   answer sitting just behind it, and retyping a name the app already
-   considered is busywork. */
-.item-detail-alternatives {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
+  .modal-actions .btn {
+    flex: 1 1 auto;
+  }
 
-.item-detail-subhead {
-  width: 100%;
-  color: var(--ink-3);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: var(--label-tracking);
-  text-transform: uppercase;
-}
-
-.item-detail-alternative {
-  padding: 4px 9px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--well);
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease;
-}
-
-.item-detail-alternative:hover {
-  border-color: var(--accent-border);
-  color: var(--accent);
-}
-
-/* Where a correction is made. The field starts on the current name, so
-   confirming an answer that is already right and fixing one that is nearly
-   right are the same gesture with different amounts of typing. */
-.item-detail-form {
-  display: grid;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.item-detail-form .table-input {
-  width: 100%;
-}
-
-.item-detail-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.item-detail-actions .btn {
-  flex: 1;
-}
-
-/* History rows stack the same way the workspace rows do, so a receipt reads
-   the same whether it is being split or being looked back at. */
-.history-line-label {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
+  .button-row .btn {
+    flex: 1 1 calc(50% - 5px);
+  }
 }

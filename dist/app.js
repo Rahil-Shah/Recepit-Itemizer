@@ -6,7 +6,7 @@ var ReceiptRing;
         Config.CATEGORIES = [
             {
                 name: "Groceries",
-                color: "#43d6a3",
+                color: "#5d7052",
                 keywords: [
                     "apple",
                     "banana",
@@ -42,7 +42,7 @@ var ReceiptRing;
             },
             {
                 name: "Dining",
-                color: "#ff6d5f",
+                color: "#c18c5d",
                 keywords: [
                     "coffee",
                     "latte",
@@ -70,7 +70,7 @@ var ReceiptRing;
             },
             {
                 name: "Home",
-                color: "#f8bd45",
+                color: "#d4b060",
                 keywords: [
                     "detergent",
                     "soap",
@@ -97,7 +97,7 @@ var ReceiptRing;
             },
             {
                 name: "Health",
-                color: "#b58cff",
+                color: "#9a8bc0",
                 keywords: [
                     "vitamin",
                     "pharmacy",
@@ -120,7 +120,7 @@ var ReceiptRing;
             },
             {
                 name: "Transport",
-                color: "#5ca8ff",
+                color: "#5f7e9b",
                 keywords: [
                     "fuel",
                     "gas",
@@ -142,7 +142,7 @@ var ReceiptRing;
             },
             {
                 name: "Personal",
-                color: "#ff89c2",
+                color: "#b8788a",
                 keywords: [
                     "shirt",
                     "socks",
@@ -163,7 +163,7 @@ var ReceiptRing;
             },
             {
                 name: "Entertainment",
-                color: "#96dc5c",
+                color: "#7fa7a3",
                 keywords: [
                     "movie",
                     "book",
@@ -182,7 +182,7 @@ var ReceiptRing;
             },
             {
                 name: "Other",
-                color: "#a5a097",
+                color: "#a9a196",
                 keywords: []
             }
         ];
@@ -2293,9 +2293,15 @@ var ReceiptRing;
                     pasteJsonStatus: this.getElement("#pasteJsonStatus", HTMLElement),
                     closePasteJsonButton: this.getElement("#closePasteJsonButton", HTMLButtonElement),
                     importPasteJsonButton: this.getElement("#importPasteJsonButton", HTMLButtonElement),
+                    landingView: this.getElement("#landingView", HTMLElement),
+                    landingMenu: this.getElement("#landingMenu", HTMLElement),
+                    landingMenuToggle: this.getElement("#landingMenuToggle", HTMLButtonElement),
+                    authActionButtons: Array.from(document.querySelectorAll("[data-auth-action]")).filter((element) => element instanceof HTMLButtonElement),
                     authOverlay: this.getElement("#authOverlay", HTMLElement),
+                    authCloseButton: this.getElement("#authCloseButton", HTMLButtonElement),
                     authForm: this.getElement("#authForm", HTMLFormElement),
                     authTitle: this.getElement("#authTitle", HTMLElement),
+                    authSubtitle: this.getElement("#authSubtitle", HTMLElement),
                     authNameField: this.getElement("#authNameField", HTMLElement),
                     authName: this.getElement("#authName", HTMLInputElement),
                     authEmail: this.getElement("#authEmail", HTMLInputElement),
@@ -2373,19 +2379,37 @@ var ReceiptRing;
                 this.elements.authToggle.addEventListener("click", () => {
                     this.setMode(this.mode === "login" ? "register" : "login");
                 });
+                this.elements.authCloseButton.addEventListener("click", () => this.hide());
+                this.elements.authOverlay.addEventListener("click", (event) => {
+                    if (event.target === this.elements.authOverlay)
+                        this.hide();
+                });
+                document.addEventListener("keydown", (event) => {
+                    if (event.key === "Escape" && this.isVisible())
+                        this.hide();
+                });
                 this.setMode("login");
             }
-            show() {
+            show(mode = this.mode) {
+                this.setMode(mode);
                 this.elements.authOverlay.classList.remove("hidden");
+                const first = mode === "register" ? this.elements.authName : this.elements.authEmail;
+                first.focus();
             }
             hide() {
                 this.elements.authOverlay.classList.add("hidden");
             }
+            isVisible() {
+                return !this.elements.authOverlay.classList.contains("hidden");
+            }
             setMode(mode) {
                 this.mode = mode;
                 const registering = mode === "register";
-                this.elements.authTitle.textContent = registering ? "Create account" : "Log in";
-                this.elements.authSubmit.textContent = registering ? "Sign up" : "Log in";
+                this.elements.authTitle.textContent = registering ? "Create your account" : "Welcome back";
+                this.elements.authSubtitle.textContent = registering
+                    ? "A minute to set up, and the first receipt is free to try with the sample."
+                    : "Your receipts are where you left them.";
+                this.elements.authSubmit.textContent = registering ? "Create account" : "Log in";
                 this.elements.authSwitchText.textContent = registering
                     ? "Already have an account?"
                     : "Need an account?";
@@ -2420,6 +2444,51 @@ var ReceiptRing;
             }
         }
         UI.AuthView = AuthView;
+    })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
+})(ReceiptRing || (ReceiptRing = {}));
+var ReceiptRing;
+(function (ReceiptRing) {
+    var UI;
+    (function (UI) {
+        class LandingView {
+            constructor(elements) {
+                this.elements = elements;
+            }
+            init(openAuth) {
+                const { landingMenu, landingMenuToggle } = this.elements;
+                landingMenuToggle.addEventListener("click", () => {
+                    this.setMenuOpen(!landingMenu.classList.contains("is-open"));
+                });
+                landingMenu.querySelectorAll("a").forEach((link) => {
+                    link.addEventListener("click", () => this.setMenuOpen(false));
+                });
+                document.addEventListener("keydown", (event) => {
+                    if (event.key === "Escape")
+                        this.setMenuOpen(false);
+                });
+                document.addEventListener("click", (event) => {
+                    const target = event.target;
+                    if (!(target instanceof Node))
+                        return;
+                    if (landingMenu.contains(target) || landingMenuToggle.contains(target))
+                        return;
+                    this.setMenuOpen(false);
+                });
+                this.elements.authActionButtons.forEach((button) => {
+                    button.addEventListener("click", () => {
+                        this.setMenuOpen(false);
+                        openAuth(button.dataset.authAction === "register" ? "register" : "login");
+                    });
+                });
+            }
+            setMenuOpen(open) {
+                const { landingMenu, landingMenuToggle } = this.elements;
+                landingMenu.classList.toggle("is-open", open);
+                landingMenuToggle.setAttribute("aria-expanded", String(open));
+                landingMenuToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+            }
+        }
+        UI.LandingView = LandingView;
     })(UI = ReceiptRing.UI || (ReceiptRing.UI = {}));
 })(ReceiptRing || (ReceiptRing = {}));
 var ReceiptRing;
@@ -2463,7 +2532,7 @@ var ReceiptRing;
                 track.setAttribute("cy", String(cy));
                 track.setAttribute("r", String(radius));
                 track.setAttribute("fill", "none");
-                track.setAttribute("stroke", "rgba(255,255,255,0.07)");
+                track.setAttribute("class", "budget-ring-track");
                 track.setAttribute("stroke-width", String(stroke));
                 svg.append(track);
                 let offset = 0;
@@ -5707,6 +5776,7 @@ var ReceiptRing;
     const monthlyTrendView = new ReceiptRing.UI.MonthlyTrendView(currencyFormatService);
     const rentEntriesView = new ReceiptRing.UI.RentEntriesView(currencyFormatService);
     const authView = new ReceiptRing.UI.AuthView(elements, authApiService);
+    const landingView = new ReceiptRing.UI.LandingView(elements);
     const controller = new ReceiptRing.App.AppController(elements, parserService, categorizationService, categoryRuleStorageService, storageService, currencyFormatService, imagePreviewService, receiptImageService, geminiService, categoryPromptView, splitWorkspaceView, splitCalculatorService, lineSelectionService, idService, receiptApiService, bankApiService, spendingAggregatorService, budgetRingView, monthlyTrendView, peopleApiService, rentEntryApiService, rentEntriesView, notificationService, itemIdentityService, itemAliasStoreService);
     let started = false;
     const startApp = () => {
@@ -5715,9 +5785,14 @@ var ReceiptRing;
         started = true;
         controller.start();
     };
+    const setAuthState = (state) => {
+        document.body.dataset.auth = state;
+    };
     authView.init();
+    landingView.init((mode) => authView.show(mode));
     authView.onAuthenticated = () => {
         authView.hide();
+        setAuthState("user");
         startApp();
     };
     elements.logoutButton.addEventListener("click", () => {
@@ -5726,11 +5801,11 @@ var ReceiptRing;
     void (async () => {
         try {
             await authApiService.me();
-            authView.hide();
+            setAuthState("user");
             startApp();
         }
         catch {
-            authView.show();
+            setAuthState("anon");
         }
     })();
 })(ReceiptRing || (ReceiptRing = {}));
