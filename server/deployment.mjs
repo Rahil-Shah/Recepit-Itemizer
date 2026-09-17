@@ -17,3 +17,15 @@ export function isVercel() {
 export function isProduction() {
   return process.env.NODE_ENV === "production" || isVercel();
 }
+
+/**
+ * The connection string the app runs on.
+ *
+ * DATABASE_URL is the one this project documents. POSTGRES_URL is what the
+ * Vercel Postgres and Supabase marketplace integrations set automatically (the
+ * pooled endpoint, which is the right one for a serverless function), so a
+ * project wired up through the integration needs nothing pasted by hand.
+ */
+export function databaseUrl() {
+  return process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
+}

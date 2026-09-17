@@ -188,9 +188,9 @@ async function readUserKeyRecord(prisma, userId) {
   return record;
 }
 
-// The shared key from the environment, when this account may spend it. On a
-// locked deployment that is the owner and nobody else (see server/access.mjs);
-// on an open one it is anybody, as before.
+// The shared key from the environment, when this account may spend it: an
+// admin's requests, and nobody else's (see server/access.mjs). Everyone else
+// parses with a personal key saved in Settings, or not at all.
 function sharedKeyFor(email) {
   return hasServerGeminiKey() && mayUseSharedGeminiKey(email) ? process.env.GEMINI_API_KEY : "";
 }

@@ -15,7 +15,7 @@ import { createRateLimiter } from "./server/rate-limit.mjs";
 import { parseMonthParam, getMonthRange, getUtcMonthRange } from "./server/month.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
 import { assertAccessPolicy } from "./server/access.mjs";
-import { isProduction, isVercel } from "./server/deployment.mjs";
+import { databaseUrl, isProduction, isVercel } from "./server/deployment.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -35,7 +35,7 @@ function fatal(message) {
   throw new Error(message);
 }
 
-if (!process.env.DATABASE_URL) {
+if (!databaseUrl()) {
   fatal("DATABASE_URL is not set. Copy .env.example to .env and start Postgres (npm run db:up).");
 }
 
@@ -49,7 +49,7 @@ try {
 }
 
 // Prisma 7 connects through a driver adapter; swap DATABASE_URL to scale to managed Postgres.
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg({ connectionString: databaseUrl() });
 const prisma = new PrismaClient({ adapter });
 const app = express();
 const PORT = Number(process.env.PORT) || 4173;
@@ -133,7 +133,7 @@ const parseLimiter = createRateLimiter({
 app.use("/api/gemini/parse", parseLimiter);
 
 const auth = createAuth(prisma);
-const { requireAuth } = auth;
+const { requireAuth, requireAdmin } = auth;
 
 // Cookies are parsed here rather than inside auth.register() because
 // requireAuth reads them, and it now gates a middleware that runs before the
@@ -167,8 +167,10 @@ app.get("/api/health", async (_req, res) => {
 
 auth.register(app);
 
+// Bank routes are admin-only (see server/access.mjs): the Plaid keys are the
+// operator's, and a regular account has no bank side at all.
 const bank = createBank(prisma);
-bank.register(app, requireAuth);
+bank.register(app, requireAuth, requireAdmin);
 
 // Gemini config + image-parsing proxy. Keys (shared or per-user) stay
 // server-side and are never returned to the browser (see server/gemini.mjs).
@@ -898,7 +900,10 @@ app.get("/api/receipts/food-summary", requireAuth, async (req, res) => {
         },
         orderBy: { createdAt: "desc" }
       }),
-      prisma.bankTransaction.findMany({ where: txnWhere, orderBy: { date: "desc" } })
+      // The bank side is admin-only, so a regular account's total is its
+      // receipts alone; an account demoted from admin keeps its rows but stops
+      // counting them.
+      req.isAdmin ? prisma.bankTransaction.findMany({ where: txnWhere, orderBy: { date: "desc" } }) : []
     ]);
 
     const selfAccountPersonId = selfPerson?.id ?? null;
@@ -956,7 +961,7 @@ app.get("/api/receipts/food-summary", requireAuth, async (req, res) => {
 });
 
 // PATCH /api/receipts/:receiptId/link-transaction - Link receipt to bank transaction
-app.patch("/api/receipts/:receiptId/link-transaction", requireAuth, async (req, res) => {
+app.patch("/api/receipts/:receiptId/link-transaction", requireAuth, requireAdmin, async (req, res) => {
   const body = req.body ?? {};
   const bankTransactionId = String(body.bankTransactionId ?? "").trim();
 
@@ -1017,7 +1022,7 @@ app.patch("/api/receipts/:receiptId/link-transaction", requireAuth, async (req, 
 });
 
 // DELETE /api/receipts/:receiptId/link-transaction - Unlink receipt from transaction
-app.delete("/api/receipts/:receiptId/link-transaction", requireAuth, async (req, res) => {
+app.delete("/api/receipts/:receiptId/link-transaction", requireAuth, requireAdmin, async (req, res) => {
   try {
     // Verify receipt belongs to user
     const receipt = await prisma.receipt.findFirst({
@@ -1080,6 +1085,11 @@ app.post("/api/rent-entries", requireAuth, async (req, res) => {
   }
   if (bankTransactionId !== undefined && bankTransactionId !== null && !isShortString(bankTransactionId)) {
     return res.status(400).json({ error: "bankTransactionId must be a short string." });
+  }
+  // A rent entry backed by a bank transaction is a bank feature, so admin-only;
+  // a rent entry typed in by hand is for everyone.
+  if (bankTransactionId && !req.isAdmin) {
+    return res.status(403).json({ error: "Only admin accounts can log rent from a bank transaction." });
   }
 
   const photo = photoDataUrl ? parseImageDataUrl(photoDataUrl) : null;

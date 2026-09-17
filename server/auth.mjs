@@ -11,7 +11,7 @@ import {
   hashToken,
   dummyPasswordHash
 } from "./crypto.mjs";
-import { allowedLoginEmail, isLockedOut } from "./access.mjs";
+import { adminEmails, allowedEmails, isAdmin, isLockedOut, publicSignupAllowed } from "./access.mjs";
 import { isProduction } from "./deployment.mjs";
 
 const SESSION_COOKIE = "rr_session";
@@ -49,8 +49,11 @@ function clearAttempts(key) {
   loginAttempts.delete(key);
 }
 
+// What the browser learns about the signed-in account. isAdmin decides which
+// surfaces it shows (the bank side of budgeting is admin-only); the server
+// enforces the same line on every route regardless.
 function publicUser(user) {
-  return { id: user.id, email: user.email, name: user.name };
+  return { id: user.id, email: user.email, name: user.name, isAdmin: isAdmin(user.email) };
 }
 
 export function createAuth(prisma) {
@@ -58,12 +61,15 @@ export function createAuth(prisma) {
   // there is no account (or no stored hash) to compare against.
   const dummyHash = dummyPasswordHash();
 
-  // Single-account lock (see server/access.mjs): with ALLOWED_LOGIN_EMAIL set,
-  // only that address can register or log in, and every other session stops
-  // working. Production refuses to start without it unless open sign-up was
-  // asked for explicitly.
-  const allowedEmail = allowedLoginEmail();
-  if (allowedEmail) console.log(`Access locked to ${allowedEmail}: no other account can register or sign in.`);
+  // Who may sign in and who is an admin is decided by server/access.mjs from
+  // the environment; say what was decided, once, where a deploy log shows it.
+  const admins = [...adminEmails()];
+  const signup = publicSignupAllowed()
+    ? "open to anyone"
+    : allowedEmails().size > 0
+      ? `closed to ${allowedEmails().size} listed account(s)`
+      : "open (nothing configured)";
+  console.log(`Access: sign-up ${signup}; admin accounts: ${admins.length > 0 ? admins.join(", ") : "none"}.`);
 
   // Expired sessions were only ever deleted if that exact token was presented
   // again after expiry -- which a browser never does, because the cookie's
@@ -126,11 +132,22 @@ export function createAuth(prisma) {
       }
 
       req.userId = session.userId;
+      req.userEmail = session.user.email;
+      req.isAdmin = isAdmin(session.user.email);
       next();
     } catch (error) {
       console.error("Auth check failed:", error);
       res.status(500).json({ error: "Authentication check failed." });
     }
+  };
+
+  // For routes that are admin features: the bank, and anything that reads or
+  // writes bank transactions. Runs after requireAuth, which sets req.isAdmin.
+  const requireAdmin = (req, res, next) => {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: "This feature is only available to admin accounts." });
+    }
+    next();
   };
 
   // Registers routes only. The cookie parser requireAuth depends on is mounted
@@ -226,5 +243,5 @@ export function createAuth(prisma) {
     });
   }
 
-  return { requireAuth, register };
+  return { requireAuth, requireAdmin, register };
 }

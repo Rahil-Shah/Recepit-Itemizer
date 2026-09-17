@@ -230,6 +230,13 @@ h3 {
 /* ---- Which surface is showing ----
    pending: the session check is in flight, so nothing but the brand mark.
    anon:    the landing page. user: the app. Set on <body> by main.ts. */
+/* Admin-only surfaces (the bank panel) stay out of a regular account's view.
+   The server refuses the routes behind them regardless; this keeps the page
+   from offering buttons that could only fail. */
+body[data-access="regular"] .admin-only {
+  display: none;
+}
+
 body[data-auth="pending"] .landing,
 body[data-auth="pending"] .app-shell,
 body[data-auth="anon"] .app-shell,

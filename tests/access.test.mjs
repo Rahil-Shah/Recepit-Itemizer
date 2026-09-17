@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  allowedLoginEmail,
+  adminEmails,
+  allowedEmails,
   assertAccessPolicy,
+  isAdmin,
   isLocked,
   isLockedOut,
-  mayUseSharedGeminiKey
+  mayUseSharedGeminiKey,
+  publicSignupAllowed
 } from "../server/access.mjs";
 
 // Each test sets the environment it needs and puts it back, so the order the
@@ -27,59 +30,100 @@ function withEnv(values, run) {
   }
 }
 
-const open = { ALLOWED_LOGIN_EMAIL: undefined, ALLOW_PUBLIC_SIGNUP: undefined };
-const locked = { ALLOWED_LOGIN_EMAIL: " Owner@Example.com ", ALLOW_PUBLIC_SIGNUP: undefined };
+const nothing = {
+  ADMIN_EMAILS: undefined,
+  ALLOWED_LOGIN_EMAILS: undefined,
+  ALLOWED_LOGIN_EMAIL: undefined,
+  ALLOW_PUBLIC_SIGNUP: undefined
+};
+const oneAdmin = { ...nothing, ADMIN_EMAILS: " Owner@Example.com " };
+const adminAndGuests = {
+  ...nothing,
+  ADMIN_EMAILS: "owner@example.com",
+  ALLOWED_LOGIN_EMAILS: "Friend@Example.com, partner@example.com;  "
+};
 
-test("an unset or blank ALLOWED_LOGIN_EMAIL leaves the deployment open", () => {
-  withEnv(open, () => {
-    assert.equal(allowedLoginEmail(), null);
+test("with nothing configured the app is open and nobody is an admin", () => {
+  withEnv(nothing, () => {
+    assert.equal(adminEmails().size, 0);
+    assert.equal(allowedEmails().size, 0);
     assert.equal(isLocked(), false);
     assert.equal(isLockedOut("anyone@example.com"), false);
-    assert.equal(mayUseSharedGeminiKey("anyone@example.com"), true);
-  });
-  withEnv({ ...open, ALLOWED_LOGIN_EMAIL: "   " }, () => {
-    assert.equal(isLocked(), false);
+    assert.equal(isAdmin("anyone@example.com"), false);
+    assert.equal(mayUseSharedGeminiKey("anyone@example.com"), false);
   });
 });
 
-test("the allowed address is normalised, and compared case-insensitively", () => {
-  withEnv(locked, () => {
-    assert.equal(allowedLoginEmail(), "owner@example.com");
-    assert.equal(isLockedOut("OWNER@example.com"), false);
-    assert.equal(isLockedOut("  owner@EXAMPLE.com "), false);
+test("addresses are trimmed, lowercased, and split on commas, semicolons or whitespace", () => {
+  withEnv(adminAndGuests, () => {
+    assert.deepEqual([...adminEmails()], ["owner@example.com"]);
+    assert.deepEqual([...allowedEmails()].sort(), ["friend@example.com", "owner@example.com", "partner@example.com"]);
+    assert.equal(isAdmin("OWNER@example.com"), true);
+    assert.equal(isLockedOut("  Friend@EXAMPLE.com "), false);
   });
 });
 
-test("when locked, every other address is locked out of everything", () => {
-  withEnv(locked, () => {
+test("an admin list alone locks sign-in to the admins", () => {
+  withEnv(oneAdmin, () => {
     assert.equal(isLocked(), true);
+    assert.equal(isLockedOut("owner@example.com"), false);
     assert.equal(isLockedOut("other@example.com"), true);
     assert.equal(isLockedOut(""), true);
     assert.equal(isLockedOut(null), true);
     assert.equal(isLockedOut(undefined), true);
-    assert.equal(mayUseSharedGeminiKey("other@example.com"), false);
-    assert.equal(mayUseSharedGeminiKey("owner@example.com"), true);
   });
 });
 
-test("production refuses to start open unless open sign-up is explicit", () => {
-  withEnv(open, () => {
-    assert.throws(() => assertAccessPolicy({ production: true }), /ALLOWED_LOGIN_EMAIL is not set/);
+test("listed non-admins may sign in but may not spend the shared Gemini key", () => {
+  withEnv(adminAndGuests, () => {
+    assert.equal(isLockedOut("friend@example.com"), false);
+    assert.equal(isAdmin("friend@example.com"), false);
+    assert.equal(mayUseSharedGeminiKey("friend@example.com"), false);
+    assert.equal(mayUseSharedGeminiKey("owner@example.com"), true);
+    assert.equal(isLockedOut("stranger@example.com"), true);
   });
-  withEnv(locked, () => {
-    assert.doesNotThrow(() => assertAccessPolicy({ production: true }));
-  });
-  withEnv({ ...open, ALLOW_PUBLIC_SIGNUP: "true" }, () => {
-    assert.doesNotThrow(() => assertAccessPolicy({ production: true }));
+});
+
+test("ALLOW_PUBLIC_SIGNUP=true opens sign-in to anyone without making them admins", () => {
+  withEnv({ ...adminAndGuests, ALLOW_PUBLIC_SIGNUP: "true" }, () => {
+    assert.equal(publicSignupAllowed(), true);
+    assert.equal(isLocked(), false);
+    assert.equal(isLockedOut("stranger@example.com"), false);
+    assert.equal(isAdmin("stranger@example.com"), false);
+    assert.equal(isAdmin("owner@example.com"), true);
   });
   // Anything but the literal "true" is not an opt-in.
-  withEnv({ ...open, ALLOW_PUBLIC_SIGNUP: "yes" }, () => {
-    assert.throws(() => assertAccessPolicy({ production: true }));
+  withEnv({ ...oneAdmin, ALLOW_PUBLIC_SIGNUP: "yes" }, () => {
+    assert.equal(publicSignupAllowed(), false);
+    assert.equal(isLockedOut("stranger@example.com"), true);
+  });
+});
+
+test("the old single-account ALLOWED_LOGIN_EMAIL still counts as an admin", () => {
+  withEnv({ ...nothing, ALLOWED_LOGIN_EMAIL: "Owner@Example.com" }, () => {
+    assert.equal(isAdmin("owner@example.com"), true);
+    assert.equal(isLocked(), true);
+    assert.equal(isLockedOut("other@example.com"), true);
+  });
+});
+
+test("production refuses to start when nobody could sign in", () => {
+  withEnv(nothing, () => {
+    assert.throws(() => assertAccessPolicy({ production: true }), /No account is allowed to sign in/);
+  });
+  withEnv(oneAdmin, () => {
+    assert.doesNotThrow(() => assertAccessPolicy({ production: true }));
+  });
+  withEnv({ ...nothing, ALLOWED_LOGIN_EMAILS: "friend@example.com" }, () => {
+    assert.doesNotThrow(() => assertAccessPolicy({ production: true }));
+  });
+  withEnv({ ...nothing, ALLOW_PUBLIC_SIGNUP: "true" }, () => {
+    assert.doesNotThrow(() => assertAccessPolicy({ production: true }));
   });
 });
 
 test("outside production the policy never blocks startup", () => {
-  withEnv(open, () => {
+  withEnv(nothing, () => {
     assert.doesNotThrow(() => assertAccessPolicy({ production: false }));
   });
 });

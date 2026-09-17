@@ -8,11 +8,18 @@ import "dotenv/config";
 // is missing, which made `npm run build` fail without a DATABASE_URL.)
 //
 // Migrations must not run through a transaction-mode connection pooler
-// (PgBouncer, Neon's pooled endpoint), so they take a direct URL when one is
-// given: DIRECT_DATABASE_URL, or the DATABASE_URL_UNPOOLED that the Vercel
-// Postgres / Neon integration sets. The app itself always uses DATABASE_URL.
+// (PgBouncer, Supabase's or Neon's pooled endpoint), so they take a direct or
+// session-mode URL when one is given: DIRECT_DATABASE_URL, or the unpooled
+// variable that the Vercel Postgres (DATABASE_URL_UNPOOLED) and Supabase
+// (POSTGRES_URL_NON_POOLING) integrations set. Failing those, the app's own
+// URL. The app itself uses DATABASE_URL, or the integrations' POSTGRES_URL
+// (see server/deployment.mjs).
 const migrationUrl =
-  process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  process.env.DIRECT_DATABASE_URL ||
+  process.env.DATABASE_URL_UNPOOLED ||
+  process.env.POSTGRES_URL_NON_POOLING ||
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL;
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
