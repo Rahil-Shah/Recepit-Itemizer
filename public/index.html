@@ -954,6 +954,8 @@
         <div class="settings-form">
           <div class="field">
             <label class="field-label" for="geminiApiKey">Gemini API key</label>
+            <!-- The placeholder is rewritten when a key is already saved, so a
+                 blank box never reads as "your key is gone". -->
             <input class="table-input" id="geminiApiKey" type="password" autocomplete="off" placeholder="Enter Gemini API key" />
             <p class="settings-status" id="geminiKeyStatus"></p>
           </div>

@@ -956,7 +956,13 @@ namespace ReceiptRing.App {
 
     private openSettings(): void {
       // The key is write-only from the browser's side: never prefill the field.
+      // An empty box is the only thing a returning user sees, though, which
+      // reads as "your key is gone, type it again" when it is in fact saved.
+      // The placeholder is what says otherwise.
       this.elements.geminiApiKey.value = "";
+      this.elements.geminiApiKey.placeholder = this.userHasGeminiKey
+        ? "Saved — leave blank to keep it"
+        : "Enter Gemini API key";
       this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash-lite";
       this.renderGeminiKeyStatus();
       this.elements.settingsModal.classList.remove("hidden");
@@ -975,13 +981,13 @@ namespace ReceiptRing.App {
         return;
       }
       if (this.userHasGeminiKey) {
-        status.textContent = "Using your saved personal key.";
+        status.textContent = "Your key is saved to your account and used for every receipt.";
         status.classList.add("is-active");
       } else if (this.serverHasGeminiKey) {
         status.textContent = "Using the shared server key. Add a key to use your own.";
         status.classList.remove("is-active");
       } else {
-        status.textContent = "No key configured yet. Add one to parse receipts.";
+        status.textContent = "No key yet. Add one and it is saved to your account for next time.";
         status.classList.remove("is-active");
       }
       this.elements.removeKeyButton.classList.toggle("hidden", !this.userHasGeminiKey);
@@ -1003,6 +1009,7 @@ namespace ReceiptRing.App {
         await this.geminiService.saveApiKey(key);
         this.userHasGeminiKey = true;
         this.elements.geminiApiKey.value = "";
+        this.notificationService.success("Gemini key saved to your account.");
         this.closeSettings();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Could not save the key.";
