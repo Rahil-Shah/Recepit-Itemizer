@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#FDFCF8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=Nunito:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="landing.css" />
+    <title>Privacy Policy · Receipt Ring</title>
+  </head>
+  <body data-auth="anon">
+    <main class="page-shell">
+      <a class="page-back" href="/">&larr; Back to Receipt Ring</a>
+      <h1 class="page-title">Privacy Policy</h1>
+      <p class="page-updated">Last updated 17 September 2026</p>
+
+      <div class="page-callout">
+        <p>
+          Receipt Ring is a small personal project. It has no advertising, no analytics and no trackers,
+          and your data is never sold or shared for marketing.
+        </p>
+      </div>
+
+      <h2>Who runs this service</h2>
+      <p>
+        Receipt Ring is operated by [OPERATOR NAME]. Questions about this policy or about your data can be
+        sent to [CONTACT EMAIL].
+      </p>
+
+      <h2>What is stored</h2>
+      <ul>
+        <li><strong>Your account:</strong> your email address, an optional display name, and your password stored only as a salted scrypt hash. The password itself is never stored.</li>
+        <li><strong>Receipts you save:</strong> the store, date, line items, amounts, the split between the people you named, and the receipt photo if you attach one.</li>
+        <li><strong>Names you confirm:</strong> corrections you make to abbreviated item names, so the same item is recognised next time.</li>
+        <li><strong>Rent entries:</strong> amounts, dates and any photo you attach, if you use the education expense tracker.</li>
+        <li><strong>Your Gemini API key, if you add one:</strong> encrypted with AES-256-GCM before it is stored, and never sent back to your browser.</li>
+        <li><strong>Bank transactions, for admin accounts that connect a bank:</strong> imported read-only through Plaid. The access token is encrypted at rest. Bank credentials are entered with Plaid and never reach this service.</li>
+        <li><strong>A session cookie</strong> so you stay signed in, and short-lived counters used to rate limit sign-in attempts.</li>
+      </ul>
+
+      <h2>What is not stored</h2>
+      <p>
+        No analytics, no advertising identifiers, no third-party tracking cookies, and no location data. The
+        only cookie is the one that keeps you signed in.
+      </p>
+
+      <h2>Who else sees it</h2>
+      <ul>
+        <li><strong>Google:</strong> when you scan a receipt, the photo is sent to the Gemini API to be read. When you identify items, the item text is sent. Google processes this under its own terms.</li>
+        <li><strong>Plaid:</strong> only if an admin account connects a bank. Plaid handles the bank login directly and returns transaction data.</li>
+        <li><strong>Hosting and database providers</strong> that run the service and store its data on the operator's behalf.</li>
+      </ul>
+      <p>Data is not sold, rented, or shared with anyone else.</p>
+
+      <h2>How long it is kept</h2>
+      <p>
+        Your data is kept until you delete it. You can delete individual receipts at any time, and you can
+        delete your entire account from <strong>Settings</strong>. Deleting your account removes your
+        receipts, photos, saved item names, people, rent entries and any bank connection. Deletion is
+        immediate and cannot be undone. Backups, if any, age out on their own schedule.
+      </p>
+
+      <h2>Security</h2>
+      <p>
+        Traffic is served over HTTPS. Passwords are hashed, and API keys and bank tokens are encrypted at
+        rest. No system is perfectly secure, and this one is a personal project rather than a bank, so
+        please do not store anything here you could not stand to lose.
+      </p>
+
+      <h2>Children</h2>
+      <p>This service is not intended for children under 13, and accounts should not be created for them.</p>
+
+      <h2>Changes</h2>
+      <p>
+        If this policy changes, the date at the top changes with it. Continuing to use the service after a
+        change means the updated policy applies.
+      </p>
+    </main>
+  </body>
+</html>

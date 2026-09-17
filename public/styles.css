@@ -230,11 +230,102 @@ h3 {
 /* ---- Which surface is showing ----
    pending: the session check is in flight, so nothing but the brand mark.
    anon:    the landing page. user: the app. Set on <body> by main.ts. */
-/* Admin-only surfaces (the bank panel) stay out of a regular account's view.
-   The server refuses the routes behind them regardless; this keeps the page
-   from offering buttons that could only fail. */
+/* Which surfaces an account sees. The server refuses the routes behind the
+   admin ones regardless; this keeps the page from offering buttons that could
+   only fail, and gives a regular account something to read in their place.
+   Both default to hidden so neither flashes before the account type is known. */
 body[data-access="regular"] .admin-only {
   display: none;
+}
+
+.regular-only {
+  display: none;
+}
+
+body[data-access="regular"] .regular-only {
+  display: grid;
+}
+
+.coming-soon-badge {
+  align-self: center;
+  margin-bottom: 4px;
+  padding: 4px 14px;
+  border: 1px solid var(--warm-border);
+  border-radius: var(--radius-pill);
+  background: var(--warm-soft);
+  color: var(--warm-ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* A quiet aside under a panel's contents: a caveat, not a warning. */
+.panel-note {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* --- Settings: the part you cannot undo --- */
+.settings-danger {
+  margin-top: 24px;
+  padding: 18px 20px;
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-sm);
+  background: var(--red-soft);
+}
+
+.settings-danger h3 {
+  margin: 0 0 6px;
+  color: var(--red);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-danger p {
+  margin: 0 0 12px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.settings-danger-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.settings-danger-row .table-input {
+  flex: 1 1 180px;
+}
+
+.btn-danger {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fdfcf8;
+}
+
+.btn-danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+/* The line under the sign-up form pointing at the terms. */
+.auth-legal {
+  margin: 10px 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.auth-legal a {
+  color: var(--ink-2);
+  text-decoration: underline;
 }
 
 body[data-auth="pending"] .landing,

@@ -53,5 +53,19 @@ namespace ReceiptRing.Services {
     async logout(): Promise<void> {
       await this.request("/api/auth/logout", { method: "POST" });
     }
+
+    /**
+     * Close the account and delete everything in it. The password is required
+     * again here: a live session alone should not be enough to destroy an
+     * account, and it costs one field to ask.
+     */
+    async deleteAccount(password: string): Promise<void> {
+      const response = await this.request("/api/auth/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password })
+      });
+      if (!response.ok) throw new Error(await this.parseError(response));
+    }
   }
 }

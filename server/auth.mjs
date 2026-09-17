@@ -26,35 +26,12 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
 
-// Naive in-memory login throttle: max attempts per key within a rolling window.
+// Per-account login throttle: how many guesses one address may make against
+// one email before it has to wait. Counted in Postgres rather than in memory,
+// so it holds across instances and cold starts -- an in-memory count is no
+// obstacle to anyone who can spread guesses over a few serverless instances.
 const MAX_ATTEMPTS = 10;
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
-const loginAttempts = new Map();
-
-// Entries used to be removed only by clearAttempts() on a *successful* login,
-// so every failed attempt against a non-existent account leaked a map entry
-// for the life of the process. Expire them on a timer instead.
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of loginAttempts) {
-    if (now - entry.first > ATTEMPT_WINDOW_MS) loginAttempts.delete(key);
-  }
-}, ATTEMPT_WINDOW_MS).unref();
-
-function tooManyAttempts(key) {
-  const now = Date.now();
-  const entry = loginAttempts.get(key);
-  if (!entry || now - entry.first > ATTEMPT_WINDOW_MS) {
-    loginAttempts.set(key, { count: 1, first: now });
-    return false;
-  }
-  entry.count += 1;
-  return entry.count > MAX_ATTEMPTS;
-}
-
-function clearAttempts(key) {
-  loginAttempts.delete(key);
-}
 
 // What the browser learns about the signed-in account. isAdmin decides which
 // surfaces it shows (the bank side of budgeting is admin-only); the server
@@ -63,7 +40,7 @@ function publicUser(user) {
   return { id: user.id, email: user.email, name: user.name, isAdmin: isAdmin(user.email) };
 }
 
-export function createAuth(prisma) {
+export function createAuth(prisma, limitStore = null) {
   // Built once at startup so login can compare against something real when
   // there is no account (or no stored hash) to compare against.
   const dummyHash = dummyPasswordHash();
@@ -217,10 +194,19 @@ export function createAuth(prisma) {
     app.post("/api/auth/login", async (req, res) => {
       const email = String(req.body?.email ?? "").trim().toLowerCase();
       const password = String(req.body?.password ?? "");
-      const throttleKey = `${req.ip}:${email}`;
+      // Keyed on both address and email so one person guessing at one account
+      // cannot lock out everybody else behind the same address.
+      const throttleKey = `login-account:${req.ip}:${email}`;
 
-      if (tooManyAttempts(throttleKey)) {
-        return res.status(429).json({ error: "Too many attempts. Try again later." });
+      if (limitStore) {
+        const attempt = await limitStore.check(throttleKey, {
+          windowMs: ATTEMPT_WINDOW_MS,
+          max: MAX_ATTEMPTS
+        });
+        if (!attempt.allowed) {
+          res.setHeader("Retry-After", String(attempt.retryAfterSeconds));
+          return res.status(429).json({ error: "Too many attempts. Try again later." });
+        }
       }
 
       try {
@@ -238,7 +224,7 @@ export function createAuth(prisma) {
         if (!user || !stored || !ok || isLockedOut(user.email)) {
           return res.status(401).json({ error: "Invalid email or password." });
         }
-        clearAttempts(throttleKey);
+        if (limitStore) await limitStore.reset(throttleKey);
         await startSession(req, res, user.id);
         res.json(publicUser(user));
       } catch (error) {
@@ -254,6 +240,44 @@ export function createAuth(prisma) {
       }
       res.clearCookie(SESSION_COOKIE, { path: "/" });
       res.status(204).end();
+    });
+
+    // Close the account and remove everything belonging to it.
+    //
+    // Receipts are deliberately deleted first. Their relation to the user is
+    // onDelete: SetNull (a receipt outlives the account that saved it, which
+    // is what keeps a shared receipt readable), so deleting the user alone
+    // would leave every receipt and every stored photo behind with no owner
+    // and no way to reach them -- the opposite of what "delete my account"
+    // promises. Everything else (sessions, people, rent, aliases, bank
+    // connections) cascades from the user row.
+    app.delete("/api/auth/account", requireAuth, async (req, res) => {
+      const password = String(req.body?.password ?? "");
+
+      try {
+        const user = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!user) return res.status(401).json({ error: "Authentication required." });
+
+        // A live session is not enough to destroy the account: someone at a
+        // borrowed laptop should not be able to, and it costs one field.
+        const ok = user.passwordHash
+          ? await verifyPassword(password, user.passwordHash)
+          : false;
+        if (!ok) {
+          return res.status(403).json({ error: "That password is not correct." });
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.receipt.deleteMany({ where: { userId: req.userId } });
+          await tx.user.delete({ where: { id: req.userId } });
+        });
+
+        res.clearCookie(SESSION_COOKIE, { path: "/" });
+        res.status(204).end();
+      } catch (error) {
+        console.error("Account deletion failed:", error);
+        res.status(500).json({ error: "Could not delete your account." });
+      }
     });
 
     app.get("/api/auth/me", requireAuth, async (req, res) => {

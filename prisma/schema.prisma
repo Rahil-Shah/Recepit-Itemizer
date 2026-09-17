@@ -264,6 +264,18 @@ model LineAssignment {
   @@map("line_assignments")
 }
 
+// One rate limit window, keyed "<bucket>:<client>". Shared by every instance,
+// because in-memory counters reset on each serverless cold start (see
+// server/rate-limit-db.mjs). Rows are disposable.
+model RateLimit {
+  key     String   @id
+  count   Int      @default(0)
+  resetAt DateTime
+
+  @@index([resetAt])
+  @@map("rate_limits")
+}
+
 model RentEntry {
   id                String   @id @default(cuid())
   userId            String

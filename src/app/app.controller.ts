@@ -109,7 +109,8 @@ namespace ReceiptRing.App {
       private readonly rentEntriesView: UI.RentEntriesView,
       private readonly notificationService: Services.NotificationService,
       private readonly itemIdentityService: Services.ItemIdentityService,
-      private readonly itemAliasStoreService: Services.ItemAliasStoreService
+      private readonly itemAliasStoreService: Services.ItemAliasStoreService,
+      private readonly authApiService: Services.AuthApiService
     ) {
       this.items = this.storageService.load();
     }
@@ -129,6 +130,7 @@ namespace ReceiptRing.App {
     }
 
     private bindEvents(): void {
+      this.elements.deleteAccountButton.addEventListener("click", () => void this.deleteAccount());
       this.elements.sampleButton.addEventListener("click", () => this.loadSample());
       this.elements.dropzone.addEventListener("click", (event) => {
         if (event.target === this.elements.receiptImage) return;
@@ -954,7 +956,44 @@ namespace ReceiptRing.App {
       this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash-lite";
     }
 
+    /**
+     * Close the account for good.
+     *
+     * Confirmed twice on purpose: once with the password, which the server
+     * checks, and once with a dialog naming what goes, because a live session
+     * alone should not be able to destroy somebody's receipts.
+     */
+    private async deleteAccount(): Promise<void> {
+      const password = this.elements.deleteAccountPassword.value;
+      const status = this.elements.deleteAccountStatus;
+
+      if (!password) {
+        status.textContent = "Enter your password to confirm.";
+        return;
+      }
+      const confirmed = window.confirm(
+        "Delete your account? Your receipts, photos, saved item names and rent entries are removed. This cannot be undone."
+      );
+      if (!confirmed) return;
+
+      this.elements.deleteAccountButton.setAttribute("disabled", "true");
+      status.textContent = "Deleting…";
+      try {
+        await this.authApiService.deleteAccount(password);
+        // Nothing left to show, and the session cookie is gone: start over at
+        // the landing page rather than leaving a dead workspace on screen.
+        window.location.assign("/");
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : "Could not delete your account.";
+        this.elements.deleteAccountButton.removeAttribute("disabled");
+      } finally {
+        this.elements.deleteAccountPassword.value = "";
+      }
+    }
+
     private openSettings(): void {
+      this.elements.deleteAccountPassword.value = "";
+      this.elements.deleteAccountStatus.textContent = "";
       // The key is write-only from the browser's side: never prefill the field.
       // An empty box is the only thing a returning user sees, though, which
       // reads as "your key is gone, type it again" when it is in fact saved.

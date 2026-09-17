@@ -12,6 +12,7 @@ import { registerGemini } from "./server/gemini.mjs";
 import { registerItemIdentity } from "./server/item-identity.mjs";
 import { identificationFields, normalizeStoredItemCode } from "./server/identification.mjs";
 import { createRateLimiter } from "./server/rate-limit.mjs";
+import { createRateLimitStore, dbRateLimiter } from "./server/rate-limit-db.mjs";
 import { parseMonthParam, getMonthRange, getUtcMonthRange } from "./server/month.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
 import { assertAccessPolicy, maxReceiptsPerUser } from "./server/access.mjs";
@@ -92,7 +93,14 @@ app.use((req, res, next) => {
 // body of an unauthenticated request before the limiter or the 401 was
 // reached, so a handful of concurrent posts to the Gemini route could exhaust
 // memory without so much as a cookie.
+// The in-memory limiter is the free first line: no query, and it turns away a
+// flood before it reaches the database. It cannot be the only line, because
+// each serverless instance keeps its own copy and a cold start forgets it --
+// so the routes worth protecting also count in Postgres, shared by every
+// instance (see server/rate-limit-db.mjs).
 app.use("/api", createRateLimiter({ windowMs: 15 * 60 * 1000, max: 300 }));
+const limitStore = createRateLimitStore(prisma);
+
 const authLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 30,
@@ -101,12 +109,41 @@ const authLimiter = createRateLimiter({
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
 
+// Shared across instances: what actually bounds credential stuffing and mass
+// account creation on a public URL.
+app.use(
+  "/api/auth/login",
+  dbRateLimiter(limitStore, {
+    bucket: "login",
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    message: "Too many sign-in attempts. Try again later."
+  })
+);
+// Registration is rarer than login by nature, and each one costs a row that
+// counts against MAX_USERS, so it gets a tighter window of its own.
+app.use(
+  "/api/auth/register",
+  dbRateLimiter(limitStore, {
+    bucket: "register",
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    message: "Too many accounts created from here. Try again later."
+  })
+);
+
 // Identification calls a paid model on the operator's key, and the browser
 // will happily fire one per receipt. The blanket /api limit is far too loose
 // for a route that costs money per request, so this one gets its own -- tight
 // enough to bound a runaway client or a scripted caller, loose enough that a
 // person working through a stack of receipts never meets it.
 const identifyLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  message: "Too many identification requests. Give it a minute."
+});
+const identifyLimiterShared = dbRateLimiter(limitStore, {
+  bucket: "identify",
   windowMs: 15 * 60 * 1000,
   max: 40,
   message: "Too many identification requests. Give it a minute."
@@ -131,8 +168,17 @@ const parseLimiter = createRateLimiter({
   message: "Too many receipt scans in a row. Give it a minute and try again."
 });
 app.use("/api/gemini/parse", parseLimiter);
+app.use(
+  "/api/gemini/parse",
+  dbRateLimiter(limitStore, {
+    bucket: "parse",
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    message: "Too many receipt scans in a row. Give it a minute and try again."
+  })
+);
 
-const auth = createAuth(prisma);
+const auth = createAuth(prisma, limitStore);
 const { requireAuth, requireAdmin } = auth;
 
 // Cookies are parsed here rather than inside auth.register() because
@@ -179,7 +225,7 @@ registerGemini(app, requireAuth, prisma);
 // Expands abbreviated receipt lines into real product names. Only the lines
 // the browser could not resolve for free get this far (see
 // src/services/item-identity.service.ts for the tiers in front of it).
-registerItemIdentity(app, requireAuth, prisma, identifyLimiter);
+registerItemIdentity(app, requireAuth, prisma, [identifyLimiter, identifyLimiterShared]);
 
 // --- API -------------------------------------------------------------------
 
@@ -1345,7 +1391,19 @@ app.use("/api", (_req, res) => {
 // so there is nothing to block -- which is the whole reason for the
 // directory. On Vercel the CDN serves it and this handler is never reached
 // (see vercel.json); dotfiles: "ignore" keeps any stray dotfile a 404 here.
-app.use(express.static(path.join(__dirname, "public"), { dotfiles: "ignore", index: "index.html" }));
+const publicDir = path.join(__dirname, "public");
+app.use(express.static(publicDir, { dotfiles: "ignore", index: "index.html" }));
+
+// Anything else is a page that does not exist. Vercel serves public/404.html
+// for these on its own; this is the same answer when the server is hosting the
+// files itself, so a self-hosted deployment does not fall through to Express's
+// bare text 404.
+app.use((req, res, next) => {
+  if (req.method !== "GET" && req.method !== "HEAD") return next();
+  res.status(404).sendFile(path.join(publicDir, "404.html"), (error) => {
+    if (error) res.status(404).type("txt").send("Not found");
+  });
+});
 
 // Terminal error handler. Without one, Express's default handler renders the
 // stack trace into the response whenever NODE_ENV isn't "production" — so

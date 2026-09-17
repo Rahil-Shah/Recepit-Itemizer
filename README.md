@@ -21,8 +21,10 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
      ```
 4. **Per-user keys**: Any account can add its own Gemini API key from the settings panel. It is stored server-side, encrypted at rest with AES-256-GCM, and is never sent back to the browser — the app only ever reports whether a key exists.
 5. **Capacity limits**: an instance holds at most `MAX_USERS` accounts (20 by default), and each non-admin account at most `MAX_RECEIPTS_PER_USER` receipts (20 by default). Registration past the account limit answers 403, as does saving past the receipt limit; editing or deleting existing receipts is unaffected. Admins are exempt from both, so a full instance never locks the owner out. A blank or malformed value falls back to the default rather than lifting the limit.
-6. **Admin accounts and everyone else**: `ADMIN_EMAILS` lists the accounts that may spend the shared `GEMINI_API_KEY` from `.env` and use the Plaid integration (connect a bank, import transactions, attach receipts and rent to them). Every other account parses with a personal key, splits and saves receipts, and tracks education expenses by hand — food lines on receipts and rent entries still work, the bank side of Budgeting is hidden and its routes answer 403. Who may hold an account at all is a separate switch: `ALLOWED_LOGIN_EMAILS` (a closed list; admins are always on it) or `ALLOW_PUBLIC_SIGNUP=true` (anyone). A production deployment refuses to start with neither.
-7. **Row-level security**: every table has RLS enabled with no policies (migration `20260917120000`). The app connects as the table owner, which bypasses RLS, so nothing changes for it; on Supabase it means the project's REST API and anon key can read nothing, even before you close the API off in the dashboard.
+6. **Admin accounts and everyone else**: `ADMIN_EMAILS` lists the accounts that may spend the shared `GEMINI_API_KEY` from `.env` and use the Plaid integration. Every other account brings its own Gemini key and never touches the bank side. Who may hold an account at all is a separate switch: `ALLOWED_LOGIN_EMAILS` (a closed list; admins are always on it) or `ALLOW_PUBLIC_SIGNUP=true` (anyone). A production deployment refuses to start with neither. See [Admin and regular accounts](#-admin-and-regular-accounts) for what each tier can do.
+7. **Rate limiting**: sign-in, registration, receipt scanning and item identification are counted in Postgres, so one window is shared by every instance. In-memory counters sit in front of them as a free first line, but they cannot be the only line on a serverless host, where each instance keeps its own copy and a cold start forgets it.
+8. **Account deletion**: any account can delete itself from **Settings**, with a password confirmation. That removes its receipts and photos too, which the database would otherwise keep (a receipt's owner link is `SetNull`, so deleting the user alone would orphan them).
+9. **Row-level security**: every table has RLS enabled with no policies (migration `20260917120000`). The app connects as the table owner, which bypasses RLS, so nothing changes for it; on Supabase it means the project's REST API and anon key can read nothing, even before you close the API off in the dashboard.
 
 ---
 
@@ -43,6 +45,30 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 - **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
 - **Landing Page**: Visitors without a session land on a page that explains the app, with **Log in** / **Get started** opening the account dialog. Signed-in users go straight to the workspace. Everything the browser loads lives in `public/`: plain HTML + CSS (`styles.css` holds the design tokens and app components, `landing.css` the landing sections) and `app.js`, the TypeScript under `src/` compiled by `npm run build`.
+
+---
+
+## 👤 Admin and regular accounts
+
+| | Admin | Regular |
+| --- | --- | --- |
+| Scan and split receipts | yes | yes |
+| Gemini key used | the server's `GEMINI_API_KEY`, or a personal one | a personal key only |
+| Saved receipts | unlimited | `MAX_RECEIPTS_PER_USER` (20) |
+| Education expenses: food lines, rent entries | yes | yes |
+| Spending ring and monthly trend | yes | yes |
+| Connect a bank through Plaid | yes | no |
+| Imported bank transactions | yes | no |
+| Attach a receipt to a transaction | yes | no |
+| Log rent from a bank transaction | yes | no |
+
+An account is an admin when its email is listed in `ADMIN_EMAILS`. Nothing in the database marks it,
+so promoting or demoting someone is an environment change and a redeploy.
+
+A regular account sees the Bank transactions panel with a **Coming soon** note in place of the Plaid
+controls, rather than a missing panel: the feature exists, it is just not open to them. The server
+enforces the same line independently — every Plaid route, the receipt-to-transaction link, and rent
+backed by a transaction all answer 403 for a non-admin, whatever the page shows.
 
 ---
 
@@ -208,10 +234,10 @@ What the serverless shape changes:
   is and may be refused as too large.
 - **Function duration.** `vercel.json` allows 120 seconds per request for the Gemini calls. Hobby
   projects with Fluid compute allow up to 300; if your plan caps it lower, reduce the value.
-- **Rate limits are per instance.** The in-memory limiters and login throttle count within one
-  function instance, not across all of them. With the account lock on, login is the only
-  unauthenticated surface that does anything, and passwords are scrypt-hashed. Vercel's own DDoS
-  mitigation sits in front of everything.
+- **Rate limits are shared.** Sign-in, registration, receipt parsing and identification count their
+  windows in Postgres (the `rate_limits` table), so the limit holds across instances and cold
+  starts. The in-memory limiters stay mounted in front as a free local guard. If the database cannot
+  be reached the shared check allows the request rather than failing the app closed.
 - **Health check.** `GET /api/health` answers `{ "ok": true }` when the function can reach the
   database, for uptime monitors.
 
@@ -277,6 +303,27 @@ things decide whether it is lossless:
 | `npm run dev` | Run the server with `--watch` for reloads |
 | `npm run start` | Build the frontend and start the server |
 | `npm run vercel-build` | What Vercel runs on deploy: generate the client, `migrate deploy`, compile |
+
+---
+
+## ⚖️ Before you let other people in
+
+`public/privacy.html` and `public/terms.html` ship with the app and are linked from the footer and
+the sign-up dialog. **They contain placeholders you must replace before anyone else uses your
+deployment**: `[OPERATOR NAME]`, `[CONTACT EMAIL]` and `[STATE / COUNTRY]`. Search for the square
+brackets.
+
+They are a starting point written for this app, not legal advice, and they have not been reviewed by
+a lawyer. If you plan to take Plaid to production, to accept anyone beyond friends, or to operate
+somewhere with its own privacy regime, have someone qualified read them first. Plaid's own developer
+policy requires you to publish a privacy policy describing how you handle bank data.
+
+Three things in the app matter for liability and are worth keeping:
+
+- The education expense totals carry a visible note that they are a record, not tax advice. That
+  feature is the one most likely to be relied on for a filing.
+- Deleting an account really deletes its data, which is what the privacy policy promises.
+- The MIT licence covers the source; the Terms cover the hosted service. They are separate.
 
 ---
 
