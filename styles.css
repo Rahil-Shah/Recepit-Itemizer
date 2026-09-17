@@ -116,7 +116,12 @@ body {
   line-height: 1.55;
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* Stop iOS inflating text in rotated/narrow layouts, which silently broke
+     the column widths this file is careful about. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* Paper grain. A fixed layer over everything, multiplied in at a few percent,
@@ -526,9 +531,11 @@ input[type="date"].table-input {
   margin-top: 18px;
 }
 
+/* Grows into the row but is allowed to give way on a narrow panel: a fixed
+   floor pushed this row wider than the card holding it on a phone. */
 .button-row .btn-primary {
-  flex: 1;
-  min-width: 150px;
+  flex: 1 1 150px;
+  min-width: 0;
 }
 
 /* --- Icon button: a round pebble --- */
@@ -709,6 +716,31 @@ input[type="date"].table-input {
   grid-column: 1 / -1;
 }
 
+/* Every single-column list in the app is a grid, and a grid track defaults to
+   `min-width: auto` -- it will not shrink below the widest thing inside it. So
+   one non-shrinking cell in one row (a store name, a date, a 96px amount) set a
+   hard floor under the whole column and pushed rows off the side of a phone.
+   Flooring each track at 0 lets the rows truncate themselves, which is what
+   their ellipses were always for. */
+.history-list,
+.history-lines,
+.history-body,
+.split-total-list,
+.people-panel,
+.education-sections,
+.education-section .section-content,
+.rent-entries-list,
+.transactions-list,
+.bank-connections,
+.food-receipt-items,
+.item-detail-body,
+.settings-form,
+.rent-form,
+.auth-form,
+.budget-legend-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 /* --- Panels: hand-shaped cards --- */
 .panel {
   position: relative;
@@ -733,11 +765,15 @@ input[type="date"].table-input {
   border-bottom-right-radius: var(--radius-card-lg);
 }
 
+/* Wraps rather than crushes: "Bank transactions" alongside two buttons, or
+   "Monthly spending" alongside a month picker, has no room on a narrow panel,
+   and a serif title breaking mid-phrase against a control reads badly. */
 .panel-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   min-height: 64px;
   padding: 12px 24px 12px 28px;
   border-bottom: 1px solid var(--border);
@@ -1055,10 +1091,12 @@ input[type="date"].table-input {
 }
 
 /* Six columns, matching the six cells every row renders: select, label, food
-   check, assignment, amount, ignore. */
+   check, assignment, amount, ignore. The flexible columns floor at 0 and
+   shrink honestly; only the amount keeps a real minimum, because a clipped
+   price is worse than a clipped name. */
 .table-row {
   display: grid;
-  grid-template-columns: 22px minmax(150px, 1.2fr) 44px minmax(140px, 0.85fr) minmax(84px, 0.4fr) 36px;
+  grid-template-columns: 22px minmax(0, 1.35fr) 44px minmax(0, 0.9fr) minmax(74px, auto) 32px;
   gap: 10px;
   align-items: center;
   min-height: 54px;
@@ -1149,7 +1187,10 @@ input[type="date"].table-input {
 .line-label {
   min-width: 0;
   font-weight: 600;
-  overflow-wrap: anywhere;
+  /* break-word, not anywhere: `anywhere` split inside words, so a long item
+     name came out as "SUPERCALIFRAGILIS / TIC HOUSEHOLD". Break between
+     words, and only split a word that genuinely cannot fit on its own line. */
+  overflow-wrap: break-word;
 }
 
 /* What the line actually was. Deliberately quieter than the receipt text above
@@ -1160,7 +1201,7 @@ input[type="date"].table-input {
   color: var(--ink-3);
   font-size: 12.5px;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* An identification the user has confirmed is the one thing on the row that is
@@ -1995,8 +2036,12 @@ input[type="date"].table-input {
   border-bottom: none;
 }
 
+/* `flex: 1` alone resolves to a 0% basis with an automatic minimum, so a long
+   item name could neither shrink below its longest word nor use the space it
+   had -- on a phone it collapsed into a one-word-per-line column. */
 .history-line > span:first-child {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .history-line .line-food-check {
@@ -2587,9 +2632,10 @@ input[type="date"].table-input {
 
 .rent-entry-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 10px 6px;
   border-bottom: 1px solid var(--border);
   border-radius: 14px;
@@ -2612,12 +2658,19 @@ input[type="date"].table-input {
   flex: 1;
 }
 
+/* Wraps so the property name keeps a readable width. Held on one line it was
+   squeezed to ~100px between the date and the paperclip and showed almost
+   nothing but an ellipsis. */
 .rent-entry-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 2px 8px;
   width: 100%;
+}
+
+.rent-entry-header .rent-entry-property {
+  flex: 1 1 auto;
 }
 
 .rent-entry-date {
@@ -2820,9 +2873,11 @@ input[type="date"].table-input {
 }
 
 /* --- Education expenses (529) --- */
+/* Reflows on its own rather than snapping 3 -> 1 at a single breakpoint, which
+   left three cards crushed into a narrow panel at tablet width. */
 .education-expenses-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   margin-bottom: 20px;
 }
@@ -2981,8 +3036,11 @@ input[type="date"].table-input {
   white-space: nowrap;
 }
 
+/* Shrinkable rather than fixed: held open at full text width, this cell pushed
+   the amount beside it out of the panel instead of simply truncating. */
 .food-item-store {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 45%;
   color: var(--ink-3);
   font-size: 12.5px;
@@ -3076,8 +3134,10 @@ input[type="date"].table-input {
   white-space: nowrap;
 }
 
+/* Same reasoning as .food-item-store: truncate the note, never widen the row. */
 .food-receipt-item-note {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 50%;
   color: var(--ink-3);
   font-size: 12px;
@@ -3506,10 +3566,6 @@ input[type="date"].table-input {
     grid-column: 1 / -1;
   }
 
-  .education-expenses-stats {
-    grid-template-columns: 1fr;
-  }
-
   .panel-header {
     padding: 12px 20px;
   }
@@ -3653,9 +3709,70 @@ input[type="date"].table-input {
     margin-right: auto;
   }
 
+  /* The budgeting lists are the densest rows in the app: a label, a
+     qualifier and a figure on one line. At phone width the label takes the
+     full width and the figure sits beneath it, legible instead of three
+     competing ellipses. */
+  .food-item-row,
+  .food-receipt-summary,
+  .food-receipt-item {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .food-item-label,
+  .food-receipt-item-label {
+    flex: 1 1 100%;
+    overflow: visible;
+    white-space: normal;
+  }
+
+  .food-item-store,
+  .food-receipt-item-note {
+    max-width: none;
+  }
+
+  /* Pushed to the right of its own row so the figures still form a column. */
+  .food-item-amount,
+  .food-receipt-item-amount,
+  .transaction-amount,
+  .rent-entry-amount {
+    min-width: 0;
+    margin-left: auto;
+  }
+
+  /* Buys back ~20px of row width on a 390px screen, which is the difference
+     between a truncated store name and a readable one. */
+  .panel-header {
+    padding: 10px 16px;
+  }
+
+  .panel-body {
+    padding: 16px 14px 20px;
+  }
+
+  .education-section .section-content,
+  .education-section .section-actions {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .food-item-row,
+  .food-receipt-summary,
+  .food-receipt-items {
+    padding-left: 14px;
+  }
+
+  /* Give dialogs more of the screen: the backdrop padding plus the card
+     padding otherwise leaves barely 300px for the content. */
+  .modal-backdrop,
+  .auth-overlay {
+    padding: 12px;
+  }
+
   .modal-card,
   .auth-card {
-    padding: 24px 20px;
+    padding: 22px 16px;
     border-top-left-radius: var(--radius-card);
   }
 
@@ -3665,5 +3782,35 @@ input[type="date"].table-input {
 
   .button-row .btn {
     flex: 1 1 calc(50% - 5px);
+  }
+}
+
+/* ---- Touch ---- */
+/* Coarse pointers get the larger targets; the desktop keeps its rhythm. */
+@media (pointer: coarse) {
+  /* width/height, not min-height: these are round controls with both axes
+     already set, so a min-height alone would leave them narrow. */
+  .icon-button,
+  .txn-menu-trigger {
+    width: 36px;
+    height: 36px;
+  }
+
+  .line-select {
+    width: 20px;
+    height: 20px;
+  }
+
+  .line-food-check:not(.txn-food-toggle) {
+    width: 30px;
+    height: 30px;
+  }
+
+  /* Safari zooms the entire page when a focused field is under 16px, which
+     rescales the layout mid-edit and strands the field off screen. */
+  textarea,
+  .table-input,
+  .table-select {
+    font-size: 16px;
   }
 }
