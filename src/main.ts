@@ -68,7 +68,8 @@ namespace ReceiptRing {
     rentEntriesView,
     notificationService,
     itemIdentityService,
-    itemAliasStoreService
+    itemAliasStoreService,
+    authApiService
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.

@@ -127,6 +127,9 @@ namespace ReceiptRing.UI {
     rentEntriesList: HTMLElement;
     rentEmpty: HTMLElement;
     addRentEntryButton: HTMLButtonElement;
+    deleteAccountPassword: HTMLInputElement;
+    deleteAccountButton: HTMLButtonElement;
+    deleteAccountStatus: HTMLElement;
   }
 
   export class DomRegistryFactory {
@@ -239,6 +242,9 @@ namespace ReceiptRing.UI {
         transactionReceiptFile: this.getElement("#transactionReceiptFile", HTMLInputElement),
         transactionsEmpty: this.getElement("#transactionsEmpty", HTMLElement),
         addRentEntryButton: this.getElement("#addRentEntryButton", HTMLButtonElement),
+        deleteAccountPassword: this.getElement("#deleteAccountPassword", HTMLInputElement),
+        deleteAccountButton: this.getElement("#deleteAccountButton", HTMLButtonElement),
+        deleteAccountStatus: this.getElement("#deleteAccountStatus", HTMLElement),
         rentEntriesList: this.getElement("#rentEntriesList", HTMLElement),
         rentEntryModal: this.getElement("#rentEntryModal", HTMLElement),
         rentEntryDate: this.getElement("#rentEntryDate", HTMLInputElement),

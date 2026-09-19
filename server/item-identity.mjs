@@ -270,7 +270,7 @@ function aliasStoreReady(prisma) {
   return Boolean(prisma?.itemAlias);
 }
 
-export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) {
+export function registerItemIdentity(app, requireAuth, prisma, identifyLimiters) {
   const aliasUnavailable = (res) =>
     res.status(503).json({
       error: "Saved item names are unavailable. Run `npm run db:migrate` to set them up."
@@ -352,7 +352,11 @@ export function registerItemIdentity(app, requireAuth, prisma, identifyLimiter) 
     }
   });
 
-  const guards = identifyLimiter ? [requireAuth, identifyLimiter] : [requireAuth];
+  // One limiter or several (an in-memory one plus the shared, database-backed
+  // one), so the caller decides how this route is bounded without this module
+  // knowing which kinds exist.
+  const limiters = [identifyLimiters ?? []].flat().filter(Boolean);
+  const guards = [requireAuth, ...limiters];
 
   // Identify a batch of receipt lines. The browser sends only what its own free
   // tiers could not place, so a well-worn account sends very little.
