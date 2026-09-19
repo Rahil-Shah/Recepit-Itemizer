@@ -309,9 +309,18 @@ things decide whether it is lossless:
 ## ⚖️ Before you let other people in
 
 `public/privacy.html` and `public/terms.html` ship with the app and are linked from the footer and
-the sign-up dialog. **They contain placeholders you must replace before anyone else uses your
-deployment**: `[OPERATOR NAME]`, `[CONTACT EMAIL]` and `[STATE / COUNTRY]`. Search for the square
-brackets.
+the sign-up dialog. Both name the operator and route contact to the repository's issue tracker rather
+than to a personal inbox, since the one request that would otherwise need an email, deleting your
+data, is self-serve in **Settings**.
+
+Two things are deliberately left loose and are worth revisiting:
+
+- **Governing law** says "the state and country in which the operator resides" rather than naming
+  one. That needs no maintenance and is determinate enough to apply, but naming your state is
+  stronger if you ever want to rely on it. It is one sentence in `public/terms.html`.
+- **Contact is public.** A GitHub issue is fine for a question about the policy and wrong for
+  anything personal, which the privacy page says out loud. If the service grows past friends, add a
+  private address.
 
 They are a starting point written for this app, not legal advice, and they have not been reviewed by
 a lawyer. If you plan to take Plaid to production, to accept anyone beyond friends, or to operate
