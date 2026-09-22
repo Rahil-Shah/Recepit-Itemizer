@@ -17,6 +17,7 @@ namespace ReceiptRing {
   const peopleApiService = new Services.PeopleApiService();
   const spendingAggregatorService = new Services.SpendingAggregatorService(categories);
   const rentEntryApiService = new Services.RentEntryApiService();
+  const educationExportApiService = new Services.EducationExportApiService();
   const notificationService = new Services.NotificationService();
 
   // Identification, cheapest tier first. The alias store is what makes the
@@ -69,7 +70,8 @@ namespace ReceiptRing {
     notificationService,
     itemIdentityService,
     itemAliasStoreService,
-    authApiService
+    authApiService,
+    educationExportApiService
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.

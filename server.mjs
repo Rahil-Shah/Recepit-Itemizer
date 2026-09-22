@@ -11,9 +11,16 @@ import { createBank } from "./server/bank.mjs";
 import { registerGemini } from "./server/gemini.mjs";
 import { registerItemIdentity } from "./server/item-identity.mjs";
 import { identificationFields, normalizeStoredItemCode } from "./server/identification.mjs";
-import { createRateLimiter } from "./server/rate-limit.mjs";
+import { createRateLimiter, createSingleFlight } from "./server/rate-limit.mjs";
 import { createRateLimitStore, dbRateLimiter } from "./server/rate-limit-db.mjs";
-import { parseMonthParam, getMonthRange, getUtcMonthRange } from "./server/month.mjs";
+import {
+  parseMonthParam,
+  getMonthRange,
+  getUtcMonthRange,
+  getYearRange,
+  getUtcYearRange
+} from "./server/month.mjs";
+import { buildEducationWorkbook, parseExportPeriod, EXPORT_RATE_LIMIT } from "./server/education-export.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
 import { assertAccessPolicy, maxReceiptsPerUser } from "./server/access.mjs";
 import { databaseUrl, isProduction, isVercel } from "./server/deployment.mjs";
@@ -177,6 +184,24 @@ app.use(
     message: "Too many receipt scans in a row. Give it a minute and try again."
   })
 );
+
+// The education-expense export is the heaviest read in the app (see
+// EXPORT_RATE_LIMIT in server/education-export.mjs for the numbers).
+// The in-memory limiter runs before auth, per address, so a flood never gets
+// as far as a session lookup. The shared one is counted per account (below,
+// on the route itself), so it holds across instances and addresses alike.
+app.use("/api/education-expenses/export", createRateLimiter(EXPORT_RATE_LIMIT));
+const exportLimiterShared = dbRateLimiter(limitStore, {
+  bucket: "export",
+  ...EXPORT_RATE_LIMIT,
+  keyOf: (req) => req.userId
+});
+// One export at a time per account on this instance. A second click while the
+// first is still building would only do the same work twice.
+const exportSingleFlight = createSingleFlight({
+  keyOf: (req) => req.userId,
+  message: "An export is already being prepared. Wait for it to finish."
+});
 
 const auth = createAuth(prisma, limitStore);
 const { requireAuth, requireAdmin } = auth;
@@ -913,113 +938,134 @@ app.patch("/api/receipts/:receiptId/lines/:lineId", requireAuth, async (req, res
 // row per shop and keep the individual items behind a disclosure.
 app.get("/api/receipts/food-summary", requireAuth, async (req, res) => {
   try {
-    const receiptWhere = { userId: req.userId, lines: { some: { isFood: true, ignored: false } } };
-
-    // Optional month filter
-    let txnWhere = { isFood: true, account: { connection: { userId: req.userId } } };
+    let window = null;
     if (req.query.month) {
       const parsed = parseMonthParam(req.query.month);
       if (!parsed) {
         return res.status(400).json({ error: "month must be in YYYY-MM format." });
       }
-      const { start, end } = getMonthRange(parsed.year, parsed.month);
-      receiptWhere.createdAt = { gte: start, lt: end };
-
-      // Bank transaction dates are calendar dates stored as UTC midnight (see
-      // server/bank.mjs), so the month window must be UTC — a local-time
-      // window would clip the first or last day of the month.
-      const utc = getUtcMonthRange(parsed.year, parsed.month);
-      txnWhere.date = { gte: utc.start, lt: utc.end };
+      window = {
+        local: getMonthRange(parsed.year, parsed.month),
+        utc: getUtcMonthRange(parsed.year, parsed.month)
+      };
     }
 
-    const [selfPerson, receipts, foodTxns] = await Promise.all([
-      prisma.accountPerson.findFirst({ where: { userId: req.userId, isSelf: true } }),
-      prisma.receipt.findMany({
-        where: receiptWhere,
-        select: {
-          id: true,
-          storeName: true,
-          createdAt: true,
-          tax: true,
-          lines: {
-            select: {
-              id: true,
-              label: true,
-              amount: true,
-              ignored: true,
-              isFood: true,
-              assignments: {
-                select: {
-                  mode: true,
-                  value: true,
-                  person: { select: { accountPersonId: true, accountPerson: { select: { name: true } } } }
-                }
-              }
-            },
-            orderBy: { sortOrder: "asc" }
-          }
-        },
-        orderBy: { createdAt: "desc" }
-      }),
-      // The bank side is admin-only, so a regular account's total is its
-      // receipts alone; an account demoted from admin keeps its rows but stops
-      // counting them.
-      req.isAdmin ? prisma.bankTransaction.findMany({ where: txnWhere, orderBy: { date: "desc" } }) : []
-    ]);
-
-    const selfAccountPersonId = selfPerson?.id ?? null;
-    const foodReceipts = receipts
-      .map((receipt) =>
-        summariseReceiptFood(
-          {
-            id: receipt.id,
-            storeName: receipt.storeName,
-            date: receipt.createdAt.toISOString().slice(0, 10),
-            tax: toNumber(receipt.tax),
-            lines: receipt.lines.map((line) => ({
-              id: line.id,
-              label: line.label,
-              amount: toNumber(line.amount),
-              ignored: line.ignored,
-              isFood: line.isFood,
-              assignments: line.assignments.map((assignment) => ({
-                accountPersonId: assignment.person.accountPersonId,
-                name: assignment.person.accountPerson.name,
-                mode: assignment.mode,
-                value: toNumber(assignment.value)
-              }))
-            }))
-          },
-          selfAccountPersonId
-        )
-      )
-      // A receipt whose food was all assigned to other people leaves nothing
-      // behind, so it should not sit in the list as an empty $0.00 row.
-      .filter((group) => group.items.length > 0);
-
-    // Outflows are stored negative and inflows positive (see server/bank.mjs),
-    // so negating gives a food-spend figure: money spent on food becomes a
-    // positive amount, while an inflow flagged as food -- a friend Zelling back
-    // their share of a meal -- becomes negative and offsets that spend. Taking
-    // the absolute value here would have counted reimbursements as extra
-    // spending instead of crediting them back.
-    const foodTransactions = foodTxns.map((txn) => ({
-      transactionId: txn.id,
-      description: txn.description,
-      amount: -Number(txn.amount),
-      date: txn.date.toISOString().slice(0, 10)
-    }));
-
-    const foodTotal =
-      foodReceipts.reduce((sum, group) => sum + group.total, 0) +
-      foodTransactions.reduce((sum, txn) => sum + txn.amount, 0);
-
-    res.json({ foodTotal, foodReceipts, foodTransactions });
+    const { foodTotal, foodReceipts, foodTransactions } = await loadFoodSummary(req, window);
+    res.json({
+      foodTotal,
+      // The photo's type is only for the spreadsheet export; the list only
+      // needs to know whether there is one.
+      foodReceipts: foodReceipts.map(({ imageMimeType: _mimeType, ...group }) => group),
+      foodTransactions
+    });
   } catch (error) {
     console.error("Failed to get food summary:", error);
     res.status(500).json({ error: "Failed to get food summary." });
   }
 });
+
+// The owner's food spending, per receipt and per food-flagged bank
+// transaction, shared by the food summary and the spreadsheet export so the
+// two can never disagree. `window` is null for all time, or `{ local, utc }`
+// half-open ranges: receipts are timestamps recorded by this server (local),
+// while bank transaction dates are calendar dates stored as UTC midnight (see
+// server/bank.mjs), so their window must be UTC — a local-time window would
+// clip the first or last day of the period.
+async function loadFoodSummary(req, window) {
+  const receiptWhere = { userId: req.userId, lines: { some: { isFood: true, ignored: false } } };
+  const txnWhere = { isFood: true, account: { connection: { userId: req.userId } } };
+  if (window) {
+    receiptWhere.createdAt = { gte: window.local.start, lt: window.local.end };
+    txnWhere.date = { gte: window.utc.start, lt: window.utc.end };
+  }
+
+  const [selfPerson, receipts, foodTxns] = await Promise.all([
+    prisma.accountPerson.findFirst({ where: { userId: req.userId, isSelf: true } }),
+    prisma.receipt.findMany({
+      where: receiptWhere,
+      select: {
+        id: true,
+        storeName: true,
+        createdAt: true,
+        tax: true,
+        imageMimeType: true,
+        lines: {
+          select: {
+            id: true,
+            label: true,
+            amount: true,
+            ignored: true,
+            isFood: true,
+            assignments: {
+              select: {
+                mode: true,
+                value: true,
+                person: { select: { accountPersonId: true, accountPerson: { select: { name: true } } } }
+              }
+            }
+          },
+          orderBy: { sortOrder: "asc" }
+        }
+      },
+      orderBy: { createdAt: "desc" }
+    }),
+    // The bank side is admin-only, so a regular account's total is its
+    // receipts alone; an account demoted from admin keeps its rows but stops
+    // counting them.
+    req.isAdmin ? prisma.bankTransaction.findMany({ where: txnWhere, orderBy: { date: "desc" } }) : []
+  ]);
+
+  const selfAccountPersonId = selfPerson?.id ?? null;
+  const foodReceipts = receipts
+    .map((receipt) => ({
+      ...summariseReceiptFood(
+        {
+          id: receipt.id,
+          storeName: receipt.storeName,
+          date: receipt.createdAt.toISOString().slice(0, 10),
+          tax: toNumber(receipt.tax),
+          lines: receipt.lines.map((line) => ({
+            id: line.id,
+            label: line.label,
+            amount: toNumber(line.amount),
+            ignored: line.ignored,
+            isFood: line.isFood,
+            assignments: line.assignments.map((assignment) => ({
+              accountPersonId: assignment.person.accountPersonId,
+              name: assignment.person.accountPerson.name,
+              mode: assignment.mode,
+              value: toNumber(assignment.value)
+            }))
+          }))
+        },
+        selfAccountPersonId
+      ),
+      hasImage: Boolean(receipt.imageMimeType),
+      imageMimeType: receipt.imageMimeType ?? null
+    }))
+    // A receipt whose food was all assigned to other people leaves nothing
+    // behind, so it should not sit in the list as an empty $0.00 row.
+    .filter((group) => group.items.length > 0);
+
+  // Outflows are stored negative and inflows positive (see server/bank.mjs),
+  // so negating gives a food-spend figure: money spent on food becomes a
+  // positive amount, while an inflow flagged as food -- a friend Zelling back
+  // their share of a meal -- becomes negative and offsets that spend. Taking
+  // the absolute value here would have counted reimbursements as extra
+  // spending instead of crediting them back.
+  const foodTransactions = foodTxns.map((txn) => ({
+    transactionId: txn.id,
+    description: txn.description,
+    amount: -Number(txn.amount),
+    date: txn.date.toISOString().slice(0, 10)
+  }));
+
+  const foodTotal =
+    foodReceipts.reduce((sum, group) => sum + group.total, 0) +
+    foodTransactions.reduce((sum, txn) => sum + txn.amount, 0);
+
+  return { foodTotal, foodReceipts, foodTransactions };
+}
 
 // PATCH /api/receipts/:receiptId/link-transaction - Link receipt to bank transaction
 app.patch("/api/receipts/:receiptId/link-transaction", requireAuth, requireAdmin, async (req, res) => {
@@ -1375,6 +1421,78 @@ app.get("/api/rent-entries/summary", requireAuth, async (req, res) => {
   } catch (error) {
     console.error("Failed to get rent summary:", error);
     res.status(500).json({ error: "Failed to get rent summary." });
+  }
+});
+
+// GET /api/education-expenses/export?month=YYYY-MM | ?year=YYYY
+//
+// The food and rent behind the education-expense totals, as an .xlsx with each
+// receipt and rent proof photo embedded beside its row. Exactly one of month
+// or year picks the period.
+
+// Photos are the bulk of the file. Vercel refuses a function response over
+// 4.5 MB, so there the budget leaves room for the sheets themselves; a
+// self-hosted server has no such cap and can carry a year of photos.
+const EXPORT_PHOTO_BUDGET = isVercel() ? 3.5 * 1024 * 1024 : 40 * 1024 * 1024;
+
+app.get("/api/education-expenses/export", requireAuth, exportLimiterShared, exportSingleFlight, async (req, res) => {
+  const period = parseExportPeriod(req.query);
+  if (period.error) {
+    return res.status(400).json({ error: period.error });
+  }
+
+  try {
+    const window =
+      period.kind === "month"
+        ? { local: getMonthRange(period.year, period.month), utc: getUtcMonthRange(period.year, period.month) }
+        : { local: getYearRange(period.year), utc: getUtcYearRange(period.year) };
+    const rentWhere = { userId: req.userId, year: period.year };
+    if (period.kind === "month") rentWhere.month = period.month;
+
+    const [food, rentEntries] = await Promise.all([
+      loadFoodSummary(req, window),
+      prisma.rentEntry.findMany({ where: rentWhere, omit: { photoData: true } })
+    ]);
+
+    // Photos are fetched one at a time as the workbook reaches them, scoped
+    // to this account, rather than loading every photo in the period up front.
+    const { buffer } = await buildEducationWorkbook({
+      period,
+      foodReceipts: food.foodReceipts,
+      foodTransactions: food.foodTransactions,
+      rentEntries: rentEntries.map((entry) => ({
+        id: entry.id,
+        year: entry.year,
+        month: entry.month,
+        date: entry.date.toISOString().slice(0, 10),
+        amount: toNumber(entry.amount),
+        propertyName: entry.propertyName,
+        photoMimeType: entry.photoMimeType
+      })),
+      loadReceiptImage: async (id) => {
+        const receipt = await prisma.receipt.findFirst({
+          where: { id, userId: req.userId },
+          select: { imageData: true, imageMimeType: true }
+        });
+        return receipt?.imageData ? { data: receipt.imageData, mimeType: receipt.imageMimeType } : null;
+      },
+      loadRentPhoto: async (id) => {
+        const entry = await prisma.rentEntry.findFirst({
+          where: { id, userId: req.userId },
+          select: { photoData: true, photoMimeType: true }
+        });
+        return entry?.photoData ? { data: entry.photoData, mimeType: entry.photoMimeType } : null;
+      },
+      maxPhotoBytes: EXPORT_PHOTO_BUDGET
+    });
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${period.fileName}"`);
+    res.setHeader("Cache-Control", "no-store");
+    res.send(buffer);
+  } catch (error) {
+    console.error("Failed to export education expenses:", error);
+    res.status(500).json({ error: "Failed to export education expenses." });
   }
 });
 

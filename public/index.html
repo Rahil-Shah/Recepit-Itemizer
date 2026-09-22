@@ -820,6 +820,9 @@
             <section class="panel" aria-label="Education expenses (529)">
               <header class="panel-header">
                 <h2>Education expenses</h2>
+                <div class="panel-actions">
+                  <button class="btn btn-secondary" id="educationExportButton" type="button">Export spreadsheet</button>
+                </div>
               </header>
               <div class="panel-body">
                 <div class="education-expenses-stats">
@@ -1114,6 +1117,40 @@
         <div class="modal-actions">
           <button class="btn btn-secondary" id="rentEntryCancelButton" type="button">Cancel</button>
           <button class="btn btn-primary" id="rentEntrySaveButton" type="button">Save rent entry</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="educationExportModal" role="dialog" aria-modal="true" aria-labelledby="educationExportTitle">
+      <section class="modal-card">
+        <header class="modal-heading">
+          <h2 id="educationExportTitle">Export education expenses</h2>
+          <p>Download food and rent as a spreadsheet, with receipt and rent photos placed beside each row.</p>
+        </header>
+        <div class="rent-form">
+          <div class="field">
+            <label class="field-label" for="educationExportScope">Period</label>
+            <select class="table-input" id="educationExportScope">
+              <option value="month">One month</option>
+              <option value="year">Whole year</option>
+            </select>
+          </div>
+          <div class="field" id="educationExportMonthField">
+            <label class="field-label" for="educationExportMonth">Month</label>
+            <input class="table-input" id="educationExportMonth" type="month" min="2000-01" max="2100-12" />
+          </div>
+          <div class="field hidden" id="educationExportYearField">
+            <label class="field-label" for="educationExportYear">Year</label>
+            <select class="table-input" id="educationExportYear"></select>
+          </div>
+          <p class="field-note">
+            PDF and WebP proofs can't be drawn inside a spreadsheet, so their rows say so instead. A very
+            large year may leave some photos out to keep the file small; export those months on their own.
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="educationExportCancelButton" type="button">Cancel</button>
+          <button class="btn btn-primary" id="educationExportDownloadButton" type="button">Download</button>
         </div>
       </section>
     </div>

@@ -110,7 +110,8 @@ namespace ReceiptRing.App {
       private readonly notificationService: Services.NotificationService,
       private readonly itemIdentityService: Services.ItemIdentityService,
       private readonly itemAliasStoreService: Services.ItemAliasStoreService,
-      private readonly authApiService: Services.AuthApiService
+      private readonly authApiService: Services.AuthApiService,
+      private readonly educationExportApiService: Services.EducationExportApiService
     ) {
       this.items = this.storageService.load();
     }
@@ -191,6 +192,10 @@ namespace ReceiptRing.App {
       this.elements.addRentEntryButton.addEventListener("click", () => this.openRentEntryForm());
       this.elements.rentEntryCancelButton.addEventListener("click", () => this.closeRentEntryModal());
       this.elements.rentEntrySaveButton.addEventListener("click", () => void this.saveRentEntry());
+      this.elements.educationExportButton.addEventListener("click", () => this.openEducationExportModal());
+      this.elements.educationExportCancelButton.addEventListener("click", () => this.closeEducationExportModal());
+      this.elements.educationExportScope.addEventListener("change", () => this.syncEducationExportScope());
+      this.elements.educationExportDownloadButton.addEventListener("click", () => void this.downloadEducationExport());
       this.elements.rentEntriesList.addEventListener("click", (event) => {
         const target = event.target as HTMLElement;
         if (target.textContent === "Edit") {
@@ -2458,6 +2463,84 @@ namespace ReceiptRing.App {
     private closeRentEntryModal(): void {
       this.editingRentEntryId = null;
       this.elements.rentEntryModal.classList.add("hidden");
+    }
+
+    // The export asks which period to cover, starting from the month the
+    // budgeting view is already showing, since that is the one the user was
+    // just looking at.
+    private openEducationExportModal(): void {
+      const month =
+        this.selectedMonth ?? this.spendingAggregatorService.monthKey(new Date().toISOString()) ?? "";
+      const currentYear = new Date().getFullYear();
+      const focusYear = Number(month.slice(0, 4)) || currentYear;
+
+      // This year and the five before it cover any realistic claim; the year
+      // in focus is added if it is older than that.
+      const years = new Set<number>();
+      for (let year = currentYear; year >= currentYear - 5; year -= 1) years.add(year);
+      years.add(focusYear);
+      const yearSelect = this.elements.educationExportYear;
+      yearSelect.replaceChildren(
+        ...[...years]
+          .sort((left, right) => right - left)
+          .map((year) => {
+            const option = document.createElement("option");
+            option.value = String(year);
+            option.textContent = String(year);
+            return option;
+          })
+      );
+      yearSelect.value = String(focusYear);
+
+      this.elements.educationExportScope.value = "month";
+      this.elements.educationExportMonth.value = month;
+      this.syncEducationExportScope();
+      this.elements.educationExportModal.classList.remove("hidden");
+    }
+
+    private closeEducationExportModal(): void {
+      this.elements.educationExportModal.classList.add("hidden");
+    }
+
+    private syncEducationExportScope(): void {
+      const wholeYear = this.elements.educationExportScope.value === "year";
+      this.elements.educationExportMonthField.classList.toggle("hidden", wholeYear);
+      this.elements.educationExportYearField.classList.toggle("hidden", !wholeYear);
+    }
+
+    private async downloadEducationExport(): Promise<void> {
+      const period: Services.EducationExportPeriod =
+        this.elements.educationExportScope.value === "year"
+          ? { kind: "year", year: Number(this.elements.educationExportYear.value) }
+          : { kind: "month", month: this.elements.educationExportMonth.value };
+      if (!Services.educationExportUrl(period)) {
+        this.notificationService.error("Choose a month or a year to export.");
+        return;
+      }
+
+      const button = this.elements.educationExportDownloadButton;
+      const label = button.textContent;
+      button.disabled = true;
+      button.textContent = "Preparing…";
+      try {
+        const { blob, fileName } = await this.educationExportApiService.download(period);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        // Give the browser a moment to start the download before the URL goes.
+        window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        this.closeEducationExportModal();
+        this.notificationService.success(`Downloaded ${fileName}.`);
+      } catch (error) {
+        this.notificationService.error(error instanceof Error ? error.message : "Export failed.");
+      } finally {
+        button.disabled = false;
+        button.textContent = label;
+      }
     }
 
     private async saveRentEntry(): Promise<void> {

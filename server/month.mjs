@@ -29,3 +29,25 @@ export function getUtcMonthRange(year, month) {
   const end = new Date(Date.UTC(year, month, 1));
   return { start, end };
 }
+
+// Parse a "YYYY" year parameter, or null if malformed. The range matches what
+// the rent endpoints accept for a year, so an export cannot ask for a window
+// no entry could ever fall in.
+export function parseYearParam(yearParam) {
+  if (!yearParam) return null;
+  const match = /^(\d{4})$/.exec(yearParam);
+  if (!match) return null;
+  const year = parseInt(match[1], 10);
+  if (year < 2000 || year > 2100) return null;
+  return year;
+}
+
+// Half-open [start, end) range for a whole year in server-local time.
+export function getYearRange(year) {
+  return { start: new Date(year, 0, 1), end: new Date(year + 1, 0, 1) };
+}
+
+// Half-open [start, end) range for a whole year in UTC.
+export function getUtcYearRange(year) {
+  return { start: new Date(Date.UTC(year, 0, 1)), end: new Date(Date.UTC(year + 1, 0, 1)) };
+}

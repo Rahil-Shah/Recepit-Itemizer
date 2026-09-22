@@ -22,7 +22,7 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 4. **Per-user keys**: Any account can add its own Gemini API key from the settings panel. It is stored server-side, encrypted at rest with AES-256-GCM, and is never sent back to the browser — the app only ever reports whether a key exists.
 5. **Capacity limits**: an instance holds at most `MAX_USERS` accounts (20 by default), and each non-admin account at most `MAX_RECEIPTS_PER_USER` receipts (20 by default). Registration past the account limit answers 403, as does saving past the receipt limit; editing or deleting existing receipts is unaffected. Admins are exempt from both, so a full instance never locks the owner out. A blank or malformed value falls back to the default rather than lifting the limit.
 6. **Admin accounts and everyone else**: `ADMIN_EMAILS` lists the accounts that may spend the shared `GEMINI_API_KEY` from `.env` and use the Plaid integration. Every other account brings its own Gemini key and never touches the bank side. Who may hold an account at all is a separate switch: `ALLOWED_LOGIN_EMAILS` (a closed list; admins are always on it) or `ALLOW_PUBLIC_SIGNUP=true` (anyone). A production deployment refuses to start with neither. See [Admin and regular accounts](#-admin-and-regular-accounts) for what each tier can do.
-7. **Rate limiting**: sign-in, registration, receipt scanning and item identification are counted in Postgres, so one window is shared by every instance. In-memory counters sit in front of them as a free first line, but they cannot be the only line on a serverless host, where each instance keeps its own copy and a cold start forgets it.
+7. **Rate limiting**: sign-in, registration, receipt scanning, item identification and the education-expense export are counted in Postgres, so one window is shared by every instance. In-memory counters sit in front of them as a free first line, but they cannot be the only line on a serverless host, where each instance keeps its own copy and a cold start forgets it.
 8. **Account deletion**: any account can delete itself from **Settings**, with a password confirmation. That removes its receipts and photos too, which the database would otherwise keep (a receipt's owner link is `SetNull`, so deleting the user alone would orphan them).
 9. **Row-level security**: every table has RLS enabled with no policies (migration `20260917120000`). The app connects as the table owner, which bypasses RLS, so nothing changes for it; on Supabase it means the project's REST API and anon key can read nothing, even before you close the API off in the dashboard.
 
@@ -41,6 +41,7 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 - **Item Identification**: Receipts print shorthand — `GV SHRD MOZZ 8Z` — which is unreadable weeks later. Hit **Identify items** and every line gets its real product name, with a confidence score. Click any item to see what the receipt printed, its item code, brand, size, where the answer came from and why; correct it, or pick one of the alternatives. Corrections are remembered, so the same item on your next receipt from that shop is named for free.
 - **Smart Categorization**: Categorize receipt items (Dining, Groceries, Travel, etc.) and save defaults for specific items. Receipt category defaults to **Groceries**.
 - **Saved History (Postgres)**: Save a split to a Postgres database and review previous receipts, items, prices, and per-person splits under the **History** tab. Marked something wrong? **Edit in Split** reopens a saved receipt in the Split tab with its assignments, food flags, and item names, and **Save changes** updates it in place — it keeps its photo, its budget month, and any linked bank transaction.
+- **Education Expense Export**: From **Budgets → Education expenses**, **Export spreadsheet** asks for one month or a whole year and downloads an `.xlsx` with a Summary, the food receipts (with each receipt photo embedded beside its row), the individual food items, and rent payments (with each proof photo). PDF and WebP proofs cannot be drawn in a spreadsheet, so their cells say so. The export is limited to 10 per 15 minutes per account, and one at a time.
 - **Bank Connection (Plaid)**: Securely link a bank through [Plaid Link](https://plaid.com/docs/link/) to import **read-only** transactions. Access tokens are exchanged server-side and stored AES-256-GCM encrypted at rest — they never reach the browser.
 - **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
@@ -56,6 +57,7 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 | Gemini key used | the server's `GEMINI_API_KEY`, or a personal one | a personal key only |
 | Saved receipts | unlimited | `MAX_RECEIPTS_PER_USER` (20) |
 | Education expenses: food lines, rent entries | yes | yes |
+| Export education expenses to a spreadsheet (with photos) | yes | yes |
 | Spending ring and monthly trend | yes | yes |
 | Connect a bank through Plaid | yes | no |
 | Imported bank transactions | yes | no |
@@ -234,10 +236,13 @@ What the serverless shape changes:
   is and may be refused as too large.
 - **Function duration.** `vercel.json` allows 120 seconds per request for the Gemini calls. Hobby
   projects with Fluid compute allow up to 300; if your plan caps it lower, reduce the value.
-- **Rate limits are shared.** Sign-in, registration, receipt parsing and identification count their
-  windows in Postgres (the `rate_limits` table), so the limit holds across instances and cold
-  starts. The in-memory limiters stay mounted in front as a free local guard. If the database cannot
+- **Rate limits are shared.** Sign-in, registration, receipt parsing, identification and the
+  education-expense export count their windows in Postgres (the `rate_limits` table), so the limit
+  holds across instances and cold starts. The in-memory limiters stay mounted in front as a free local guard. If the database cannot
   be reached the shared check allows the request rather than failing the app closed.
+- **Spreadsheet export size.** Vercel refuses a function response over 4.5 MB, so there the
+  education-expense export embeds at most ~3.5 MB of photos and names the rest in their cells
+  (export a single month to get them all). A self-hosted server allows 40 MB.
 - **Health check.** `GET /api/health` answers `{ "ok": true }` when the function can reach the
   database, for uptime monitors.
 

@@ -60,3 +60,27 @@ export function createRateLimiter({ windowMs, max, message } = {}) {
     next();
   };
 }
+
+/**
+ * Lets one request per key run at a time; another from the same key while the
+ * first is still going is turned away with a 429. Meant for routes where a
+ * single request is expensive and a second concurrent one can only repeat the
+ * work (a double click, a script firing in parallel). Per-process, like the
+ * limiter above.
+ */
+export function createSingleFlight({ keyOf, message } = {}) {
+  const running = new Set();
+  const keyFor = keyOf ?? ((req) => req.ip || req.socket?.remoteAddress || "unknown");
+
+  return function singleFlight(req, res, next) {
+    const key = keyFor(req);
+    if (running.has(key)) {
+      return res.status(429).json({ error: message || "A request is already in progress." });
+    }
+    running.add(key);
+    // "close" fires however the response ends -- sent, errored, or the client
+    // walking away -- so a key can never stay stuck.
+    res.once("close", () => running.delete(key));
+    next();
+  };
+}

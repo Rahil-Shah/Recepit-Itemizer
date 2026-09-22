@@ -51,3 +51,31 @@ test("getUtcMonthRange rolls December into January", () => {
   const { end } = getUtcMonthRange(2026, 12);
   assert.equal(end.toISOString(), "2027-01-01T00:00:00.000Z");
 });
+
+test("parseYearParam accepts four-digit years in the supported range", async () => {
+  const { parseYearParam } = await import("../server/month.mjs");
+  assert.equal(parseYearParam("2026"), 2026);
+  assert.equal(parseYearParam("2000"), 2000);
+  assert.equal(parseYearParam("2100"), 2100);
+  assert.equal(parseYearParam(undefined), null);
+  assert.equal(parseYearParam("26"), null);
+  assert.equal(parseYearParam("1999"), null);
+  assert.equal(parseYearParam("2101"), null);
+  assert.equal(parseYearParam("2026-08"), null);
+});
+
+test("getYearRange and getUtcYearRange span one whole year, half open", async () => {
+  const { getYearRange, getUtcYearRange } = await import("../server/month.mjs");
+  const local = getYearRange(2026);
+  assert.equal(local.start.getFullYear(), 2026);
+  assert.equal(local.start.getMonth(), 0);
+  assert.equal(local.start.getDate(), 1);
+  assert.equal(local.end.getFullYear(), 2027);
+  assert.equal(local.end.getMonth(), 0);
+
+  const utc = getUtcYearRange(2026);
+  assert.equal(utc.start.toISOString(), "2026-01-01T00:00:00.000Z");
+  assert.equal(utc.end.toISOString(), "2027-01-01T00:00:00.000Z");
+  const newYearsEve = new Date("2026-12-31T00:00:00.000Z");
+  assert.ok(newYearsEve >= utc.start && newYearsEve < utc.end);
+});

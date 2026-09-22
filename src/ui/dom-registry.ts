@@ -120,6 +120,15 @@ namespace ReceiptRing.UI {
     educationFoodTotal: HTMLElement;
     educationRentTotal: HTMLElement;
     educationExpensesTotal: HTMLElement;
+    educationExportButton: HTMLButtonElement;
+    educationExportModal: HTMLElement;
+    educationExportScope: HTMLSelectElement;
+    educationExportMonthField: HTMLElement;
+    educationExportMonth: HTMLInputElement;
+    educationExportYearField: HTMLElement;
+    educationExportYear: HTMLSelectElement;
+    educationExportCancelButton: HTMLButtonElement;
+    educationExportDownloadButton: HTMLButtonElement;
     foodSection: HTMLElement;
     foodItemsList: HTMLElement;
     foodEmpty: HTMLElement;
@@ -264,6 +273,15 @@ namespace ReceiptRing.UI {
         educationFoodTotal: this.getElement("#educationFoodTotal", HTMLElement),
         educationRentTotal: this.getElement("#educationRentTotal", HTMLElement),
         educationExpensesTotal: this.getElement("#educationExpensesTotal", HTMLElement),
+        educationExportButton: this.getElement("#educationExportButton", HTMLButtonElement),
+        educationExportModal: this.getElement("#educationExportModal", HTMLElement),
+        educationExportScope: this.getElement("#educationExportScope", HTMLSelectElement),
+        educationExportMonthField: this.getElement("#educationExportMonthField", HTMLElement),
+        educationExportMonth: this.getElement("#educationExportMonth", HTMLInputElement),
+        educationExportYearField: this.getElement("#educationExportYearField", HTMLElement),
+        educationExportYear: this.getElement("#educationExportYear", HTMLSelectElement),
+        educationExportCancelButton: this.getElement("#educationExportCancelButton", HTMLButtonElement),
+        educationExportDownloadButton: this.getElement("#educationExportDownloadButton", HTMLButtonElement),
         foodSection: this.getElement("#foodSection", HTMLElement),
         foodItemsList: this.getElement("#foodItemsList", HTMLElement),
         foodEmpty: this.getElement("#foodEmpty", HTMLElement),
