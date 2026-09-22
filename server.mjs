@@ -20,7 +20,13 @@ import {
   getYearRange,
   getUtcYearRange
 } from "./server/month.mjs";
-import { buildEducationWorkbook, parseExportPeriod, EXPORT_RATE_LIMIT } from "./server/education-export.mjs";
+import {
+  buildEducationWorkbook,
+  exportFileName,
+  parseExportPeriod,
+  EXPORT_FORMATS,
+  EXPORT_RATE_LIMIT
+} from "./server/education-export.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
 import { assertAccessPolicy, maxReceiptsPerUser } from "./server/access.mjs";
 import { databaseUrl, isProduction, isVercel } from "./server/deployment.mjs";
@@ -1440,6 +1446,7 @@ app.get("/api/education-expenses/export", requireAuth, exportLimiterShared, expo
   if (period.error) {
     return res.status(400).json({ error: period.error });
   }
+  const format = "xlsx";
 
   try {
     const window =
@@ -1486,8 +1493,8 @@ app.get("/api/education-expenses/export", requireAuth, exportLimiterShared, expo
       maxPhotoBytes: EXPORT_PHOTO_BUDGET
     });
 
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${period.fileName}"`);
+    res.setHeader("Content-Type", EXPORT_FORMATS[format].contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${exportFileName(period, format)}"`);
     res.setHeader("Cache-Control", "no-store");
     res.send(buffer);
   } catch (error) {

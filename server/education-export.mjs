@@ -1,6 +1,9 @@
 // Builds the education-expense spreadsheet: the same food and rent figures
 // the budgeting view shows, for one month or a whole year, with each receipt
-// or rent proof photo embedded next to the row it backs up.
+// or rent proof photo embedded next to the row it backs up. Also home to what
+// the spreadsheet and the PDF (server/education-export-pdf.mjs) share: which
+// period and format was asked for, the order and totals of the rows, and how
+// a photo is loaded, budgeted, or explained away.
 //
 // No Prisma and no Express in here. The route in server.mjs gathers the rows
 // and hands over loaders for the photos, so this module can be unit tested
@@ -9,7 +12,7 @@
 import ExcelJS from "exceljs";
 import { parseMonthParam, parseYearParam } from "./month.mjs";
 
-const MONTH_NAMES = [
+export const MONTH_NAMES = [
   "January",
   "February",
   "March",
@@ -45,6 +48,30 @@ export const EXPORT_RATE_LIMIT = Object.freeze({
 
 const CURRENCY_FORMAT = '"$"#,##0.00;[Red]-"$"#,##0.00';
 
+/** What each export format is sent as. */
+export const EXPORT_FORMATS = Object.freeze({
+  xlsx: Object.freeze({
+    extension: "xlsx",
+    contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  }),
+  pdf: Object.freeze({ extension: "pdf", contentType: "application/pdf" })
+});
+
+/**
+ * The format asked for with `?format=`, or null when it is not one of ours.
+ * Left out, it is a spreadsheet: that is what the export was first, and what
+ * an older page still asks for.
+ */
+export function parseExportFormat(value) {
+  if (value === undefined || value === "") return "xlsx";
+  return typeof value === "string" && Object.hasOwn(EXPORT_FORMATS, value) ? value : null;
+}
+
+/** "education-expenses-2026-08.pdf" and the like. */
+export function exportFileName(period, format) {
+  return `${period.baseName}.${EXPORT_FORMATS[format].extension}`;
+}
+
 /**
  * Which period an export covers, from the query string: `?month=YYYY-MM` or
  * `?year=YYYY`, exactly one of them. Returns `{ error }` when the request is
@@ -66,7 +93,7 @@ export function parseExportPeriod(query = {}) {
       year: parsed.year,
       month: parsed.month,
       label: `${MONTH_NAMES[parsed.month - 1]} ${parsed.year}`,
-      fileName: `education-expenses-${key}.xlsx`
+      baseName: `education-expenses-${key}`
     };
   }
   if (hasYear) {
@@ -77,7 +104,7 @@ export function parseExportPeriod(query = {}) {
       year,
       month: null,
       label: `${year} (full year)`,
-      fileName: `education-expenses-${year}.xlsx`
+      baseName: `education-expenses-${year}`
     };
   }
   return { error: "Choose a month (month=YYYY-MM) or a whole year (year=YYYY) to export." };
@@ -170,8 +197,32 @@ function sumFormula(column, firstRow, lastRow, result) {
   return { formula: `SUM(${column}${firstRow}:${column}${lastRow})`, result };
 }
 
-function roundCents(value) {
+export function roundCents(value) {
   return Math.round(value * 100) / 100;
+}
+
+/** The note both formats carry: these are records, not advice. */
+export const EDUCATION_NOTE =
+  "These totals are a record of what you marked, not tax advice. Check them against your own " +
+  "receipts and the rules for your plan before using them in a filing.";
+
+/**
+ * The rows of an export in the order they are printed, with their totals.
+ *
+ * Chronological reads better on paper than the newest-first of the app, and
+ * both formats must add up to the same figures, so the sorting and summing
+ * live here once.
+ */
+export function prepareExport({ foodReceipts = [], foodTransactions = [], rentEntries = [] }) {
+  const receipts = [...foodReceipts].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const transactions = [...foodTransactions].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const rent = [...rentEntries].sort((a, b) => a.year - b.year || a.month - b.month);
+
+  const foodTotal = roundCents(
+    receipts.reduce((sum, group) => sum + group.total, 0) + transactions.reduce((sum, txn) => sum + txn.amount, 0)
+  );
+  const rentTotal = roundCents(rent.reduce((sum, entry) => sum + entry.amount, 0));
+  return { receipts, transactions, rent, foodTotal, rentTotal, total: roundCents(foodTotal + rentTotal) };
 }
 
 /**
@@ -180,7 +231,7 @@ function roundCents(value) {
  * named in their cells, so one export cannot balloon the response (or the
  * memory holding it) without limit.
  */
-function createPhotoBudget(maxBytes) {
+export function createPhotoBudget(maxBytes) {
   let used = 0;
   let omitted = 0;
   let full = false;
@@ -213,31 +264,34 @@ function createPhotoBudget(maxBytes) {
 }
 
 /**
- * Put a photo (or a note explaining its absence) in `cell`, and size the row
- * so the picture fits. `load` fetches the photo only when it is needed, so
- * rows without one cost no query, and photos are held one at a time.
+ * Fetch a row's photo, if it has one the file can carry and the budget has
+ * room for it. `load` is called only then, so rows without a photo cost no
+ * query and photos are held one at a time.
+ *
+ * Resolves to one of:
+ * - `{ kind: "none" }`: the row has no photo.
+ * - `{ kind: "photo", buffer, extension }`: embed it.
+ * - `{ kind: "unsupported", label }`: a PDF or WebP attachment; nothing to draw.
+ * - `{ kind: "omitted" }`: over the budget, left out.
+ * - `{ kind: "failed" }`: it should be there and could not be loaded.
  */
-async function placePhoto(workbook, sheet, cell, row, { hasPhoto, mimeType, load, budget, period }) {
-  if (!hasPhoto) {
-    cell.value = "";
-    return { embedded: false };
-  }
+export async function resolvePhoto({ hasPhoto, mimeType, load, budget }) {
+  if (!hasPhoto) return { kind: "none" };
 
   const extension = embeddableExtension(mimeType);
   if (!extension) {
-    const kind = mimeType === "application/pdf" ? "PDF" : (mimeType?.split("/")[1] ?? "file").toUpperCase();
-    cell.value = `${kind} proof attached in the app (can't be shown in a spreadsheet)`;
-    return { embedded: false };
+    const label =
+      mimeType === "application/pdf"
+        ? "PDF"
+        : mimeType === "image/webp"
+          ? "WebP image"
+          : `${(mimeType?.split("/")[1] ?? "unknown").toUpperCase()} file`;
+    return { kind: "unsupported", label };
   }
 
-  const leftOut =
-    period.kind === "year"
-      ? "Photo left out to keep the file small — export this month on its own to include it"
-      : "Photo left out to keep the file small";
   if (budget.full) {
     budget.skip();
-    cell.value = leftOut;
-    return { embedded: false };
+    return { kind: "omitted" };
   }
 
   let photo;
@@ -247,17 +301,59 @@ async function placePhoto(workbook, sheet, cell, row, { hasPhoto, mimeType, load
     console.warn("Could not load a photo for the export:", error?.message ?? error);
     photo = null;
   }
-  if (!photo?.data) {
-    cell.value = "Photo could not be loaded";
-    return { embedded: false };
-  }
+  if (!photo?.data) return { kind: "failed" };
 
   const buffer = Buffer.from(photo.data, "base64");
-  if (!budget.tryTake(buffer.length)) {
-    cell.value = leftOut;
+  if (!budget.tryTake(buffer.length)) return { kind: "omitted" };
+  return { kind: "photo", buffer, extension };
+}
+
+// Why an attachment is missing, in the words of the file it is missing from.
+const UNSUPPORTED_REASON = {
+  spreadsheet: "can't be shown in a spreadsheet",
+  pdf: "can't be embedded in this file"
+};
+
+/**
+ * What stands in for a photo that is not in the file. `medium` is the file
+ * it is missing from: "spreadsheet" or "pdf".
+ */
+export function photoNote(result, { period, medium }) {
+  switch (result.kind) {
+    case "unsupported":
+      return `${result.label} attached in the app (${UNSUPPORTED_REASON[medium]})`;
+    case "omitted":
+      return period.kind === "year"
+        ? "Photo left out to keep the file small — export this month on its own to include it"
+        : "Photo left out to keep the file small";
+    case "failed":
+      return "Photo could not be loaded";
+    default:
+      return "";
+  }
+}
+
+/** The Summary line explaining how many photos a file left out, if any. */
+export function omittedPhotosNote(count, period) {
+  if (count === 0) return null;
+  return (
+    `${count} photo${count === 1 ? " was" : "s were"} left out to keep this file small.` +
+    (period.kind === "year" ? " Export a single month to include every photo." : "")
+  );
+}
+
+/**
+ * Put a row's photo (or a note explaining its absence) in `cell`, and size
+ * the row so the picture fits.
+ */
+async function placePhoto(workbook, sheet, cell, row, { hasPhoto, mimeType, load, budget, period }) {
+  const result = await resolvePhoto({ hasPhoto, mimeType, load, budget });
+  if (result.kind !== "photo") {
+    cell.value = photoNote(result, { period, medium: "spreadsheet" });
     return { embedded: false };
   }
 
+  const { buffer, extension } = result;
   const size = fitPhoto(imageDimensions(buffer));
   const imageId = workbook.addImage({ buffer, extension });
   // tl is zero-based; a small inset keeps the picture off the gridlines.
@@ -320,11 +416,15 @@ export async function buildEducationWorkbook({
   styleHeader(food.getRow(1));
   food.views = [{ state: "frozen", ySplit: 1 }];
 
-  // Chronological reads better on paper than the newest-first of the app.
-  const receiptsInOrder = [...foodReceipts].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  const transactionsInOrder = [...foodTransactions].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const {
+    receipts: receiptsInOrder,
+    transactions: transactionsInOrder,
+    rent: rentInOrder,
+    foodTotal,
+    rentTotal,
+    total
+  } = prepareExport({ foodReceipts, foodTransactions, rentEntries });
 
-  let foodTotal = 0;
   for (const group of receiptsInOrder) {
     const row = food.addRow({
       date: group.date,
@@ -336,7 +436,6 @@ export async function buildEducationWorkbook({
       total: group.total
     });
     row.alignment = { vertical: "top", wrapText: true };
-    foodTotal += group.total;
     await placePhoto(workbook, food, row.getCell("photo"), row, {
       hasPhoto: Boolean(group.hasImage),
       mimeType: group.imageMimeType,
@@ -356,10 +455,8 @@ export async function buildEducationWorkbook({
       total: txn.amount
     });
     row.alignment = { vertical: "top", wrapText: true };
-    foodTotal += txn.amount;
   }
   const foodLastDataRow = food.rowCount;
-  foodTotal = roundCents(foodTotal);
   const foodTotalRow = food.addRow({
     store: "Total",
     total: sumFormula("G", 2, foodLastDataRow, foodTotal)
@@ -409,8 +506,6 @@ export async function buildEducationWorkbook({
   styleHeader(rent.getRow(1));
   rent.views = [{ state: "frozen", ySplit: 1 }];
 
-  const rentInOrder = [...rentEntries].sort((a, b) => a.year - b.year || a.month - b.month);
-  let rentTotal = 0;
   for (const entry of rentInOrder) {
     const row = rent.addRow({
       date: entry.date,
@@ -419,7 +514,6 @@ export async function buildEducationWorkbook({
       amount: entry.amount
     });
     row.alignment = { vertical: "top", wrapText: true };
-    rentTotal += entry.amount;
     await placePhoto(workbook, rent, row.getCell("photo"), row, {
       hasPhoto: Boolean(entry.photoMimeType),
       mimeType: entry.photoMimeType,
@@ -429,7 +523,6 @@ export async function buildEducationWorkbook({
     });
   }
   const rentLastDataRow = rent.rowCount;
-  rentTotal = roundCents(rentTotal);
   const rentTotalRow = rent.addRow({ property: "Total", amount: sumFormula("D", 2, rentLastDataRow, rentTotal) });
   rentTotalRow.font = { bold: true };
 
@@ -460,25 +553,16 @@ export async function buildEducationWorkbook({
       label: "Total",
       value: {
         formula: `B${foodSummaryRow.number}+B${rentSummaryRow.number}`,
-        result: roundCents(foodTotal + rentTotal)
+        result: total
       }
     })
   );
   combinedRow.font = { bold: true };
   summary.addRow({});
-  summary.addRow({
-    label: "Note",
-    value:
-      "These totals are a record of what you marked, not tax advice. Check them against your own " +
-      "receipts and the rules for your plan before using them in a filing."
-  }).alignment = { wrapText: true, vertical: "top" };
-  if (budget.omitted > 0) {
-    summary.addRow({
-      label: "Photos",
-      value:
-        `${budget.omitted} photo${budget.omitted === 1 ? " was" : "s were"} left out to keep this file small.` +
-        (period.kind === "year" ? " Export a single month to include every photo." : "")
-    }).alignment = { wrapText: true, vertical: "top" };
+  summary.addRow({ label: "Note", value: EDUCATION_NOTE }).alignment = { wrapText: true, vertical: "top" };
+  const omitted = omittedPhotosNote(budget.omitted, period);
+  if (omitted) {
+    summary.addRow({ label: "Photos", value: omitted }).alignment = { wrapText: true, vertical: "top" };
   }
 
   const buffer = Buffer.from(await workbook.xlsx.writeBuffer());

@@ -1,66 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deflateSync } from "node:zlib";
 import ExcelJS from "exceljs";
+import { makeJpegHeader, makePng } from "./helpers/image-fixtures.mjs";
 import {
   buildEducationWorkbook,
+  createPhotoBudget,
   embeddableExtension,
+  exportFileName,
   fitPhoto,
   imageDimensions,
+  parseExportFormat,
   parseExportPeriod,
+  photoNote,
+  prepareExport,
+  resolvePhoto,
+  EXPORT_FORMATS,
   EXPORT_RATE_LIMIT
 } from "../server/education-export.mjs";
-
-// --- Tiny image fixtures ------------------------------------------------------
-
-function crc32(bytes) {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function pngChunk(type, data) {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(body));
-  return Buffer.concat([length, body, crc]);
-}
-
-// A real, decodable greyscale PNG of the given size.
-function makePng(width, height) {
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(width, 0);
-  header.writeUInt32BE(height, 4);
-  header[8] = 8; // bit depth
-  header[9] = 0; // greyscale
-  const raw = Buffer.alloc((width + 1) * height, 0x80);
-  for (let row = 0; row < height; row += 1) raw[row * (width + 1)] = 0; // filter: none
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    pngChunk("IHDR", header),
-    pngChunk("IDAT", deflateSync(raw)),
-    pngChunk("IEND", Buffer.alloc(0))
-  ]);
-}
-
-// The segments a JPEG header walk has to get past: SOI, an APP0 segment,
-// then a baseline start-of-frame carrying the dimensions.
-function makeJpegHeader(width, height) {
-  const app0 = Buffer.from([0xff, 0xe0, 0x00, 0x10, ...Buffer.from("JFIF\0"), 1, 1, 0, 0, 1, 0, 1, 0, 0]);
-  const sof = Buffer.alloc(19);
-  sof.writeUInt16BE(0xffc0, 0);
-  sof.writeUInt16BE(17, 2);
-  sof[4] = 8;
-  sof.writeUInt16BE(height, 5);
-  sof.writeUInt16BE(width, 7);
-  sof[9] = 3;
-  return Buffer.concat([Buffer.from([0xff, 0xd8]), app0, sof, Buffer.from([0xff, 0xd9])]);
-}
 
 async function readWorkbook(buffer) {
   const workbook = new ExcelJS.Workbook();
@@ -99,7 +55,7 @@ test("parseExportPeriod accepts one month", () => {
     year: 2026,
     month: 8,
     label: "August 2026",
-    fileName: "education-expenses-2026-08.xlsx"
+    baseName: "education-expenses-2026-08"
   });
 });
 
@@ -109,7 +65,7 @@ test("parseExportPeriod accepts a whole year", () => {
     year: 2026,
     month: null,
     label: "2026 (full year)",
-    fileName: "education-expenses-2026.xlsx"
+    baseName: "education-expenses-2026"
   });
 });
 
@@ -122,6 +78,88 @@ test("parseExportPeriod insists on exactly one well-formed period", () => {
   assert.match(parseExportPeriod({ year: "1999" }).error, /four-digit/);
   // Express turns ?month=a&month=b into an array; that is not a month.
   assert.match(parseExportPeriod({ month: ["2026-08", "2026-09"] }).error, /YYYY-MM/);
+});
+
+test("parseExportFormat defaults to the spreadsheet and knows the PDF", () => {
+  assert.equal(parseExportFormat(undefined), "xlsx");
+  assert.equal(parseExportFormat(""), "xlsx");
+  assert.equal(parseExportFormat("xlsx"), "xlsx");
+  assert.equal(parseExportFormat("pdf"), "pdf");
+  assert.equal(parseExportFormat("PDF"), null);
+  assert.equal(parseExportFormat("csv"), null);
+  // Inherited keys are not formats.
+  assert.equal(parseExportFormat("toString"), null);
+  assert.equal(parseExportFormat(["pdf", "xlsx"]), null);
+});
+
+test("exportFileName and EXPORT_FORMATS name and type each file", () => {
+  assert.equal(exportFileName(monthPeriod, "xlsx"), "education-expenses-2026-08.xlsx");
+  assert.equal(exportFileName(monthPeriod, "pdf"), "education-expenses-2026-08.pdf");
+  assert.equal(exportFileName(yearPeriod, "pdf"), "education-expenses-2026.pdf");
+  assert.equal(EXPORT_FORMATS.pdf.contentType, "application/pdf");
+  assert.match(EXPORT_FORMATS.xlsx.contentType, /spreadsheetml/);
+});
+
+test("prepareExport orders rows by date and totals them once for both formats", () => {
+  const rows = prepareExport({
+    foodReceipts: [
+      { ...groceries, receiptId: "late", date: "2026-08-20", total: 10.1 },
+      { ...groceries, receiptId: "early", date: "2026-08-02", total: 0.2 }
+    ],
+    foodTransactions: [{ transactionId: "t", description: "Zelle", amount: -0.1, date: "2026-08-03" }],
+    rentEntries: [
+      { id: "b", year: 2026, month: 9, amount: 500.05 },
+      { id: "a", year: 2026, month: 8, amount: 499.95 }
+    ]
+  });
+  assert.deepEqual(rows.receipts.map((group) => group.receiptId), ["early", "late"]);
+  assert.deepEqual(rows.rent.map((entry) => entry.id), ["a", "b"]);
+  // Rounded to cents, so floating point never leaves 10.200000000000001.
+  assert.equal(rows.foodTotal, 10.2);
+  assert.equal(rows.rentTotal, 1000);
+  assert.equal(rows.total, 1010.2);
+});
+
+test("resolvePhoto only loads what the file can carry and the budget allows", async () => {
+  const budget = createPhotoBudget(100);
+  const load = async () => ({ data: Buffer.alloc(60).toString("base64"), mimeType: "image/png" });
+
+  assert.deepEqual(await resolvePhoto({ hasPhoto: false, budget, load }), { kind: "none" });
+  assert.deepEqual(await resolvePhoto({ hasPhoto: true, mimeType: "application/pdf", budget, load }), {
+    kind: "unsupported",
+    label: "PDF"
+  });
+  assert.equal((await resolvePhoto({ hasPhoto: true, mimeType: "image/png", budget, load })).kind, "photo");
+  // 60 more bytes would pass 100: left out, and the budget is now closed.
+  assert.equal((await resolvePhoto({ hasPhoto: true, mimeType: "image/png", budget, load })).kind, "omitted");
+  let loaded = false;
+  const result = await resolvePhoto({
+    hasPhoto: true,
+    mimeType: "image/png",
+    budget,
+    load: async () => {
+      loaded = true;
+      return null;
+    }
+  });
+  assert.equal(result.kind, "omitted");
+  assert.equal(loaded, false);
+  assert.equal(budget.omitted, 2);
+});
+
+test("photoNote says why a photo is missing, in the file's own terms", () => {
+  const unsupported = { kind: "unsupported", label: "PDF" };
+  assert.equal(
+    photoNote(unsupported, { period: monthPeriod, medium: "spreadsheet" }),
+    "PDF attached in the app (can't be shown in a spreadsheet)"
+  );
+  assert.equal(
+    photoNote(unsupported, { period: monthPeriod, medium: "pdf" }),
+    "PDF attached in the app (can't be embedded in this file)"
+  );
+  assert.equal(photoNote({ kind: "omitted" }, { period: monthPeriod, medium: "pdf" }), "Photo left out to keep the file small");
+  assert.match(photoNote({ kind: "omitted" }, { period: yearPeriod, medium: "pdf" }), /export this month on its own/);
+  assert.equal(photoNote({ kind: "failed" }, { period: monthPeriod, medium: "pdf" }), "Photo could not be loaded");
 });
 
 // --- Photo helpers --------------------------------------------------------------
@@ -250,7 +288,7 @@ test("receipt and rent photos are embedded beside their rows", async () => {
   assert.deepEqual(media, ["jpeg", "png"]);
 });
 
-test("PDF and WebP proofs are named, not silently dropped", async () => {
+test("PDF and WebP attachments are named, not silently dropped", async () => {
   let loads = 0;
   const { buffer } = await buildEducationWorkbook({
     period: monthPeriod,
@@ -270,8 +308,8 @@ test("PDF and WebP proofs are named, not silently dropped", async () => {
 
   assert.equal(loads, 0, "a photo the spreadsheet cannot draw is never loaded");
   const workbook = await readWorkbook(buffer);
-  assert.match(workbook.getWorksheet("Food").getCell("H2").value, /WEBP proof attached in the app/);
-  assert.match(workbook.getWorksheet("Rent").getCell("E2").value, /PDF proof attached in the app/);
+  assert.match(workbook.getWorksheet("Food").getCell("H2").value, /WebP image attached in the app/);
+  assert.match(workbook.getWorksheet("Rent").getCell("E2").value, /PDF attached in the app/);
   assert.equal(workbook.getWorksheet("Food").getImages().length, 0);
 });
 
