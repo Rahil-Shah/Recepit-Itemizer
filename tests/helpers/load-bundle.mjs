@@ -42,5 +42,5 @@ export function loadReceiptRing(globals = {}) {
   const localStorage = globals.localStorage ?? createLocalStorageFake();
   const context = vm.createContext({ console, localStorage, ...globals });
   vm.runInContext(readFileSync(bundlePath, "utf8"), context, { filename: "bundle.js" });
-  return { ReceiptRing: context.ReceiptRing, localStorage };
+  return { ReceiptRing: context.ReceiptRing, localStorage, context };
 }

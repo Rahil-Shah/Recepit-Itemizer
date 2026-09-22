@@ -29,6 +29,9 @@ namespace ReceiptRing.App {
     // could overwrite the faster one and leave the workspace showing a result
     // the user did not ask for -- while charging for both.
     private isParsing = false;
+    // The loader laid over a panel while its content loads (see
+    // src/ui/loading.view.ts).
+    private readonly loading = new UI.LoadingOverlays();
     // The photo a parse failed on, so a retry has something to send.
     //
     // Held here rather than read back off the file input, because the input is
@@ -740,12 +743,14 @@ namespace ReceiptRing.App {
 
     private setIdentifyMessage(message: string, ratio: number): void {
       this.elements.identifyStatus.classList.remove("hidden");
+      this.elements.identifyStatus.classList.toggle("is-running", ratio < 1);
       this.elements.identifyStatusText.textContent = message;
       this.elements.identifyProgressBar.style.width = `${Math.round(Math.min(1, Math.max(0, ratio)) * 100)}%`;
     }
 
     private hideIdentifyStatus(): void {
       this.elements.identifyStatus.classList.add("hidden");
+      this.elements.identifyStatus.classList.remove("is-running");
       this.elements.identifyProgressBar.style.width = "0%";
     }
 
@@ -1088,6 +1093,8 @@ namespace ReceiptRing.App {
 
     private setOcrStatus(label: string, progress: number): void {
       this.elements.ocrStatus.classList.remove("hidden");
+      // Anything short of done is still running, so the loader turns beside it.
+      this.elements.ocrStatus.classList.toggle("is-running", progress < 1);
       // textContent, never innerHTML. This string can carry an error message
       // that originated at Gemini and was passed through the server, so it is
       // upstream text on a page -- it gets rendered, never parsed.
@@ -1098,6 +1105,7 @@ namespace ReceiptRing.App {
 
     private hideOcrStatus(): void {
       this.elements.ocrStatus.classList.add("hidden");
+      this.elements.ocrStatus.classList.remove("is-running");
       this.elements.ocrProgressBar.style.width = "0%";
       this.renderRetryButton();
     }
@@ -1423,7 +1431,7 @@ namespace ReceiptRing.App {
         return;
       }
 
-      this.elements.saveReceiptButton.setAttribute("disabled", "true");
+      UI.setBusy(this.elements.saveReceiptButton, true);
       this.setSaveStatus("Saving...");
 
       // Wait for the downscale started when the photo was picked; a failed one
@@ -1455,7 +1463,7 @@ namespace ReceiptRing.App {
         const message = error instanceof Error ? error.message : "Could not save receipt.";
         this.setSaveStatus(message, true);
       } finally {
-        this.elements.saveReceiptButton.removeAttribute("disabled");
+        UI.setBusy(this.elements.saveReceiptButton, false);
       }
     }
 
@@ -1599,7 +1607,15 @@ namespace ReceiptRing.App {
       return JSON.stringify(this.buildReceiptPayload(null));
     }
 
+    /** The body of the panel `element` sits in: where its loader goes. */
+    private panelBody(element: HTMLElement): HTMLElement {
+      return element.closest<HTMLElement>(".panel-body") ?? element;
+    }
+
     private async loadHistory(): Promise<void> {
+      const done = this.loading.show(this.panelBody(this.elements.historyList), "Loading your receipts…");
+      // "No saved receipts" is not true yet: nothing has been asked for.
+      this.elements.historyEmpty.classList.add("hidden");
       try {
         const receipts = await this.receiptApiService.list();
         // Kept so the budgeting view's "Receipt · <store>" tags can name a
@@ -1627,6 +1643,8 @@ namespace ReceiptRing.App {
         detail.textContent = error instanceof Error ? error.message : "Is the server running?";
         this.elements.historyEmpty.replaceChildren(title, detail);
         this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
+      } finally {
+        done();
       }
     }
 
@@ -1719,7 +1737,7 @@ namespace ReceiptRing.App {
     // 2FA needed. Distinct from the silent sync in loadBudgeting so the user
     // gets clear feedback on how many transactions came in.
     private async refreshTransactions(): Promise<void> {
-      this.elements.refreshTransactionsButton.setAttribute("disabled", "true");
+      UI.setBusy(this.elements.refreshTransactionsButton, true);
       try {
         this.setBankStatus("Refreshing…");
         const sync = await this.bankApiService.sync();
@@ -1732,11 +1750,36 @@ namespace ReceiptRing.App {
       } catch (error) {
         this.setBankStatus(error instanceof Error ? error.message : "Could not refresh transactions.");
       } finally {
-        this.elements.refreshTransactionsButton.removeAttribute("disabled");
+        UI.setBusy(this.elements.refreshTransactionsButton, false);
       }
     }
 
     private async loadBudgeting(options: { sync?: boolean } = {}): Promise<void> {
+      // Every panel is covered while its figures are fetched and added up.
+      // The education panel's own fetch (renderEducationExpenses) holds its
+      // loader a little longer, until its lists are in.
+      const spending = "Adding up your spending…";
+      const releases = [
+        this.loading.show(this.panelBody(this.elements.monthlyTrend), spending),
+        this.loading.show(this.panelBody(this.elements.budgetRing), spending),
+        this.loading.show(this.panelBody(this.elements.foodItemsList), "Totalling education expenses…")
+      ];
+      if (this.isAdmin) {
+        releases.push(
+          this.loading.show(
+            this.panelBody(this.elements.transactionsList),
+            options.sync === false ? "Loading transactions…" : "Checking your bank for new transactions…"
+          )
+        );
+      }
+      try {
+        await this.fetchAndRenderBudgeting(options);
+      } finally {
+        releases.forEach((release) => release());
+      }
+    }
+
+    private async fetchAndRenderBudgeting(options: { sync?: boolean }): Promise<void> {
       // Best-effort refresh: pull any new bank transactions on view. Failures
       // (no bank linked, Plaid still preparing data) are non-fatal — we still
       // render whatever is already stored below. Callers that just synced pass
@@ -2435,6 +2478,8 @@ namespace ReceiptRing.App {
 
     private renderRentEntries(): void {
       void (async () => {
+        // The rent list lives in the education panel, under the same loader.
+        const done = this.loading.show(this.panelBody(this.elements.rentEntriesList), "Totalling education expenses…");
         try {
           // No month in focus (fresh account) still shows the current month's
           // rent, mirroring renderEducationExpenses' fallback.
@@ -2450,6 +2495,8 @@ namespace ReceiptRing.App {
         } catch (error) {
           console.error("Failed to load rent entries:", error);
           this.rentEntriesView.render(this.elements.rentEntriesList, []);
+        } finally {
+          done();
         }
       })();
     }
@@ -2560,7 +2607,7 @@ namespace ReceiptRing.App {
         return;
       }
 
-      this.elements.rentEntrySaveButton.setAttribute("disabled", "true");
+      UI.setBusy(this.elements.rentEntrySaveButton, true);
 
       try {
         const { year, month } = parts;
@@ -2608,7 +2655,7 @@ namespace ReceiptRing.App {
           this.notificationService.error(message);
         }
       } finally {
-        this.elements.rentEntrySaveButton.removeAttribute("disabled");
+        UI.setBusy(this.elements.rentEntrySaveButton, false);
       }
     }
 
@@ -2916,6 +2963,7 @@ namespace ReceiptRing.App {
     }
 
     private async renderEducationExpenses(): Promise<void> {
+      const done = this.loading.show(this.panelBody(this.elements.foodItemsList), "Totalling education expenses…");
       try {
         const month = this.selectedMonth ?? (this.spendingAggregatorService.monthKey(new Date().toISOString()) ?? undefined);
         const foodSummary = await this.receiptApiService.getFoodSummary(month);
@@ -2988,6 +3036,8 @@ namespace ReceiptRing.App {
         console.error("Failed to render education expenses:", error);
         this.elements.foodEmpty.classList.remove("hidden");
         this.elements.rentEmpty.classList.remove("hidden");
+      } finally {
+        done();
       }
     }
 

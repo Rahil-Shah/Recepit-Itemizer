@@ -37,6 +37,7 @@
     "../src/services/spending-aggregator.service.ts",
     "../src/services/receipt-image.service.ts",
     "../src/services/gemini.service.ts",
-    "../src/ui/split-workspace.view.ts"
+    "../src/ui/split-workspace.view.ts",
+    "../src/ui/loading.view.ts"
   ]
 }

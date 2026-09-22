@@ -50,6 +50,7 @@
     "src/ui/split-workspace.view.ts",
     "src/ui/category-prompt.view.ts",
     "src/ui/rent-entries.view.ts",
+    "src/ui/loading.view.ts",
     "src/app/app.controller.ts",
     "src/main.ts"
   ]

@@ -343,16 +343,6 @@ body:not([data-auth="pending"]) .boot-mark {
   place-items: center;
 }
 
-.boot-mark .brand-logo {
-  width: 52px;
-  height: 52px;
-  animation: breathe 2.4s ease-in-out infinite;
-}
-
-.boot-mark .brand-logo svg {
-  width: 26px;
-  height: 26px;
-}
 
 /* ---------------- 3. Primitives ---------------- */
 
@@ -664,6 +654,264 @@ input[type="date"].table-input {
   background: var(--red-soft);
   color: var(--sienna);
   transform: scale(1.08);
+}
+
+/* --- Loader: the ring, turning round a receipt being printed ---
+   The one way this app says "wait". The spending ring from the logo fills
+   and turns round a moss disc while the receipt slip at its centre prints its
+   lines, one after another. Built by UI.createLoader (src/ui/loading.view.ts),
+   laid over a panel by UI.LoadingOverlays, and tucked into a button by
+   UI.setBusy, so a wait looks the same wherever it happens. */
+.loader {
+  display: inline-grid;
+  justify-items: center;
+  gap: 10px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.loader-mark {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  overflow: visible;
+}
+
+.loader-track,
+.loader-arc {
+  fill: none;
+  stroke-width: 3.5;
+}
+
+.loader-track {
+  stroke: var(--sand);
+}
+
+.loader-arc {
+  stroke: var(--clay);
+  stroke-linecap: round;
+  stroke-dasharray: 6 94;
+  transform-origin: 24px 24px;
+  animation:
+    loader-fill 1.8s var(--ease) infinite,
+    loader-turn 2.4s linear infinite;
+}
+
+.loader-disc {
+  fill: var(--moss);
+}
+
+.loader-slip {
+  fill: var(--bg);
+}
+
+.loader-line {
+  fill: none;
+  stroke: var(--moss);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  animation: loader-print 2.4s var(--ease) infinite;
+}
+
+.loader-line + .loader-line {
+  animation-delay: 0.3s;
+}
+
+.loader-line + .loader-line + .loader-line {
+  animation-delay: 0.6s;
+}
+
+.loader-label {
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.loader-hint {
+  max-width: 32ch;
+  margin-top: -6px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.loader-hint:empty {
+  display: none;
+}
+
+/* Small: beside a line of text or inside a button. At this size the slip is
+   a smudge, so the ring says it alone. */
+.loader-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loader-sm .loader-mark {
+  width: 18px;
+  height: 18px;
+}
+
+.loader-sm .loader-disc,
+.loader-sm .loader-slip,
+.loader-sm .loader-line {
+  display: none;
+}
+
+.loader-sm .loader-track,
+.loader-sm .loader-arc {
+  stroke-width: 6;
+}
+
+/* A ring this small needs a longer shortest arc, or it shrinks to a dot. */
+.loader-sm .loader-arc {
+  animation-name: loader-fill-sm, loader-turn;
+}
+
+.loader-lg .loader-mark {
+  width: 72px;
+  height: 72px;
+}
+
+/* In a button the ring takes the button's own ink, so it reads on moss,
+   sand and paper alike. */
+.btn .loader-track {
+  stroke: currentColor;
+  opacity: 0.22;
+}
+
+.btn .loader-arc {
+  stroke: currentColor;
+}
+
+.btn.is-busy {
+  cursor: progress;
+}
+
+/* Laid over a panel's body while it loads. What was there stays faintly
+   visible underneath, so nothing jumps when the new content lands. It fades
+   in after a beat, so a load that finishes at once never flashes a loader. */
+.is-loading {
+  position: relative;
+}
+
+.panel-body.is-loading {
+  min-height: 190px;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  border-radius: inherit;
+  background: rgba(254, 254, 250, 0.8);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  animation: fade 240ms var(--ease) 160ms both;
+}
+
+.loading-overlay.is-leaving {
+  animation: loading-leave 200ms var(--ease) both;
+}
+
+@keyframes loader-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The ring fills most of the way round, then lets go from the start: a month
+   of spending being added up, over and over. */
+@keyframes loader-fill {
+  0% {
+    stroke-dasharray: 6 94;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 64 36;
+    stroke-dashoffset: -16;
+  }
+  100% {
+    stroke-dasharray: 6 94;
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes loader-fill-sm {
+  0% {
+    stroke-dasharray: 24 76;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 70 30;
+    stroke-dashoffset: -18;
+  }
+  100% {
+    stroke-dasharray: 24 76;
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes loader-print {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+  30%,
+  75% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  90%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes loader-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes loading-leave {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Without motion the loader must still plainly be waiting: the ring a third
+   full, every line printed, and the whole mark fading slowly in and out.
+   These outrank the blanket rule in section 9 that stops every animation. */
+@media (prefers-reduced-motion: reduce) {
+  .loader .loader-arc,
+  .loader .loader-line {
+    animation: none !important;
+  }
+
+  .loader .loader-arc {
+    stroke-dasharray: 34 66;
+  }
+
+  .loader .loader-line {
+    stroke-dashoffset: 0;
+  }
+
+  .loader .loader-mark {
+    animation: loader-breathe 2s ease-in-out infinite !important;
+  }
 }
 
 /* ---------------- 4. App shell ---------------- */
@@ -1020,6 +1268,27 @@ input[type="date"].table-input {
 .ocr-status.hidden,
 .identify-status.hidden {
   display: none !important;
+}
+
+/* The message, with the loader turning beside it while the job runs. */
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ocr-status:not(.is-running) .status-line > .loader,
+.identify-status:not(.is-running) .status-line > .loader {
+  display: none;
+}
+
+/* In the moss status block the ring takes the block's own moss. */
+.status-line .loader-track {
+  stroke: rgba(93, 112, 82, 0.2);
+}
+
+.status-line .loader-arc {
+  stroke: var(--moss);
 }
 
 /* The retry sits inside the status block, beside the message that explains why
@@ -3581,18 +3850,6 @@ input[type="date"].table-input {
   }
   to {
     opacity: 1;
-  }
-}
-
-@keyframes breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    box-shadow: var(--shadow-soft);
-  }
-  50% {
-    transform: scale(1.08);
-    box-shadow: var(--shadow-soft-hover);
   }
 }
 
