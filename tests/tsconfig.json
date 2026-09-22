@@ -33,9 +33,11 @@
     "../src/services/saved-receipt-workspace.service.ts",
     "../src/services/bank-api.service.ts",
     "../src/services/rent-api.service.ts",
+    "../src/services/education-export-api.service.ts",
     "../src/services/spending-aggregator.service.ts",
     "../src/services/receipt-image.service.ts",
     "../src/services/gemini.service.ts",
-    "../src/ui/split-workspace.view.ts"
+    "../src/ui/split-workspace.view.ts",
+    "../src/ui/loading.view.ts"
   ]
 }

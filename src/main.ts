@@ -17,6 +17,7 @@ namespace ReceiptRing {
   const peopleApiService = new Services.PeopleApiService();
   const spendingAggregatorService = new Services.SpendingAggregatorService(categories);
   const rentEntryApiService = new Services.RentEntryApiService();
+  const educationExportApiService = new Services.EducationExportApiService();
   const notificationService = new Services.NotificationService();
 
   // Identification, cheapest tier first. The alias store is what makes the
@@ -35,6 +36,9 @@ namespace ReceiptRing {
     new Services.ItemIdentityApiService()
   );
   const elements = new UI.DomRegistryFactory().create();
+  // The spinners written into the page's own markup, such as the one beside
+  // a receipt scan's status, get their drawing here.
+  UI.mountLoaders(document);
   const categoryPromptView = new UI.CategoryPromptView(categories, elements);
   const splitWorkspaceView = new UI.SplitWorkspaceView(currencyFormatService, receiptApiService);
   const budgetRingView = new UI.BudgetRingView(currencyFormatService);
@@ -69,7 +73,8 @@ namespace ReceiptRing {
     notificationService,
     itemIdentityService,
     itemAliasStoreService,
-    authApiService
+    authApiService,
+    educationExportApiService
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.

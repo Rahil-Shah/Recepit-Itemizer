@@ -1,6 +1,9 @@
 namespace ReceiptRing.App {
   type TabName = "receipts" | "history" | "budgeting";
 
+  // Where the export dialog remembers the format it was last used with.
+  const EXPORT_FORMAT_KEY = "education_export_format";
+
   // A small receipt glyph for the "this transaction has a receipt" tag. A bare
   // word was easy to miss when scanning the list; the mark reads at a glance.
   const RECEIPT_TAG_ICON = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -29,6 +32,11 @@ namespace ReceiptRing.App {
     // could overwrite the faster one and leave the workspace showing a result
     // the user did not ask for -- while charging for both.
     private isParsing = false;
+    // The loader laid over a panel while its content loads (see
+    // src/ui/loading.view.ts).
+    private readonly loading = new UI.LoadingOverlays();
+    // The export download in flight, so closing its dialog can stop it.
+    private exportAbort: AbortController | null = null;
     // The photo a parse failed on, so a retry has something to send.
     //
     // Held here rather than read back off the file input, because the input is
@@ -110,7 +118,8 @@ namespace ReceiptRing.App {
       private readonly notificationService: Services.NotificationService,
       private readonly itemIdentityService: Services.ItemIdentityService,
       private readonly itemAliasStoreService: Services.ItemAliasStoreService,
-      private readonly authApiService: Services.AuthApiService
+      private readonly authApiService: Services.AuthApiService,
+      private readonly educationExportApiService: Services.EducationExportApiService
     ) {
       this.items = this.storageService.load();
     }
@@ -191,6 +200,10 @@ namespace ReceiptRing.App {
       this.elements.addRentEntryButton.addEventListener("click", () => this.openRentEntryForm());
       this.elements.rentEntryCancelButton.addEventListener("click", () => this.closeRentEntryModal());
       this.elements.rentEntrySaveButton.addEventListener("click", () => void this.saveRentEntry());
+      this.elements.educationExportButton.addEventListener("click", () => this.openEducationExportModal());
+      this.elements.educationExportCancelButton.addEventListener("click", () => this.closeEducationExportModal());
+      this.elements.educationExportScope.addEventListener("change", () => this.syncEducationExportScope());
+      this.elements.educationExportDownloadButton.addEventListener("click", () => void this.downloadEducationExport());
       this.elements.rentEntriesList.addEventListener("click", (event) => {
         const target = event.target as HTMLElement;
         if (target.textContent === "Edit") {
@@ -735,12 +748,14 @@ namespace ReceiptRing.App {
 
     private setIdentifyMessage(message: string, ratio: number): void {
       this.elements.identifyStatus.classList.remove("hidden");
+      this.elements.identifyStatus.classList.toggle("is-running", ratio < 1);
       this.elements.identifyStatusText.textContent = message;
       this.elements.identifyProgressBar.style.width = `${Math.round(Math.min(1, Math.max(0, ratio)) * 100)}%`;
     }
 
     private hideIdentifyStatus(): void {
       this.elements.identifyStatus.classList.add("hidden");
+      this.elements.identifyStatus.classList.remove("is-running");
       this.elements.identifyProgressBar.style.width = "0%";
     }
 
@@ -1083,6 +1098,8 @@ namespace ReceiptRing.App {
 
     private setOcrStatus(label: string, progress: number): void {
       this.elements.ocrStatus.classList.remove("hidden");
+      // Anything short of done is still running, so the loader turns beside it.
+      this.elements.ocrStatus.classList.toggle("is-running", progress < 1);
       // textContent, never innerHTML. This string can carry an error message
       // that originated at Gemini and was passed through the server, so it is
       // upstream text on a page -- it gets rendered, never parsed.
@@ -1093,6 +1110,7 @@ namespace ReceiptRing.App {
 
     private hideOcrStatus(): void {
       this.elements.ocrStatus.classList.add("hidden");
+      this.elements.ocrStatus.classList.remove("is-running");
       this.elements.ocrProgressBar.style.width = "0%";
       this.renderRetryButton();
     }
@@ -1418,7 +1436,7 @@ namespace ReceiptRing.App {
         return;
       }
 
-      this.elements.saveReceiptButton.setAttribute("disabled", "true");
+      UI.setBusy(this.elements.saveReceiptButton, true);
       this.setSaveStatus("Saving...");
 
       // Wait for the downscale started when the photo was picked; a failed one
@@ -1450,7 +1468,7 @@ namespace ReceiptRing.App {
         const message = error instanceof Error ? error.message : "Could not save receipt.";
         this.setSaveStatus(message, true);
       } finally {
-        this.elements.saveReceiptButton.removeAttribute("disabled");
+        UI.setBusy(this.elements.saveReceiptButton, false);
       }
     }
 
@@ -1594,7 +1612,15 @@ namespace ReceiptRing.App {
       return JSON.stringify(this.buildReceiptPayload(null));
     }
 
+    /** The body of the panel `element` sits in: where its loader goes. */
+    private panelBody(element: HTMLElement): HTMLElement {
+      return element.closest<HTMLElement>(".panel-body") ?? element;
+    }
+
     private async loadHistory(): Promise<void> {
+      const done = this.loading.show(this.panelBody(this.elements.historyList), "Loading your receipts…");
+      // "No saved receipts" is not true yet: nothing has been asked for.
+      this.elements.historyEmpty.classList.add("hidden");
       try {
         const receipts = await this.receiptApiService.list();
         // Kept so the budgeting view's "Receipt · <store>" tags can name a
@@ -1622,6 +1648,8 @@ namespace ReceiptRing.App {
         detail.textContent = error instanceof Error ? error.message : "Is the server running?";
         this.elements.historyEmpty.replaceChildren(title, detail);
         this.splitWorkspaceView.renderHistory(this.elements.historyList, []);
+      } finally {
+        done();
       }
     }
 
@@ -1714,7 +1742,7 @@ namespace ReceiptRing.App {
     // 2FA needed. Distinct from the silent sync in loadBudgeting so the user
     // gets clear feedback on how many transactions came in.
     private async refreshTransactions(): Promise<void> {
-      this.elements.refreshTransactionsButton.setAttribute("disabled", "true");
+      UI.setBusy(this.elements.refreshTransactionsButton, true);
       try {
         this.setBankStatus("Refreshing…");
         const sync = await this.bankApiService.sync();
@@ -1727,11 +1755,36 @@ namespace ReceiptRing.App {
       } catch (error) {
         this.setBankStatus(error instanceof Error ? error.message : "Could not refresh transactions.");
       } finally {
-        this.elements.refreshTransactionsButton.removeAttribute("disabled");
+        UI.setBusy(this.elements.refreshTransactionsButton, false);
       }
     }
 
     private async loadBudgeting(options: { sync?: boolean } = {}): Promise<void> {
+      // Every panel is covered while its figures are fetched and added up.
+      // The education panel's own fetch (renderEducationExpenses) holds its
+      // loader a little longer, until its lists are in.
+      const spending = "Adding up your spending…";
+      const releases = [
+        this.loading.show(this.panelBody(this.elements.monthlyTrend), spending),
+        this.loading.show(this.panelBody(this.elements.budgetRing), spending),
+        this.loading.show(this.panelBody(this.elements.foodItemsList), "Totalling education expenses…")
+      ];
+      if (this.isAdmin) {
+        releases.push(
+          this.loading.show(
+            this.panelBody(this.elements.transactionsList),
+            options.sync === false ? "Loading transactions…" : "Checking your bank for new transactions…"
+          )
+        );
+      }
+      try {
+        await this.fetchAndRenderBudgeting(options);
+      } finally {
+        releases.forEach((release) => release());
+      }
+    }
+
+    private async fetchAndRenderBudgeting(options: { sync?: boolean }): Promise<void> {
       // Best-effort refresh: pull any new bank transactions on view. Failures
       // (no bank linked, Plaid still preparing data) are non-fatal — we still
       // render whatever is already stored below. Callers that just synced pass
@@ -2430,6 +2483,8 @@ namespace ReceiptRing.App {
 
     private renderRentEntries(): void {
       void (async () => {
+        // The rent list lives in the education panel, under the same loader.
+        const done = this.loading.show(this.panelBody(this.elements.rentEntriesList), "Totalling education expenses…");
         try {
           // No month in focus (fresh account) still shows the current month's
           // rent, mirroring renderEducationExpenses' fallback.
@@ -2445,6 +2500,8 @@ namespace ReceiptRing.App {
         } catch (error) {
           console.error("Failed to load rent entries:", error);
           this.rentEntriesView.render(this.elements.rentEntriesList, []);
+        } finally {
+          done();
         }
       })();
     }
@@ -2458,6 +2515,132 @@ namespace ReceiptRing.App {
     private closeRentEntryModal(): void {
       this.editingRentEntryId = null;
       this.elements.rentEntryModal.classList.add("hidden");
+    }
+
+    // The export asks which period to cover, starting from the month the
+    // budgeting view is already showing, since that is the one the user was
+    // just looking at.
+    private openEducationExportModal(): void {
+      const month =
+        this.selectedMonth ?? this.spendingAggregatorService.monthKey(new Date().toISOString()) ?? "";
+      const currentYear = new Date().getFullYear();
+      const focusYear = Number(month.slice(0, 4)) || currentYear;
+
+      // This year and the five before it cover any realistic claim; the year
+      // in focus is added if it is older than that.
+      const years = new Set<number>();
+      for (let year = currentYear; year >= currentYear - 5; year -= 1) years.add(year);
+      years.add(focusYear);
+      const yearSelect = this.elements.educationExportYear;
+      yearSelect.replaceChildren(
+        ...[...years]
+          .sort((left, right) => right - left)
+          .map((year) => {
+            const option = document.createElement("option");
+            option.value = String(year);
+            option.textContent = String(year);
+            return option;
+          })
+      );
+      yearSelect.value = String(focusYear);
+
+      this.elements.educationExportScope.value = "month";
+      this.elements.educationExportMonth.value = month;
+      const format = this.rememberedExportFormat();
+      this.elements.educationExportFormatInputs.forEach((input) => {
+        input.checked = input.value === format;
+      });
+      this.syncEducationExportScope();
+      this.elements.educationExportModal.classList.remove("hidden");
+    }
+
+    private closeEducationExportModal(): void {
+      // Closing while the file is still being built stops waiting for it.
+      if (this.exportAbort) {
+        this.exportAbort.abort();
+        this.exportAbort = null;
+        this.notificationService.info("Export cancelled.");
+      }
+      this.elements.educationExportModal.classList.add("hidden");
+    }
+
+    // The format picked last time is the likeliest one next time. A PDF is
+    // the default: it is what gets read, printed and sent.
+    private rememberedExportFormat(): Services.EducationExportFormat {
+      try {
+        const saved = localStorage.getItem(EXPORT_FORMAT_KEY);
+        return Services.isEducationExportFormat(saved) ? saved : "pdf";
+      } catch {
+        return "pdf";
+      }
+    }
+
+    private rememberExportFormat(format: Services.EducationExportFormat): void {
+      try {
+        localStorage.setItem(EXPORT_FORMAT_KEY, format);
+      } catch {
+        // Private browsing and the like: the choice just is not remembered.
+      }
+    }
+
+    private selectedExportFormat(): Services.EducationExportFormat {
+      const checked = this.elements.educationExportFormatInputs.find((input) => input.checked)?.value;
+      return Services.isEducationExportFormat(checked) ? checked : "pdf";
+    }
+
+    private syncEducationExportScope(): void {
+      const wholeYear = this.elements.educationExportScope.value === "year";
+      this.elements.educationExportMonthField.classList.toggle("hidden", wholeYear);
+      this.elements.educationExportYearField.classList.toggle("hidden", !wholeYear);
+    }
+
+    private async downloadEducationExport(): Promise<void> {
+      const period: Services.EducationExportPeriod =
+        this.elements.educationExportScope.value === "year"
+          ? { kind: "year", year: Number(this.elements.educationExportYear.value) }
+          : { kind: "month", month: this.elements.educationExportMonth.value };
+      const format = this.selectedExportFormat();
+      if (!Services.educationExportUrl(period, format)) {
+        this.notificationService.error("Choose a month or a year to export.");
+        return;
+      }
+
+      // The server builds the whole file before sending any of it, so the
+      // form sits under the loader until it arrives. Cancel stays usable.
+      const button = this.elements.educationExportDownloadButton;
+      const done = this.loading.show(
+        this.elements.educationExportForm,
+        `Building your ${format === "pdf" ? "PDF" : "spreadsheet"}…`,
+        period.kind === "year" ? "A whole year of photos can take a moment." : "Placing your receipt and rent photos."
+      );
+      UI.setBusy(button, true);
+      const abort = new AbortController();
+      this.exportAbort = abort;
+      try {
+        const { blob, fileName } = await this.educationExportApiService.download(period, format, abort.signal);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        // Give the browser a moment to start the download before the URL goes.
+        window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        this.rememberExportFormat(format);
+        // Finished, so closing is not a cancellation.
+        this.exportAbort = null;
+        this.closeEducationExportModal();
+        this.notificationService.success(`Downloaded ${fileName}.`);
+      } catch (error) {
+        // Cancelled: the dialog is already closed and has said so.
+        if (abort.signal.aborted) return;
+        this.notificationService.error(error instanceof Error ? error.message : "Export failed.");
+      } finally {
+        if (this.exportAbort === abort) this.exportAbort = null;
+        done();
+        UI.setBusy(button, false);
+      }
     }
 
     private async saveRentEntry(): Promise<void> {
@@ -2477,7 +2660,7 @@ namespace ReceiptRing.App {
         return;
       }
 
-      this.elements.rentEntrySaveButton.setAttribute("disabled", "true");
+      UI.setBusy(this.elements.rentEntrySaveButton, true);
 
       try {
         const { year, month } = parts;
@@ -2525,7 +2708,7 @@ namespace ReceiptRing.App {
           this.notificationService.error(message);
         }
       } finally {
-        this.elements.rentEntrySaveButton.removeAttribute("disabled");
+        UI.setBusy(this.elements.rentEntrySaveButton, false);
       }
     }
 
@@ -2833,6 +3016,7 @@ namespace ReceiptRing.App {
     }
 
     private async renderEducationExpenses(): Promise<void> {
+      const done = this.loading.show(this.panelBody(this.elements.foodItemsList), "Totalling education expenses…");
       try {
         const month = this.selectedMonth ?? (this.spendingAggregatorService.monthKey(new Date().toISOString()) ?? undefined);
         const foodSummary = await this.receiptApiService.getFoodSummary(month);
@@ -2905,6 +3089,8 @@ namespace ReceiptRing.App {
         console.error("Failed to render education expenses:", error);
         this.elements.foodEmpty.classList.remove("hidden");
         this.elements.rentEmpty.classList.remove("hidden");
+      } finally {
+        done();
       }
     }
 
