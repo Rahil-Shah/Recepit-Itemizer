@@ -23,10 +23,12 @@ import {
 import {
   buildEducationWorkbook,
   exportFileName,
+  parseExportFormat,
   parseExportPeriod,
   EXPORT_FORMATS,
   EXPORT_RATE_LIMIT
 } from "./server/education-export.mjs";
+import { buildEducationPdf } from "./server/education-export-pdf.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
 import { assertAccessPolicy, maxReceiptsPerUser } from "./server/access.mjs";
 import { databaseUrl, isProduction, isVercel } from "./server/deployment.mjs";
@@ -1430,14 +1432,16 @@ app.get("/api/rent-entries/summary", requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/education-expenses/export?month=YYYY-MM | ?year=YYYY
+// GET /api/education-expenses/export?month=YYYY-MM | ?year=YYYY [&format=xlsx|pdf]
 //
-// The food and rent behind the education-expense totals, as an .xlsx with each
-// receipt and rent proof photo embedded beside its row. Exactly one of month
-// or year picks the period.
+// The food and rent behind the education-expense totals, as an .xlsx or a PDF
+// with each receipt and rent proof photo embedded beside its row. Exactly one
+// of month or year picks the period; the format defaults to the spreadsheet.
+// Both formats share one rate limit, so asking for the other one is not a way
+// around it.
 
 // Photos are the bulk of the file. Vercel refuses a function response over
-// 4.5 MB, so there the budget leaves room for the sheets themselves; a
+// 4.5 MB, so there the budget leaves room for the rest of the file; a
 // self-hosted server has no such cap and can carry a year of photos.
 const EXPORT_PHOTO_BUDGET = isVercel() ? 3.5 * 1024 * 1024 : 40 * 1024 * 1024;
 
@@ -1446,7 +1450,10 @@ app.get("/api/education-expenses/export", requireAuth, exportLimiterShared, expo
   if (period.error) {
     return res.status(400).json({ error: period.error });
   }
-  const format = "xlsx";
+  const format = parseExportFormat(req.query.format);
+  if (!format) {
+    return res.status(400).json({ error: "format must be xlsx or pdf." });
+  }
 
   try {
     const window =
@@ -1461,9 +1468,10 @@ app.get("/api/education-expenses/export", requireAuth, exportLimiterShared, expo
       prisma.rentEntry.findMany({ where: rentWhere, omit: { photoData: true } })
     ]);
 
-    // Photos are fetched one at a time as the workbook reaches them, scoped
-    // to this account, rather than loading every photo in the period up front.
-    const { buffer } = await buildEducationWorkbook({
+    // Photos are fetched one at a time as the file reaches them, scoped to
+    // this account, rather than loading every photo in the period up front.
+    const build = format === "pdf" ? buildEducationPdf : buildEducationWorkbook;
+    const { buffer } = await build({
       period,
       foodReceipts: food.foodReceipts,
       foodTransactions: food.foodTransactions,
