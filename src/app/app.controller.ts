@@ -1,6 +1,9 @@
 namespace ReceiptRing.App {
   type TabName = "receipts" | "history" | "budgeting";
 
+  // Where the export dialog remembers the format it was last used with.
+  const EXPORT_FORMAT_KEY = "education_export_format";
+
   // A small receipt glyph for the "this transaction has a receipt" tag. A bare
   // word was easy to miss when scanning the list; the mark reads at a glance.
   const RECEIPT_TAG_ICON = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -32,6 +35,8 @@ namespace ReceiptRing.App {
     // The loader laid over a panel while its content loads (see
     // src/ui/loading.view.ts).
     private readonly loading = new UI.LoadingOverlays();
+    // The export download in flight, so closing its dialog can stop it.
+    private exportAbort: AbortController | null = null;
     // The photo a parse failed on, so a retry has something to send.
     //
     // Held here rather than read back off the file input, because the input is
@@ -2541,12 +2546,46 @@ namespace ReceiptRing.App {
 
       this.elements.educationExportScope.value = "month";
       this.elements.educationExportMonth.value = month;
+      const format = this.rememberedExportFormat();
+      this.elements.educationExportFormatInputs.forEach((input) => {
+        input.checked = input.value === format;
+      });
       this.syncEducationExportScope();
       this.elements.educationExportModal.classList.remove("hidden");
     }
 
     private closeEducationExportModal(): void {
+      // Closing while the file is still being built stops waiting for it.
+      if (this.exportAbort) {
+        this.exportAbort.abort();
+        this.exportAbort = null;
+        this.notificationService.info("Export cancelled.");
+      }
       this.elements.educationExportModal.classList.add("hidden");
+    }
+
+    // The format picked last time is the likeliest one next time. A PDF is
+    // the default: it is what gets read, printed and sent.
+    private rememberedExportFormat(): Services.EducationExportFormat {
+      try {
+        const saved = localStorage.getItem(EXPORT_FORMAT_KEY);
+        return Services.isEducationExportFormat(saved) ? saved : "pdf";
+      } catch {
+        return "pdf";
+      }
+    }
+
+    private rememberExportFormat(format: Services.EducationExportFormat): void {
+      try {
+        localStorage.setItem(EXPORT_FORMAT_KEY, format);
+      } catch {
+        // Private browsing and the like: the choice just is not remembered.
+      }
+    }
+
+    private selectedExportFormat(): Services.EducationExportFormat {
+      const checked = this.elements.educationExportFormatInputs.find((input) => input.checked)?.value;
+      return Services.isEducationExportFormat(checked) ? checked : "pdf";
     }
 
     private syncEducationExportScope(): void {
@@ -2560,17 +2599,25 @@ namespace ReceiptRing.App {
         this.elements.educationExportScope.value === "year"
           ? { kind: "year", year: Number(this.elements.educationExportYear.value) }
           : { kind: "month", month: this.elements.educationExportMonth.value };
-      if (!Services.educationExportUrl(period)) {
+      const format = this.selectedExportFormat();
+      if (!Services.educationExportUrl(period, format)) {
         this.notificationService.error("Choose a month or a year to export.");
         return;
       }
 
+      // The server builds the whole file before sending any of it, so the
+      // form sits under the loader until it arrives. Cancel stays usable.
       const button = this.elements.educationExportDownloadButton;
-      const label = button.textContent;
-      button.disabled = true;
-      button.textContent = "Preparing…";
+      const done = this.loading.show(
+        this.elements.educationExportForm,
+        `Building your ${format === "pdf" ? "PDF" : "spreadsheet"}…`,
+        period.kind === "year" ? "A whole year of photos can take a moment." : "Placing your receipt and rent photos."
+      );
+      UI.setBusy(button, true);
+      const abort = new AbortController();
+      this.exportAbort = abort;
       try {
-        const { blob, fileName } = await this.educationExportApiService.download(period);
+        const { blob, fileName } = await this.educationExportApiService.download(period, format, abort.signal);
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -2580,13 +2627,19 @@ namespace ReceiptRing.App {
         link.remove();
         // Give the browser a moment to start the download before the URL goes.
         window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        this.rememberExportFormat(format);
+        // Finished, so closing is not a cancellation.
+        this.exportAbort = null;
         this.closeEducationExportModal();
         this.notificationService.success(`Downloaded ${fileName}.`);
       } catch (error) {
+        // Cancelled: the dialog is already closed and has said so.
+        if (abort.signal.aborted) return;
         this.notificationService.error(error instanceof Error ? error.message : "Export failed.");
       } finally {
-        button.disabled = false;
-        button.textContent = label;
+        if (this.exportAbort === abort) this.exportAbort = null;
+        done();
+        UI.setBusy(button, false);
       }
     }
 

@@ -122,6 +122,8 @@ namespace ReceiptRing.UI {
     educationExpensesTotal: HTMLElement;
     educationExportButton: HTMLButtonElement;
     educationExportModal: HTMLElement;
+    educationExportForm: HTMLElement;
+    educationExportFormatInputs: HTMLInputElement[];
     educationExportScope: HTMLSelectElement;
     educationExportMonthField: HTMLElement;
     educationExportMonth: HTMLInputElement;
@@ -275,6 +277,10 @@ namespace ReceiptRing.UI {
         educationExpensesTotal: this.getElement("#educationExpensesTotal", HTMLElement),
         educationExportButton: this.getElement("#educationExportButton", HTMLButtonElement),
         educationExportModal: this.getElement("#educationExportModal", HTMLElement),
+        educationExportForm: this.getElement("#educationExportForm", HTMLElement),
+        educationExportFormatInputs: Array.from(document.querySelectorAll('input[name="educationExportFormat"]')).filter(
+          (element): element is HTMLInputElement => element instanceof HTMLInputElement
+        ),
         educationExportScope: this.getElement("#educationExportScope", HTMLSelectElement),
         educationExportMonthField: this.getElement("#educationExportMonthField", HTMLElement),
         educationExportMonth: this.getElement("#educationExportMonth", HTMLInputElement),

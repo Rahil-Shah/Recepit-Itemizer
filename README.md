@@ -41,7 +41,11 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 - **Item Identification**: Receipts print shorthand — `GV SHRD MOZZ 8Z` — which is unreadable weeks later. Hit **Identify items** and every line gets its real product name, with a confidence score. Click any item to see what the receipt printed, its item code, brand, size, where the answer came from and why; correct it, or pick one of the alternatives. Corrections are remembered, so the same item on your next receipt from that shop is named for free.
 - **Smart Categorization**: Categorize receipt items (Dining, Groceries, Travel, etc.) and save defaults for specific items. Receipt category defaults to **Groceries**.
 - **Saved History (Postgres)**: Save a split to a Postgres database and review previous receipts, items, prices, and per-person splits under the **History** tab. Marked something wrong? **Edit in Split** reopens a saved receipt in the Split tab with its assignments, food flags, and item names, and **Save changes** updates it in place — it keeps its photo, its budget month, and any linked bank transaction.
-- **Education Expense Export**: From **Budgets → Education expenses**, **Export spreadsheet** asks for one month or a whole year and downloads an `.xlsx` with a Summary, the food receipts (with each receipt photo embedded beside its row), the individual food items, and rent payments (with each proof photo). PDF and WebP proofs cannot be drawn in a spreadsheet, so their cells say so. The export is limited to 10 per 15 minutes per account, and one at a time.
+- **Education Expense Export**: From **Budgets → Education expenses**, **Export** asks for a format and for one month or a whole year, then downloads:
+  - a **PDF** to read, print or send: a summary with the Food / Rent / Total figures, then every food receipt with its items and your share, and every rent payment, each with its photo beside it. Every page carries the Receipt Ring logo and name in its header and a page number in its footer, and the text is set in the app's own Fraunces and Nunito.
+  - a **spreadsheet** (`.xlsx`) to sort and total yourself: a Summary, the food receipts (each receipt photo embedded beside its row), the individual food items, and rent payments (each proof photo embedded).
+
+  PDF and WebP attachments cannot be placed inside either file, so their rows say so. The dialog remembers the format you used last, and **Cancel** stops a file that is still being built. Both formats share one limit of 10 exports per 15 minutes per account, one at a time.
 - **Bank Connection (Plaid)**: Securely link a bank through [Plaid Link](https://plaid.com/docs/link/) to import **read-only** transactions. Access tokens are exchanged server-side and stored AES-256-GCM encrypted at rest — they never reach the browser.
 - **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
@@ -57,7 +61,7 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 | Gemini key used | the server's `GEMINI_API_KEY`, or a personal one | a personal key only |
 | Saved receipts | unlimited | `MAX_RECEIPTS_PER_USER` (20) |
 | Education expenses: food lines, rent entries | yes | yes |
-| Export education expenses to a spreadsheet (with photos) | yes | yes |
+| Export education expenses as a PDF or spreadsheet (with photos) | yes | yes |
 | Spending ring and monthly trend | yes | yes |
 | Connect a bank through Plaid | yes | no |
 | Imported bank transactions | yes | no |
@@ -240,9 +244,12 @@ What the serverless shape changes:
   education-expense export count their windows in Postgres (the `rate_limits` table), so the limit
   holds across instances and cold starts. The in-memory limiters stay mounted in front as a free local guard. If the database cannot
   be reached the shared check allows the request rather than failing the app closed.
-- **Spreadsheet export size.** Vercel refuses a function response over 4.5 MB, so there the
-  education-expense export embeds at most ~3.5 MB of photos and names the rest in their cells
+- **Export size.** Vercel refuses a function response over 4.5 MB, so there the education-expense
+  export (PDF or spreadsheet) embeds at most ~3.5 MB of photos and names the rest in their place
   (export a single month to get them all). A self-hosted server allows 40 MB.
+- **PDF fonts.** The PDF export reads its typefaces from `server/fonts` at runtime, so
+  `vercel.json` names that directory in `includeFiles` to ship it with the function. If the
+  fonts are ever missing, the PDF falls back to the standard PDF fonts rather than failing.
 - **Health check.** `GET /api/health` answers `{ "ok": true }` when the function can reach the
   database, for uptime monitors.
 

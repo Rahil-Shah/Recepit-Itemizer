@@ -3533,6 +3533,97 @@ input[type="date"].table-input {
   color: var(--ink-3);
 }
 
+/* --- Export dialog: which file, for which period --- */
+.format-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.format-option {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+/* The radio stays in the page for the keyboard and screen readers; the card
+   is what shows which one is picked. */
+.format-option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.format-option-card {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  height: 100%;
+  padding: 14px 16px 15px;
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition:
+    border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.format-option-icon {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 6px;
+  color: var(--ink-3);
+  transition: color var(--dur) var(--ease);
+}
+
+.format-option-name {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.format-option-note {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.format-option:hover .format-option-card {
+  border-color: var(--border-hover);
+}
+
+.format-option input:checked + .format-option-card {
+  border-color: var(--moss);
+  background: var(--accent-soft);
+  box-shadow: var(--shadow-soft);
+}
+
+.format-option input:checked + .format-option-card .format-option-icon {
+  color: var(--moss);
+}
+
+.format-option input:focus-visible + .format-option-card {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* While the file is built the form sits under the loader; Cancel stays
+   usable beneath it. */
+.export-form.is-loading {
+  min-height: 240px;
+}
+
+.export-form .loading-overlay {
+  margin: -6px;
+  border-radius: var(--radius-sm);
+}
+
 /* ---------------- 8. Dialogs ---------------- */
 
 /* --- Modals --- */
