@@ -262,22 +262,22 @@ things decide whether it is lossless:
    ```bash
    DIRECT_DATABASE_URL="postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require" npm run db:deploy
    ```
-3. Copy the rows. Data only, without Prisma's history table (Supabase now has its own, correct
-   one), and run both tools inside the Docker container so their versions match:
+3. Copy the rows with the bundled script, passing the **session pooler** string:
    ```bash
-   docker exec receipt-ring-db pg_dump -U receipt -d receipt_ring --data-only --no-owner --no-privileges --exclude-table=_prisma_migrations > receipt-ring-data.sql
+   ./scripts/import-local-db.sh "postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
+   ```
+   It checks the local database is running, refuses a string that still carries a placeholder or
+   points at the transaction pooler, confirms the target has the schema, copies the rows, and
+   compares the counts on both sides. Nothing is written unless every check passes.
 
-   docker exec -i receipt-ring-db psql "postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require" -v ON_ERROR_STOP=1 --single-transaction < receipt-ring-data.sql
-   ```
-   The restore is all-or-nothing: if it fails, nothing is written and it can be rerun. The schema
-   has no circular foreign keys, so the dump's own table order is correct.
-4. Compare counts on both sides:
-   ```sql
-   SELECT (SELECT count(*) FROM users) users, (SELECT count(*) FROM receipts) receipts,
-          (SELECT count(*) FROM receipt_lines) lines, (SELECT count(*) FROM line_assignments) assignments,
-          (SELECT count(*) FROM bank_transactions) transactions, (SELECT count(*) FROM rent_entries) rent,
-          (SELECT count(*) FROM item_aliases) aliases, (SELECT count(*) FROM account_people) people;
-   ```
+   It copies data only. Prisma's migration history, the rate limit counters and the session table
+   stay behind: the target's history is the correct one, and the other two are transient state
+   belonging to the machine that wrote them.
+
+   If the target already holds data, usually because an account was created on the live site before
+   the import, the script stops and says so. Re-run it with `--replace` to erase what is there
+   first. That erase and the restore run inside one transaction, so a failure cannot leave the
+   target empty.
 5. In Supabase, under Project Settings → API → *Exposed schemas*, remove `public`. The app never
    uses Supabase's REST API, and the row-level security migration already blocks it, but there is
    no reason to leave the door in place.
