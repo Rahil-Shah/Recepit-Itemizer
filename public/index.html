@@ -567,6 +567,8 @@
             <a href="#how-it-works">How it works</a>
             <a href="#features">Features</a>
             <a href="#faq">FAQ</a>
+            <a href="/privacy.html">Privacy</a>
+            <a href="/terms.html">Terms</a>
             <a href="https://github.com/Rahil-Shah/Recepit-Itemizer" rel="noopener noreferrer" target="_blank">Source on GitHub</a>
           </nav>
           <p class="site-footer-note">MIT licensed. Built with Gemini, Plaid and Postgres.</p>
@@ -835,6 +837,11 @@
                   </div>
                 </div>
 
+                <p class="panel-note">
+                  These totals are a record of what you marked, not tax advice. Check them against your own
+                  receipts and the rules for your plan before using them in a filing.
+                </p>
+
                 <div class="education-sections">
                   <div class="education-section" id="foodSection">
                     <header class="section-header">
@@ -872,31 +879,44 @@
               </div>
             </section>
 
-            <!-- Admin accounts only: the stylesheet hides it for everyone else
-                 (body[data-access="regular"]), and the server refuses the
-                 routes behind it regardless. -->
-            <section class="panel panel-wide admin-only" aria-label="Bank transactions">
+            <!-- The panel is always here; what is inside it depends on the
+                 account. Admin accounts get the real Plaid controls, everyone
+                 else gets the coming-soon note, and the server refuses the
+                 routes behind it either way. -->
+            <section class="panel panel-wide" aria-label="Bank transactions">
               <header class="panel-header">
                 <h2>Bank transactions</h2>
-                <div class="panel-actions">
+                <div class="panel-actions admin-only">
                   <button class="btn btn-secondary" id="refreshTransactionsButton" type="button">Refresh</button>
                   <button class="btn btn-primary" id="connectBankButton" type="button">Connect bank</button>
                 </div>
               </header>
               <div class="panel-body">
-                <p class="bank-status" id="bankStatus"></p>
-                <div class="bank-connections" id="bankConnections"></div>
-                <div class="transactions-list" id="transactionsList"></div>
-                <input
-                  accept="image/*"
-                  class="visually-hidden"
-                  id="transactionReceiptFile"
-                  tabindex="-1"
-                  type="file"
-                />
-                <div class="empty-state hidden" id="transactionsEmpty">
-                  <strong>No transactions yet</strong>
-                  <span>Connect a bank to import read-only transactions.</span>
+                <div class="admin-only">
+                  <p class="bank-status" id="bankStatus"></p>
+                  <div class="bank-connections" id="bankConnections"></div>
+                  <div class="transactions-list" id="transactionsList"></div>
+                  <input
+                    accept="image/*"
+                    class="visually-hidden"
+                    id="transactionReceiptFile"
+                    tabindex="-1"
+                    type="file"
+                  />
+                  <div class="empty-state hidden" id="transactionsEmpty">
+                    <strong>No transactions yet</strong>
+                    <span>Connect a bank to import read-only transactions.</span>
+                  </div>
+                </div>
+
+                <div class="empty-state regular-only">
+                  <span class="coming-soon-badge">Coming soon</span>
+                  <strong>Bank import isn't open yet</strong>
+                  <span>
+                    Linking a bank through Plaid is limited to admin accounts while it is being tested.
+                    Everything else works without it: scan receipts, split them line by line, and track
+                    education expenses by marking food items and adding rent payments yourself.
+                  </span>
                 </div>
               </div>
             </section>
@@ -954,6 +974,8 @@
         <div class="settings-form">
           <div class="field">
             <label class="field-label" for="geminiApiKey">Gemini API key</label>
+            <!-- The placeholder is rewritten when a key is already saved, so a
+                 blank box never reads as "your key is gone". -->
             <input class="table-input" id="geminiApiKey" type="password" autocomplete="off" placeholder="Enter Gemini API key" />
             <p class="settings-status" id="geminiKeyStatus"></p>
           </div>
@@ -976,6 +998,25 @@
           <button class="btn btn-ghost" id="removeKeyButton" type="button">Remove key</button>
           <button class="btn btn-secondary" id="closeSettingsButton" type="button">Cancel</button>
           <button class="btn btn-primary" id="saveSettingsButton" type="button">Save settings</button>
+        </div>
+
+        <div class="settings-danger">
+          <h3>Delete account</h3>
+          <p>
+            Removes your account and everything in it: receipts, photos, saved item names, people, rent
+            entries and any bank connection. This cannot be undone.
+          </p>
+          <div class="settings-danger-row">
+            <input
+              class="table-input"
+              id="deleteAccountPassword"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Confirm your password"
+            />
+            <button class="btn btn-danger" id="deleteAccountButton" type="button">Delete account</button>
+          </div>
+          <p class="settings-status" id="deleteAccountStatus"></p>
         </div>
       </section>
     </div>
@@ -1036,6 +1077,11 @@
         <p class="auth-switch">
           <span id="authSwitchText">Need an account?</span>
           <button class="btn btn-ghost btn-small" id="authToggle" type="button">Sign up</button>
+        </p>
+        <p class="auth-legal">
+          By creating an account you agree to the
+          <a href="/terms.html" target="_blank" rel="noopener">Terms</a> and
+          <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.
         </p>
       </section>
     </div>
