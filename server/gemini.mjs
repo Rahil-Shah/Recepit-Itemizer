@@ -13,11 +13,14 @@ const GEMINI_HOST = "https://generativelanguage.googleapis.com";
 // Gemini model ids are interpolated into the request URL, so constrain them to
 // a safe character set to avoid path traversal / URL injection.
 const MODEL_RE = /^[A-Za-z0-9._-]+$/;
-// Google API keys are ASCII alphanumerics plus - and _ (typically ~39 chars).
-// Constrain user input to that set: the key is placed in the request URL, so a
-// strict allowlist blocks URL/query injection and stray control characters,
-// and caps length to bound abuse.
-const API_KEY_RE = /^[A-Za-z0-9_-]{20,200}$/;
+// Two key formats are in circulation. Standard keys are "AIza" plus 35
+// alphanumerics, - and _. Since May 2026 AI Studio only issues auth keys,
+// which start "AQ." and are longer -- and the dot is what the old
+// alphanumerics-only pattern rejected, turning every freshly made key away as
+// "not a valid key". Allow the dot, keep the rest of the allowlist (the key
+// goes into a request header, so whitespace and control characters stay out),
+// and cap the length to bound abuse without guessing an exact size.
+const API_KEY_RE = /^[A-Za-z0-9._-]{20,512}$/;
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 // Formats Gemini accepts for inline image data. An open /^image\// test let
 // "image/" plus arbitrary trailing text through to Google verbatim.
@@ -152,6 +155,11 @@ function validateAndReconcileReceipt(data) {
 // likely because TOKEN_ENCRYPTION_KEY was rotated.
 class UndecryptableKeyError extends Error {}
 
+/** Whether a pasted value has the shape of a Gemini API key, either format. */
+export function isPlausibleGeminiKey(value) {
+  return typeof value === "string" && API_KEY_RE.test(value);
+}
+
 export function hasServerGeminiKey() {
   return Boolean(process.env.GEMINI_API_KEY);
 }
@@ -253,12 +261,15 @@ export async function callGemini({ apiKey, model, parts, tools }) {
   // Ungrounded calls stay on v1: it is the stable surface and the receipt
   // parser has been working against it.
   const apiVersion = tools ? "v1beta" : "v1";
-  const url = `${GEMINI_HOST}/${apiVersion}/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const url = `${GEMINI_HOST}/${apiVersion}/models/${model}:generateContent`;
   const startTime = Date.now();
 
+  // The key goes in the x-goog-api-key header, not a ?key= query parameter:
+  // auth keys ("AQ.") are documented for the header, and it works for standard
+  // keys too. It also keeps the key out of any URL that ends up in a log.
   const upstream = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({ contents: [{ parts }], ...(tools ? { tools } : {}) }),
     signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
   });
@@ -348,7 +359,7 @@ export function registerGemini(app, requireAuth, prisma) {
       return res.status(503).json({ error: "Key storage is unavailable." });
     }
     const apiKey = typeof req.body?.apiKey === "string" ? req.body.apiKey.trim() : "";
-    if (!API_KEY_RE.test(apiKey)) {
+    if (!isPlausibleGeminiKey(apiKey)) {
       return res.status(400).json({ error: "That doesn't look like a valid Gemini API key." });
     }
     try {
