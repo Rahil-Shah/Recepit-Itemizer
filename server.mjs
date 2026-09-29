@@ -29,6 +29,7 @@ import {
   EXPORT_RATE_LIMIT
 } from "./server/education-export.mjs";
 import { buildEducationPdf } from "./server/education-export-pdf.mjs";
+import { buildSpendingCsv, spendingExportFileName, SPENDING_EXPORT_RATE_LIMIT } from "./server/spending-export.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
 import { assertAccessPolicy, maxReceiptsPerUser } from "./server/access.mjs";
 import { databaseUrl, isProduction, isVercel } from "./server/deployment.mjs";
@@ -206,6 +207,12 @@ const exportLimiterShared = dbRateLimiter(limitStore, {
 });
 // One export at a time per account on this instance. A second click while the
 // first is still building would only do the same work twice.
+const spendingExportLimiterShared = dbRateLimiter(limitStore, {
+  bucket: "spending-export",
+  ...SPENDING_EXPORT_RATE_LIMIT,
+  keyOf: (req) => req.userId
+});
+app.use("/api/spending/export", createRateLimiter(SPENDING_EXPORT_RATE_LIMIT));
 const exportSingleFlight = createSingleFlight({
   keyOf: (req) => req.userId,
   message: "An export is already being prepared. Wait for it to finish."
@@ -1508,6 +1515,62 @@ app.get("/api/education-expenses/export", requireAuth, exportLimiterShared, expo
   } catch (error) {
     console.error("Failed to export education expenses:", error);
     res.status(500).json({ error: "Failed to export education expenses." });
+  }
+});
+
+// GET /api/spending/export
+//
+// Admin only. Everything the account has spent, not just education expenses:
+// every bank transaction plus each saved receipt that is not already attached
+// to one, as a CSV.
+app.get("/api/spending/export", requireAuth, requireAdmin, spendingExportLimiterShared, async (req, res) => {
+  try {
+    const [transactions, receipts] = await Promise.all([
+      prisma.bankTransaction.findMany({
+        where: { account: { connection: { userId: req.userId } } },
+        include: { account: { select: { name: true } } }
+      }),
+      prisma.receipt.findMany({
+        where: { userId: req.userId },
+        select: {
+          id: true,
+          storeName: true,
+          category: true,
+          total: true,
+          receiptDate: true,
+          createdAt: true,
+          lines: { select: { isFood: true, ignored: true } }
+        }
+      })
+    ]);
+
+    const csv = buildSpendingCsv({
+      transactions: transactions.map((txn) => ({
+        date: txn.date.toISOString().slice(0, 10),
+        description: txn.description,
+        amount: toNumber(txn.amount),
+        category: txn.category,
+        account: txn.account?.name ?? null,
+        isFood: txn.isFood,
+        linkedReceiptId: txn.linkedReceiptId
+      })),
+      receipts: receipts.map((receipt) => ({
+        id: receipt.id,
+        date: (receipt.receiptDate ?? receipt.createdAt).toISOString().slice(0, 10),
+        storeName: receipt.storeName,
+        category: receipt.category,
+        total: toNumber(receipt.total),
+        hasFood: receipt.lines.some((line) => line.isFood && !line.ignored)
+      }))
+    });
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${spendingExportFileName()}"`);
+    res.setHeader("Cache-Control", "no-store");
+    res.send(csv);
+  } catch (error) {
+    console.error("Failed to export spending:", error);
+    res.status(500).json({ error: "Failed to export spending." });
   }
 });
 

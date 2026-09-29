@@ -201,6 +201,7 @@ namespace ReceiptRing.App {
       this.elements.rentEntryCancelButton.addEventListener("click", () => this.closeRentEntryModal());
       this.elements.rentEntrySaveButton.addEventListener("click", () => void this.saveRentEntry());
       this.elements.educationExportButton.addEventListener("click", () => this.openEducationExportModal());
+      this.elements.spendingExportButton.addEventListener("click", () => void this.downloadSpendingExport());
       this.elements.educationExportCancelButton.addEventListener("click", () => this.closeEducationExportModal());
       this.elements.educationExportScope.addEventListener("change", () => this.syncEducationExportScope());
       this.elements.educationExportDownloadButton.addEventListener("click", () => void this.downloadEducationExport());
@@ -2592,6 +2593,28 @@ namespace ReceiptRing.App {
       const wholeYear = this.elements.educationExportScope.value === "year";
       this.elements.educationExportMonthField.classList.toggle("hidden", wholeYear);
       this.elements.educationExportYearField.classList.toggle("hidden", !wholeYear);
+    }
+
+    // Admin only: everything spent, as a CSV, not just education expenses.
+    private async downloadSpendingExport(): Promise<void> {
+      const button = this.elements.spendingExportButton;
+      UI.setBusy(button, true);
+      try {
+        const { blob, fileName } = await this.educationExportApiService.downloadSpending();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        this.notificationService.success(`Downloaded ${fileName}.`);
+      } catch (error) {
+        this.notificationService.error(error instanceof Error ? error.message : "Export failed.");
+      } finally {
+        UI.setBusy(button, false);
+      }
     }
 
     private async downloadEducationExport(): Promise<void> {
