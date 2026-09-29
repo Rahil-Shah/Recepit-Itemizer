@@ -12,6 +12,9 @@ namespace ReceiptRing.Services {
     ): Domain.SplitSummary {
       const itemCents = new Map<string, number>();
       const foodCents = new Map<string, number>();
+      // Extra cents each person has absorbed on earlier lines, so odd cents
+      // rotate between people instead of always landing on the first one.
+      const luck = new Map<string, number>();
       people.forEach((person) => {
         itemCents.set(person.id, 0);
         foodCents.set(person.id, 0);
@@ -30,7 +33,7 @@ namespace ReceiptRing.Services {
           const lineAssignments = assignments.filter((assignment) => assignment.lineId === line.id);
           if (lineAssignments.length === 0) return;
 
-          const shares = this.getLineShares(line, lineAssignments);
+          const shares = this.getLineShares(line, lineAssignments, luck);
           let allocated = 0;
           shares.forEach((cents, personId) => {
             itemCents.set(personId, (itemCents.get(personId) ?? 0) + cents);
@@ -108,23 +111,31 @@ namespace ReceiptRing.Services {
     /** Each assigned person's share of one line, in whole cents. */
     private getLineShares(
       line: Domain.ReceiptLine,
-      assignments: readonly Domain.LineAssignment[]
+      assignments: readonly Domain.LineAssignment[],
+      luck: Map<string, number>
     ): Map<string, number> {
       const shares = new Map<string, number>();
       if (assignments.length === 0) return shares;
 
       const lineCents = this.toCents(line.amount);
+      const tally = assignments.map((assignment) => luck.get(assignment.personId) ?? 0);
+      const base = Math.trunc(lineCents / assignments.length);
+      const recordLuck = (personId: string, cents: number) =>
+        luck.set(personId, (luck.get(personId) ?? 0) + cents - base);
 
       if (assignments.every((assignment) => assignment.mode === "equal")) {
-        const even = this.distributeEvenly(lineCents, assignments.length);
-        assignments.forEach((assignment, index) => shares.set(assignment.personId, even[index]));
+        const even = this.distributeEvenly(lineCents, assignments.length, tally);
+        assignments.forEach((assignment, index) => {
+          shares.set(assignment.personId, even[index]);
+          recordLuck(assignment.personId, even[index]);
+        });
         return shares;
       }
 
       // Mixed modes: the equal-mode assignments still divide the whole line, as
       // before — only the even-split path can distribute leftover cents.
       const equalCount = assignments.filter((assignment) => assignment.mode === "equal").length;
-      const equalShares = equalCount > 0 ? this.distributeEvenly(lineCents, assignments.length) : [];
+      const equalShares = equalCount > 0 ? this.distributeEvenly(lineCents, assignments.length, tally) : [];
       let equalIndex = 0;
 
       assignments.forEach((assignment) => {
@@ -134,6 +145,7 @@ namespace ReceiptRing.Services {
           shares.set(assignment.personId, this.toCents(assignment.value));
         } else {
           shares.set(assignment.personId, equalShares[equalIndex]);
+          recordLuck(assignment.personId, equalShares[equalIndex]);
           equalIndex += 1;
         }
       });
@@ -142,21 +154,27 @@ namespace ReceiptRing.Services {
     }
 
     /**
-     * Split a cent total into `count` parts that sum back to it exactly,
-     * handing the leftover cents out one at a time. Works for negative totals
-     * (discount lines) as well.
+     * Split a cent total into `count` parts that sum back to it exactly. The
+     * leftover cents go to the slots with the lowest `tally` (cents of luck
+     * they have already had on earlier lines), so the same person is not always
+     * the one who pays the extra cent. Ties fall back to slot order. A negative
+     * leftover (a discount) takes its cent back from the highest tally.
      */
-    private distributeEvenly(totalCents: number, count: number): number[] {
+    private distributeEvenly(totalCents: number, count: number, tally: readonly number[] = []): number[] {
       if (count <= 0) return [];
       const base = Math.trunc(totalCents / count);
-      let remainder = totalCents - base * count;
+      const remainder = totalCents - base * count;
       const step = remainder < 0 ? -1 : 1;
+      const owed = (index: number) => tally[index] ?? 0;
 
-      return Array.from({ length: count }, () => {
-        if (remainder === 0) return base;
-        remainder -= step;
-        return base + step;
-      });
+      const order = Array.from({ length: count }, (_, index) => index).sort(
+        (left, right) => step * (owed(left) - owed(right)) || left - right
+      );
+      const result = Array.from({ length: count }, () => base);
+      for (let taken = 0; taken < Math.abs(remainder); taken += 1) {
+        result[order[taken]] += step;
+      }
+      return result;
     }
 
     /**

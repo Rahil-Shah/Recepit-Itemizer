@@ -171,3 +171,14 @@ test("a receipt whose food is entirely someone else's yields no items", () => {
   // No food of the owner's means no tax on the owner's food either.
   assert.equal(summary.taxTotal, 0);
 });
+
+test("odd cents rotate between people across lines", () => {
+  const luck = new Map();
+  const people = ["a", "b", "c", "d"].map((id) => ({ accountPersonId: id, mode: "equal", value: 0 }));
+  const owed = new Map(people.map((p) => [p.accountPersonId, 0]));
+  for (let i = 0; i < 4; i += 1) {
+    const shares = getLineShares(99, people, luck);
+    shares.forEach((cents, id) => owed.set(id, owed.get(id) + cents));
+  }
+  assert.deepEqual([...owed.values()], [99, 99, 99, 99]);
+});

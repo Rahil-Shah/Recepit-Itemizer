@@ -15,18 +15,28 @@ export function toCents(value) {
   return Number.isFinite(numeric) ? Math.round(numeric * 100) : 0;
 }
 
-/** Split a cent total into `count` parts that sum back to it exactly. */
-export function distributeEvenly(totalCents, count) {
+/**
+ * Split a cent total into `count` parts that sum back to it exactly. The
+ * leftover cents go to the slots with the lowest `tally` (cents of luck they
+ * have already had on earlier lines), so the same person is not always the one
+ * who pays the extra cent. Ties fall back to slot order. A negative leftover
+ * (a discount) takes its cent back from the slots with the highest tally.
+ */
+export function distributeEvenly(totalCents, count, tally = []) {
   if (count <= 0) return [];
   const base = Math.trunc(totalCents / count);
-  let remainder = totalCents - base * count;
+  const remainder = totalCents - base * count;
   const step = remainder < 0 ? -1 : 1;
+  const owed = (index) => tally[index] ?? 0;
 
-  return Array.from({ length: count }, () => {
-    if (remainder === 0) return base;
-    remainder -= step;
-    return base + step;
-  });
+  const order = Array.from({ length: count }, (_, index) => index).sort(
+    (left, right) => step * (owed(left) - owed(right)) || left - right
+  );
+  const result = Array.from({ length: count }, () => base);
+  for (let taken = 0; taken < Math.abs(remainder); taken += 1) {
+    result[order[taken]] += step;
+  }
+  return result;
 }
 
 /**
@@ -59,18 +69,26 @@ export function distributeProportionally(totalCents, weights) {
  * Each assigned person's share of one line, in whole cents, keyed by
  * accountPersonId. Mirrors SplitCalculatorService.getLineShares.
  */
-export function getLineShares(lineCents, assignments) {
+export function getLineShares(lineCents, assignments, luck = new Map()) {
   const shares = new Map();
   if (assignments.length === 0) return shares;
 
+  const tally = assignments.map((assignment) => luck.get(assignment.accountPersonId) ?? 0);
+  const base = Math.trunc(lineCents / assignments.length);
+  const recordLuck = (assignment, cents) =>
+    luck.set(assignment.accountPersonId, (luck.get(assignment.accountPersonId) ?? 0) + cents - base);
+
   if (assignments.every((assignment) => assignment.mode === "equal")) {
-    const even = distributeEvenly(lineCents, assignments.length);
-    assignments.forEach((assignment, index) => shares.set(assignment.accountPersonId, even[index]));
+    const even = distributeEvenly(lineCents, assignments.length, tally);
+    assignments.forEach((assignment, index) => {
+      shares.set(assignment.accountPersonId, even[index]);
+      recordLuck(assignment, even[index]);
+    });
     return shares;
   }
 
   const equalCount = assignments.filter((assignment) => assignment.mode === "equal").length;
-  const equalShares = equalCount > 0 ? distributeEvenly(lineCents, assignments.length) : [];
+  const equalShares = equalCount > 0 ? distributeEvenly(lineCents, assignments.length, tally) : [];
   let equalIndex = 0;
 
   assignments.forEach((assignment) => {
@@ -80,6 +98,7 @@ export function getLineShares(lineCents, assignments) {
       shares.set(assignment.accountPersonId, toCents(assignment.value));
     } else {
       shares.set(assignment.accountPersonId, equalShares[equalIndex]);
+      recordLuck(assignment, equalShares[equalIndex]);
       equalIndex += 1;
     }
   });
@@ -105,6 +124,8 @@ export function summariseReceiptFood(receipt, selfAccountPersonId) {
 
   const items = [];
   let foodCents = 0;
+  // Extra cents each person has absorbed so far, so odd cents rotate.
+  const luck = new Map();
 
   for (const line of activeLines) {
     const lineCents = toCents(line.amount);
@@ -115,7 +136,7 @@ export function summariseReceiptFood(receipt, selfAccountPersonId) {
     if (assignments.length === 0) {
       mineCents = lineCents;
     } else {
-      const shares = getLineShares(lineCents, assignments);
+      const shares = getLineShares(lineCents, assignments, luck);
       mineCents = selfAccountPersonId ? shares.get(selfAccountPersonId) ?? 0 : 0;
       sharedWith = assignments
         .filter((assignment) => assignment.accountPersonId !== selfAccountPersonId)

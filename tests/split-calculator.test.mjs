@@ -296,3 +296,21 @@ test("getUnassignedCount counts active lines with no assignments", () => {
 
   assert.equal(calculator.getUnassignedCount(lines, assignments), 1);
 });
+
+test("odd cents rotate between people instead of always hitting the first", () => {
+  const calculator = makeCalculator();
+  const four = [
+    { id: "p1", name: "A" }, { id: "p2", name: "B" },
+    { id: "p3", name: "C" }, { id: "p4", name: "D" }
+  ];
+  // $0.99 four ways leaves 3 spare cents per line; over four lines everyone
+  // should absorb the same number of extra cents.
+  const lines = ["l1", "l2", "l3", "l4"].map((id) => line(id, 0.99));
+  const assignments = lines.flatMap((l) => four.map((p) => equalAssignment(l.id, p.id)));
+
+  const summary = calculator.calculate(four, lines, assignments, 0);
+
+  const totals = [...summary.totals].map((t) => cents(t.finalTotal));
+  assert.equal(totals.reduce((a, b) => a + b, 0), 396);
+  assert.deepEqual([...totals], [99, 99, 99, 99]);
+});
