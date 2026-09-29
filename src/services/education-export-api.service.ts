@@ -48,6 +48,25 @@ namespace ReceiptRing.Services {
   }
 
   export class EducationExportApiService {
+    /** Admin only: every bank transaction and unlinked receipt, as a CSV. */
+    async downloadSpending(): Promise<EducationExportFile> {
+      const response = await fetch("/api/spending/export");
+      if (!response.ok) {
+        let message = `Export failed (${response.status}).`;
+        try {
+          const data = (await response.json()) as { error?: string };
+          if (data.error) message = data.error;
+        } catch {
+          // Keep the status-only message.
+        }
+        throw new Error(message);
+      }
+      return {
+        blob: await response.blob(),
+        fileName: exportFileName(response.headers.get("Content-Disposition"), "spending.csv")
+      };
+    }
+
     /**
      * Fetch the file. `signal` lets the dialog's Cancel stop waiting for it;
      * the fetch then rejects with an AbortError.
