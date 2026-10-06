@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import vm from "node:vm";
 import { loadReceiptRing } from "./helpers/load-bundle.mjs";
 import { createFakeDocument, FakeElement } from "./helpers/fake-dom.mjs";
 
@@ -16,8 +15,12 @@ function setup() {
     }
   };
   const clock = { now: 1_000 };
-  const { ReceiptRing, context } = loadReceiptRing({ document, window, __clock: clock });
-  vm.runInContext("Date.now = () => __clock.now;", context);
+  class ClockDate extends Date {
+    static now() {
+      return clock.now;
+    }
+  }
+  const { ReceiptRing } = loadReceiptRing({ document, window, Date: ClockDate });
   const runTimers = () => {
     while (timers.length > 0) timers.shift().callback();
   };

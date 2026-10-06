@@ -42,9 +42,10 @@ import { isVercel } from "./deployment.mjs";
 const __dirname = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * Build the app. `prisma` is the database client every route uses.
+ * Build the app. `prisma` is the database client every route uses; `plaid`
+ * replaces the Plaid client (server/plaid.mjs) when given, as the tests do.
  */
-export function createApp({ prisma }) {
+export function createApp({ prisma, plaid }) {
   const app = express();
 
   // First of all: /api/v1 paths become /api paths, so everything mounted
@@ -250,7 +251,7 @@ export function createApp({ prisma }) {
 
   // Bank routes are admin-only (see server/access.mjs): the Plaid keys are the
   // operator's, and a regular account has no bank side at all.
-  const bank = createBank(prisma);
+  const bank = createBank(prisma, plaid);
   bank.register(app, requireAuth, requireAdmin);
 
   // Gemini config + image-parsing proxy. Keys (shared or per-user) stay

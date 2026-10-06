@@ -9,7 +9,9 @@
     "noImplicitOverride": true,
     "forceConsistentCasingInFileNames": true,
     "outFile": "dist/bundle.js",
-    "removeComments": true
+    "removeComments": true,
+    "inlineSourceMap": true,
+    "inlineSources": true
   },
   "files": [
     "../src/domain/models.ts",

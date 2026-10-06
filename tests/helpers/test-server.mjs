@@ -173,17 +173,29 @@ export async function startTestServer(envOverrides = {}, appOptions = {}) {
   let counter = 0;
   const client = (options) => new TestClient(baseUrl, options);
 
-  /** Register a fresh account and return a client signed in as it. */
+  /**
+   * A fresh account and a client signed in as it. Written straight to the
+   * database, session included, rather than through /api/auth/register: the
+   * sign-up and login limits would otherwise cap how many accounts one test
+   * file can make. The auth routes have tests of their own.
+   */
   async function signUp({ email, password = "correct horse battery", name = "Tester" } = {}) {
+    const { hashPassword, generateSessionToken, hashToken } = await import("../../server/crypto.mjs");
+    const { isAdmin } = await import("../../server/access.mjs");
     counter += 1;
+    const address = (email ?? `user${counter}-${crypto.randomBytes(3).toString("hex")}@test.dev`).toLowerCase();
+    const created = await prisma.user.create({
+      data: { email: address, name, passwordHash: await hashPassword(password) }
+    });
+    const token = generateSessionToken();
+    await prisma.session.create({
+      data: { tokenHash: hashToken(token), userId: created.id, expiresAt: new Date(Date.now() + 86_400_000) }
+    });
     const user = client();
-    const address = email ?? `user${counter}-${crypto.randomBytes(3).toString("hex")}@test.dev`;
-    const response = await user.post("/api/auth/register", { email: address, password, name });
-    if (response.status !== 201) {
-      throw new Error(`sign-up failed: ${response.status} ${JSON.stringify(response.body)}`);
-    }
-    user.user = response.body;
+    user.cookie = `rr_session=${token}`;
+    user.user = { id: created.id, email: address, name, isAdmin: isAdmin(address) };
     user.password = password;
+    user.sessionToken = token;
     return user;
   }
 
@@ -209,3 +221,52 @@ export async function startTestServer(envOverrides = {}, appOptions = {}) {
 export const JPEG_DATA_URL =
   "data:image/jpeg;base64," +
   Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0xff, 0xd9]).toString("base64");
+
+/**
+ * A stand-in for server/plaid.mjs. Each function can be replaced per test;
+ * `calls` records what was asked of it.
+ */
+export function createFakePlaid() {
+  const calls = [];
+  const fake = {
+    calls,
+    configured: true,
+    accounts: [{ account_id: "acc-1", name: "Checking", subtype: "checking", mask: "1234" }],
+    pages: [],
+    plaidConfig: () => ({ environment: "sandbox", configured: fake.configured }),
+    createLinkToken: async (userId) => {
+      calls.push(["createLinkToken", userId]);
+      return { link_token: "link-sandbox-123" };
+    },
+    exchangePublicToken: async (publicToken) => {
+      calls.push(["exchangePublicToken", publicToken]);
+      return { access_token: `access-${publicToken}`, item_id: `item-${publicToken}` };
+    },
+    getAccounts: async (token) => {
+      calls.push(["getAccounts", token]);
+      return { accounts: fake.accounts };
+    },
+    getItem: async (token) => {
+      calls.push(["getItem", token]);
+      return { item: { institution_id: "ins_1" } };
+    },
+    removeItem: async (token) => {
+      calls.push(["removeItem", token]);
+      return {};
+    },
+    syncTransactions: async (token, cursor) => {
+      calls.push(["syncTransactions", token, cursor]);
+      const next = fake.pages.shift();
+      if (next instanceof Error) throw next;
+      return next ?? { added: [], modified: [], removed: [], next_cursor: cursor ?? "c0", has_more: false };
+    }
+  };
+  return fake;
+}
+
+/** A Plaid-shaped error, the way server/plaid.mjs throws them. */
+export function plaidError(code) {
+  const error = new Error(code);
+  error.plaidErrorCode = code;
+  return error;
+}

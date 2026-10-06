@@ -2,15 +2,7 @@
 // endpoint requires authentication and only ever touches the current user's
 // own connections, accounts, and transactions.
 
-import {
-  plaidConfig,
-  createLinkToken,
-  exchangePublicToken,
-  getAccounts,
-  syncTransactions,
-  removeItem,
-  getItem
-} from "./plaid.mjs";
+import * as plaidClient from "./plaid.mjs";
 import { encryptSecret, decryptSecret } from "./crypto.mjs";
 
 // Plaid error codes that mean the stored access token can no longer be used and
@@ -27,14 +19,18 @@ const RECONNECT_ERROR_CODES = new Set([
   "ITEM_NOT_FOUND"
 ]);
 
-export function createBank(prisma) {
+/**
+ * @param plaid The Plaid client: server/plaid.mjs, or a stand-in with the same
+ *   functions (the route tests pass one, so they never reach Plaid).
+ */
+export function createBank(prisma, plaid = plaidClient) {
   // Revoke access tokens for connections we have already deleted locally.
   // Always best-effort: the rows are gone either way, and a stale Item left at
   // Plaid is harmless, so a failure here must never fail the caller's request.
   async function releaseItems(connections) {
     for (const connection of connections ?? []) {
       try {
-        await removeItem(
+        await plaid.removeItem(
           decryptSecret({
             ciphertext: connection.encryptedToken,
             iv: connection.tokenIv,
@@ -60,7 +56,7 @@ export function createBank(prisma) {
 
     for (const connection of stale) {
       try {
-        const item = await getItem(
+        const item = await plaid.getItem(
           decryptSecret({
             ciphertext: connection.encryptedToken,
             iv: connection.tokenIv,
@@ -146,7 +142,7 @@ export function createBank(prisma) {
       if (known) return known;
       if (!refetchedAccounts) {
         refetchedAccounts = true;
-        const response = await getAccounts(token);
+        const response = await plaid.getAccounts(token);
         await storeAccounts(prisma, connection.id, userId, response?.accounts ?? []);
         const rows = await prisma.bankAccount.findMany({
           where: { connectionId: connection.id },
@@ -160,7 +156,7 @@ export function createBank(prisma) {
     while (hasMore) {
       let page;
       try {
-        page = await syncTransactions(token, cursor);
+        page = await plaid.syncTransactions(token, cursor);
       } catch (error) {
         // Right after linking (especially in production), Plaid may still be
         // pulling the Item's initial transactions. That's expected, not a
@@ -238,12 +234,12 @@ export function createBank(prisma) {
     // Mint a short-lived Plaid Link token for the browser. Scoped to auth so
     // only a logged-in user can start a link, and to their own user id.
     app.get("/api/plaid/link-token", ...guard, async (req, res) => {
-      const { configured } = plaidConfig();
+      const { configured } = plaid.plaidConfig();
       if (!configured) {
         return res.status(400).json({ error: "Plaid is not configured on the server." });
       }
       try {
-        const result = await createLinkToken(req.userId);
+        const result = await plaid.createLinkToken(req.userId);
         res.json({ linkToken: result?.link_token ?? "" });
       } catch (error) {
         console.error("Plaid link token failed:", error);
@@ -264,14 +260,14 @@ export function createBank(prisma) {
       const institutionId = metadata?.institution?.institution_id ?? null;
 
       try {
-        const exchange = await exchangePublicToken(publicToken);
+        const exchange = await plaid.exchangePublicToken(publicToken);
         const accessToken = exchange?.access_token;
         if (!accessToken) {
           throw new Error("Plaid did not return an access token.");
         }
         const itemId = exchange?.item_id ?? null;
         // Fetching accounts both validates the token and gives us rows to store.
-        const accountsResponse = await getAccounts(accessToken);
+        const accountsResponse = await plaid.getAccounts(accessToken);
         const accounts = accountsResponse?.accounts ?? [];
 
         const encrypted = encryptSecret(accessToken);
