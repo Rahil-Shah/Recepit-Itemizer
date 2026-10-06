@@ -15,27 +15,48 @@ export function toCents(value) {
   return Number.isFinite(numeric) ? Math.round(numeric * 100) : 0;
 }
 
+const EPSILON = 1e-9;
+
 /**
- * Split a cent total into `count` parts that sum back to it exactly. The
- * leftover cents go to the slots with the lowest `tally` (cents of luck they
- * have already had on earlier lines), so the same person is not always the one
- * who pays the extra cent. Ties fall back to slot order. A negative leftover
- * (a discount) takes its cent back from the slots with the highest tally.
+ * A running record, across one receipt's lines, of how far each person's
+ * even-split shares have strayed from their exact fair share. Mirrors
+ * CentLedger in SplitCalculatorService.
  */
-export function distributeEvenly(totalCents, count, tally = []) {
+export function createCentLedger() {
+  return { drift: new Map(), turn: 0 };
+}
+
+/**
+ * Split a cent total evenly between `personIds` so the parts sum back to it
+ * exactly. The leftover cents go to whoever has paid least against their exact
+ * share on earlier lines; ties rotate from line to line rather than always
+ * landing on the first person. A negative leftover (a discount) takes its
+ * cents back from whoever has paid most.
+ */
+export function splitEvenly(totalCents, personIds, ledger = createCentLedger()) {
+  const count = personIds.length;
   if (count <= 0) return [];
   const base = Math.trunc(totalCents / count);
   const remainder = totalCents - base * count;
+  const exact = totalCents / count;
   const step = remainder < 0 ? -1 : 1;
-  const owed = (index) => tally[index] ?? 0;
+  const drift = personIds.map((id) => ledger.drift.get(id) ?? 0);
+  const start = ledger.turn % count;
+  const rotation = (index) => (index - start + count) % count;
 
-  const order = Array.from({ length: count }, (_, index) => index).sort(
-    (left, right) => step * (owed(left) - owed(right)) || left - right
-  );
-  const result = Array.from({ length: count }, () => base);
+  const order = personIds
+    .map((_, index) => index)
+    .sort((left, right) => {
+      const gap = step * (drift[left] - drift[right]);
+      return Math.abs(gap) > EPSILON ? gap : rotation(left) - rotation(right);
+    });
+  const result = personIds.map(() => base);
   for (let taken = 0; taken < Math.abs(remainder); taken += 1) {
     result[order[taken]] += step;
   }
+
+  personIds.forEach((id, index) => ledger.drift.set(id, drift[index] + result[index] - exact));
+  ledger.turn += 1;
   return result;
 }
 
@@ -69,37 +90,29 @@ export function distributeProportionally(totalCents, weights) {
  * Each assigned person's share of one line, in whole cents, keyed by
  * accountPersonId. Mirrors SplitCalculatorService.getLineShares.
  */
-export function getLineShares(lineCents, assignments, luck = new Map()) {
+export function getLineShares(lineCents, assignments, ledger = createCentLedger()) {
   const shares = new Map();
   if (assignments.length === 0) return shares;
 
-  const tally = assignments.map((assignment) => luck.get(assignment.accountPersonId) ?? 0);
-  const base = Math.trunc(lineCents / assignments.length);
-  const recordLuck = (assignment, cents) =>
-    luck.set(assignment.accountPersonId, (luck.get(assignment.accountPersonId) ?? 0) + cents - base);
-
-  if (assignments.every((assignment) => assignment.mode === "equal")) {
-    const even = distributeEvenly(lineCents, assignments.length, tally);
-    assignments.forEach((assignment, index) => {
-      shares.set(assignment.accountPersonId, even[index]);
-      recordLuck(assignment, even[index]);
-    });
-    return shares;
+  const equal = assignments.filter((assignment) => assignment.mode === "equal");
+  if (equal.length > 0) {
+    const pot =
+      equal.length === assignments.length
+        ? lineCents
+        : Math.round((lineCents * equal.length) / assignments.length);
+    const even = splitEvenly(
+      pot,
+      equal.map((assignment) => assignment.accountPersonId),
+      ledger
+    );
+    equal.forEach((assignment, index) => shares.set(assignment.accountPersonId, even[index]));
   }
-
-  const equalCount = assignments.filter((assignment) => assignment.mode === "equal").length;
-  const equalShares = equalCount > 0 ? distributeEvenly(lineCents, assignments.length, tally) : [];
-  let equalIndex = 0;
 
   assignments.forEach((assignment) => {
     if (assignment.mode === "percentage") {
       shares.set(assignment.accountPersonId, Math.round(lineCents * (Number(assignment.value) / 100)));
     } else if (assignment.mode === "amount") {
       shares.set(assignment.accountPersonId, toCents(assignment.value));
-    } else {
-      shares.set(assignment.accountPersonId, equalShares[equalIndex]);
-      recordLuck(assignment, equalShares[equalIndex]);
-      equalIndex += 1;
     }
   });
 
@@ -124,8 +137,9 @@ export function summariseReceiptFood(receipt, selfAccountPersonId) {
 
   const items = [];
   let foodCents = 0;
-  // Extra cents each person has absorbed so far, so odd cents rotate.
-  const luck = new Map();
+  // How far each person's even shares have strayed from exact, so odd cents
+  // even out across the receipt the way the split workspace balances them.
+  const ledger = createCentLedger();
 
   for (const line of activeLines) {
     const lineCents = toCents(line.amount);
@@ -136,7 +150,7 @@ export function summariseReceiptFood(receipt, selfAccountPersonId) {
     if (assignments.length === 0) {
       mineCents = lineCents;
     } else {
-      const shares = getLineShares(lineCents, assignments, luck);
+      const shares = getLineShares(lineCents, assignments, ledger);
       mineCents = selfAccountPersonId ? shares.get(selfAccountPersonId) ?? 0 : 0;
       sharedWith = assignments
         .filter((assignment) => assignment.accountPersonId !== selfAccountPersonId)

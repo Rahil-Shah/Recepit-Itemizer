@@ -314,3 +314,63 @@ test("odd cents rotate between people instead of always hitting the first", () =
   assert.equal(totals.reduce((a, b) => a + b, 0), 396);
   assert.deepEqual([...totals], [99, 99, 99, 99]);
 });
+
+test("a batch of odd-priced lines stays within a cent of even, tax included", () => {
+  const calculator = makeCalculator();
+  const four = [
+    { id: "p1", name: "A" }, { id: "p2", name: "B" },
+    { id: "p3", name: "C" }, { id: "p4", name: "D" }
+  ];
+  const lines = Array.from({ length: 10 }, (_, i) => line(`l${i}`, 0.99));
+  const assignments = lines.flatMap((l) => four.map((p) => equalAssignment(l.id, p.id)));
+
+  const summary = calculator.calculate(four, lines, assignments, 1.03);
+
+  const finals = summary.totals.map((t) => cents(t.finalTotal));
+  assert.equal(finals.reduce((a, b) => a + b, 0), 1093);
+  // 10.93 four ways is 273.25 each: one person pays 274, everyone else 273.
+  assert.ok(Math.max(...finals) - Math.min(...finals) <= 1, finals.join(","));
+  const items = summary.totals.map((t) => cents(t.itemTotal));
+  assert.ok(Math.max(...items) - Math.min(...items) <= 1, items.join(","));
+});
+
+test("odd cents balance across lines shared by different groups", () => {
+  const calculator = makeCalculator();
+  const four = [
+    { id: "p1", name: "A" }, { id: "p2", name: "B" },
+    { id: "p3", name: "C" }, { id: "p4", name: "D" }
+  ];
+  // Every other line is split three ways, so the groups overlap.
+  const lines = Array.from({ length: 12 }, (_, i) => line(`l${i}`, 0.97));
+  const assignments = lines.flatMap((l, i) =>
+    (i % 2 === 0 ? four : four.slice(0, 3)).map((p) => equalAssignment(l.id, p.id))
+  );
+
+  const summary = calculator.calculate(four, lines, assignments, 0);
+
+  const exact = { p1: 0, p2: 0, p3: 0, p4: 0 };
+  lines.forEach((l, i) => {
+    const group = i % 2 === 0 ? four : four.slice(0, 3);
+    group.forEach((p) => (exact[p.id] += 97 / group.length));
+  });
+  for (const total of summary.totals) {
+    assert.ok(Math.abs(cents(total.itemTotal) - exact[total.personId]) < 1, `${total.personName}`);
+  }
+});
+
+test("mixed-mode lines still hand the equal people an even part", () => {
+  const calculator = makeCalculator();
+  const lines = [line("l1", 10)];
+  const assignments = [
+    { id: "a1", lineId: "l1", personId: "p1", mode: "percentage", value: 50 },
+    equalAssignment("l1", "p2"),
+    equalAssignment("l1", "p3")
+  ];
+
+  const summary = calculator.calculate(people, lines, assignments, 0);
+  const byId = new Map(summary.totals.map((t) => [t.personId, cents(t.itemTotal)]));
+
+  assert.equal(byId.get("p1"), 500);
+  assert.equal(byId.get("p2") + byId.get("p3"), 667);
+  assert.ok(Math.abs(byId.get("p2") - byId.get("p3")) <= 1);
+});
