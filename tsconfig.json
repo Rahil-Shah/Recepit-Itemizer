@@ -43,6 +43,9 @@
     "src/services/zip-writer.service.ts",
     "src/services/data-export.service.ts",
     "src/services/admin-backup.service.ts",
+    "src/services/account-api.service.ts",
+    "src/services/admin-api.service.ts",
+    "src/services/preferences.service.ts",
     "src/services/spending-aggregator.service.ts",
     "src/services/insights.service.ts",
     "src/services/notification.service.ts",
@@ -56,6 +59,9 @@
     "src/ui/rent-entries.view.ts",
     "src/ui/loading.view.ts",
     "src/ui/insights.view.ts",
+    "src/ui/admin.view.ts",
+    "src/app/settings.controller.ts",
+    "src/app/admin.controller.ts",
     "src/app/app.controller.ts",
     "src/main.ts"
   ]

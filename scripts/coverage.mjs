@@ -35,7 +35,7 @@ const report = new CoverageReport({
   entryFilter: (entry) =>
     entry.url.startsWith(`file://${root}/`) &&
     !entry.url.includes("/node_modules/") &&
-    (entry.url.includes("/server/") || entry.url.endsWith("/server.mjs") || entry.url.endsWith("/tests/dist/bundle.cjs")),
+    (entry.url.includes("/server/") || entry.url.endsWith("/server.mjs") || entry.url.endsWith("/tests/dist/bundle.cjs") || entry.url.endsWith("/tests/dist/app.cjs")),
   sourceFilter: (sourcePath) => /(^|\/)(src|server)\//.test(sourcePath) || sourcePath.endsWith("server.mjs"),
   sourcePath: (filePath) => filePath.replace(/^.*?(?=(src|server)\/)/, ""),
   // Files no test loads count too, at zero, so the number cannot be raised by
