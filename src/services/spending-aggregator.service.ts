@@ -11,6 +11,17 @@ namespace ReceiptRing.Services {
     categories: CategorySpend[];
   }
 
+  // The budget categories the Gemini pass can choose (server/budget-categorize.mjs)
+  // that are not item categories, coloured to sit with the built-in palette.
+  const BUDGET_COLORS: Record<string, string> = {
+    Travel: "#4f8a8b",
+    Shopping: "#c47a5a",
+    Utilities: "#8a9a5b",
+    Subscriptions: "#7d6ba8",
+    Education: "#b5935a",
+    Fees: "#a85448"
+  };
+
   // Fallback colors for categories that aren't part of the built-in palette.
   const FALLBACK_COLORS = ["#7cc4ff", "#f0a6ca", "#c3b1e1", "#ffd6a5", "#9ee7c0", "#e8998d"];
 
@@ -63,11 +74,20 @@ namespace ReceiptRing.Services {
     ): MonthlySpend[] {
       const byMonth = new Map<string, Map<string, number>>();
 
-      const add = (dateStr: string, rawCategory: string | null, amount: number): void => {
+      // A category from the Gemini pass is already one of the ring's own
+      // names, so it is used as given. Running it through the aliases would
+      // fold "Travel" into Transport and "Shopping" into Personal, undoing
+      // the very distinction the pass was asked to draw.
+      const add = (
+        dateStr: string,
+        rawCategory: string | null,
+        amount: number,
+        budgetCategory?: string | null
+      ): void => {
         if (!(amount > 0)) return;
         const month = this.monthKey(dateStr);
         if (!month) return;
-        const category = this.normalize(rawCategory);
+        const category = budgetCategory || this.normalize(rawCategory);
         const bucket = byMonth.get(month) ?? new Map<string, number>();
         bucket.set(category, (bucket.get(category) ?? 0) + amount);
         byMonth.set(month, bucket);
@@ -86,12 +106,12 @@ namespace ReceiptRing.Services {
       for (const receipt of receipts) {
         if (attachedReceiptIds.has(receipt.id)) continue;
         const override = receiptAmounts?.get(receipt.id);
-        add(receipt.createdAt, receipt.category, override ?? receipt.total ?? 0);
+        add(receipt.createdAt, receipt.category, override ?? receipt.total ?? 0, receipt.budgetCategory);
       }
       for (const txn of transactions) {
         // Amounts are normalized to negative-for-outflows on ingest (see
         // server/bank.mjs); only spending counts.
-        add(txn.date, txn.category, txn.amount < 0 ? -txn.amount : 0);
+        add(txn.date, txn.category, txn.amount < 0 ? -txn.amount : 0, txn.budgetCategory);
       }
 
       return [...byMonth.entries()]
@@ -103,6 +123,28 @@ namespace ReceiptRing.Services {
             .sort((a, b) => b.amount - a.amount)
         }))
         .sort((a, b) => (a.month < b.month ? 1 : -1));
+    }
+
+    /**
+     * The receipts and spending transactions that make up one month of the
+     * ring, by id -- what the Gemini categorization pass is asked about. A
+     * receipt attached to a transaction is left out: the transaction already
+     * stands for that purchase.
+     */
+    idsForMonth(
+      month: string,
+      receipts: readonly SavedReceiptSummary[],
+      transactions: readonly BankTransaction[]
+    ): { receiptIds: string[]; transactionIds: string[] } {
+      const attached = new Set(transactions.map((txn) => txn.linkedReceiptId).filter(Boolean));
+      return {
+        receiptIds: receipts
+          .filter((receipt) => !attached.has(receipt.id) && this.monthKey(receipt.createdAt) === month)
+          .map((receipt) => receipt.id),
+        transactionIds: transactions
+          .filter((txn) => txn.amount < 0 && this.monthKey(txn.date) === month)
+          .map((txn) => txn.id)
+      };
     }
 
     // Public so callers (e.g. filtering a transaction list to one month) bucket
@@ -133,7 +175,7 @@ namespace ReceiptRing.Services {
     }
 
     private color(name: string): string {
-      const known = this.colorByName.get(name);
+      const known = this.colorByName.get(name) ?? BUDGET_COLORS[name];
       if (known) return known;
       // Deterministic fallback based on the category name.
       let hash = 0;

@@ -1,5 +1,11 @@
 namespace ReceiptRing.App {
-  type TabName = "receipts" | "history" | "budgeting";
+  type TabName = "receipts" | "history" | "budgeting" | "settings" | "admin";
+
+  /** What the Settings and Admin pages need from the rest of the app. */
+  export interface PageHooks {
+    onShowSettings?(): void;
+    onShowAdmin?(): void;
+  }
 
   // Where the export dialog remembers the format it was last used with.
   const EXPORT_FORMAT_KEY = "education_export_format";
@@ -35,8 +41,14 @@ namespace ReceiptRing.App {
     // The loader laid over a panel while its content loads (see
     // src/ui/loading.view.ts).
     private readonly loading = new UI.LoadingOverlays();
+    // The tab to go back to when Settings or Admin tools close.
+    private lastMainTab: TabName = "receipts";
+    // Set by main.ts: the Settings and Admin pages load themselves on show.
+    hooks: PageHooks = {};
     // The export download in flight, so closing its dialog can stop it.
     private exportAbort: AbortController | null = null;
+    // The full data export in flight, so a second click does not start another.
+    private isExportingAll = false;
     // The photo a parse failed on, so a retry has something to send.
     //
     // Held here rather than read back off the file input, because the input is
@@ -119,7 +131,12 @@ namespace ReceiptRing.App {
       private readonly itemIdentityService: Services.ItemIdentityService,
       private readonly itemAliasStoreService: Services.ItemAliasStoreService,
       private readonly authApiService: Services.AuthApiService,
-      private readonly educationExportApiService: Services.EducationExportApiService
+      private readonly educationExportApiService: Services.EducationExportApiService,
+      private readonly dataExportService: Services.DataExportService,
+      private readonly insightsService: Services.InsightsService,
+      private readonly insightsView: UI.InsightsView,
+      private readonly adminBackupService: Services.AdminBackupService,
+      private readonly preferencesService: Services.PreferencesService
     ) {
       this.items = this.storageService.load();
     }
@@ -129,10 +146,19 @@ namespace ReceiptRing.App {
       // The stylesheet hides admin-only surfaces (the bank panel) for a
       // regular account. The server refuses the same routes either way.
       document.body.dataset.access = user.isAdmin ? "admin" : "regular";
+      // Which tab is showing, so a full-screen loader that belongs to one tab
+      // (see UI.OverlayOptions.screen) hides while another is open.
+      document.body.dataset.tab = "receipts";
       this.bindEvents();
+      // Device preferences: the category new receipts start in, and the tab
+      // the app opens on.
+      const preferences = this.preferencesService.load();
+      this.setReceiptCategory(preferences.defaultCategory);
       this.render();
+      if (preferences.startTab !== "receipts") this.switchTab(preferences.startTab);
       void this.initGeminiSettings();
       void this.loadPeople();
+      void this.refreshRecentReceipts();
       // Corrections made on past receipts, so the first identification of this
       // session can already be free for anything the user has taught it.
       void this.itemAliasStoreService.load();
@@ -183,6 +209,14 @@ namespace ReceiptRing.App {
       });
       this.elements.settingsButton.addEventListener("click", () => this.openSettings());
       this.elements.closeSettingsButton.addEventListener("click", () => this.closeSettings());
+      this.elements.closeAdminButton.addEventListener("click", () => this.switchTab(this.lastMainTab));
+      // Admin tools: the app-bar button and the one in Settings. Admin-only on
+      // the page; the server refuses the routes to anyone else regardless.
+      this.elements.openAdminButtons.forEach((button) =>
+        button.addEventListener("click", () => {
+          if (this.isAdmin) this.switchTab("admin");
+        })
+      );
       this.elements.saveSettingsButton.addEventListener("click", () => void this.saveSettings());
       this.elements.removeKeyButton.addEventListener("click", () => void this.removeGeminiKey());
       this.elements.pasteJsonButton.addEventListener("click", () => this.openPasteJsonModal());
@@ -193,6 +227,11 @@ namespace ReceiptRing.App {
       this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
       this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
       this.elements.refreshTransactionsButton.addEventListener("click", () => void this.refreshTransactions());
+      this.elements.categorizeMonthButton.addEventListener("click", () => void this.categorizeMonth());
+      this.elements.databaseBackupButton.addEventListener("click", () => void this.downloadDatabaseBackup());
+      this.elements.exportAllDataButtons.forEach((button) =>
+        button.addEventListener("click", () => void this.downloadAllData())
+      );
       this.elements.budgetMonth.addEventListener("change", () => {
         this.selectMonth(this.elements.budgetMonth.value || null);
       });
@@ -246,6 +285,10 @@ namespace ReceiptRing.App {
       this.elements.tabButtons.forEach((button) => {
         button.addEventListener("click", () => this.switchTab(button.dataset.tab as TabName));
       });
+      this.elements.tabJumpButtons.forEach((button) => {
+        button.addEventListener("click", () => this.switchTab(button.dataset.tabJump as TabName));
+      });
+      this.elements.historySearch.addEventListener("input", () => this.renderHistoryList());
 
       ["dragenter", "dragover"].forEach((eventName) => {
         this.elements.dropzone.addEventListener(eventName, (event) => {
@@ -280,12 +323,22 @@ namespace ReceiptRing.App {
     }
 
     private switchTab(tab: TabName): void {
+      if (tab === "admin" && !this.isAdmin) tab = "settings";
+      if (tab !== "settings" && tab !== "admin") this.lastMainTab = tab;
+      document.body.dataset.tab = tab;
       this.elements.tabButtons.forEach((button) => {
         button.classList.toggle("is-active", button.dataset.tab === tab);
       });
+      this.elements.settingsButton.classList.toggle("is-active", tab === "settings");
       this.elements.receiptsView.classList.toggle("hidden", tab !== "receipts");
       this.elements.historyView.classList.toggle("hidden", tab !== "history");
       this.elements.budgetingView.classList.toggle("hidden", tab !== "budgeting");
+      this.elements.settingsView.classList.toggle("hidden", tab !== "settings");
+      this.elements.adminView.classList.toggle("hidden", tab !== "admin");
+      if (tab === "settings" || tab === "admin") window.scrollTo(0, 0);
+
+      if (tab === "settings") this.hooks.onShowSettings?.();
+      if (tab === "admin") this.hooks.onShowAdmin?.();
 
       if (tab === "history") {
         void this.loadHistory();
@@ -621,6 +674,11 @@ namespace ReceiptRing.App {
 
       this.isIdentifying = true;
       this.elements.identifyItemsButton.setAttribute("disabled", "true");
+      this.hideIdentifyStatus();
+      // The same receipt-ring loader as every other wait, laid over the lines
+      // being named; the stage it is on is written under it.
+      const linesPanel = this.panelBody(this.elements.receiptLinesList);
+      const done = this.loading.show(linesPanel, "Identifying items…", "Checking what you've named before…");
 
       try {
         const resolved = await this.itemIdentityService.identify(
@@ -628,7 +686,13 @@ namespace ReceiptRing.App {
           this.identifications,
           {
             storeName: this.elements.storeNameInput.value.trim(),
-            onProgress: (progress) => this.setIdentifyStatus(progress)
+            onProgress: (progress) => {
+              if (progress.stage !== "complete") {
+                this.loading.relabel(linesPanel, "Identifying items…", progress.message.replace(/\.\.\.$/, "…"));
+              } else {
+                this.setIdentifyMessage(progress.message);
+              }
+            }
           }
         );
 
@@ -650,9 +714,10 @@ namespace ReceiptRing.App {
         console.error("Item identification failed:", error);
         const message =
           error instanceof Error ? error.message : "Could not identify these items.";
-        this.setIdentifyMessage(message, 1);
+        this.setIdentifyMessage(message);
         this.notificationService.error(message);
       } finally {
+        done();
         this.isIdentifying = false;
         this.elements.identifyItemsButton.removeAttribute("disabled");
       }
@@ -734,30 +799,15 @@ namespace ReceiptRing.App {
       if (details) details.open = false;
     }
 
-    private setIdentifyStatus(progress: Services.IdentifyProgress): void {
-      // The free tiers land before the first paint, so the bar would jump from
-      // nothing to nearly full and sit there. Give the stages a floor so the
-      // movement the user sees tracks the wait they are actually having.
-      const stageFloor: Record<Services.IdentifyProgress["stage"], number> = {
-        aliases: 0.08,
-        dictionary: 0.2,
-        ai: 0.45,
-        complete: 1
-      };
-      this.setIdentifyMessage(progress.message, stageFloor[progress.stage]);
-    }
-
-    private setIdentifyMessage(message: string, ratio: number): void {
+    // Where a finished identification says how it went. The wait itself is
+    // shown by the loader over the lines, so this carries no spinner.
+    private setIdentifyMessage(message: string): void {
       this.elements.identifyStatus.classList.remove("hidden");
-      this.elements.identifyStatus.classList.toggle("is-running", ratio < 1);
       this.elements.identifyStatusText.textContent = message;
-      this.elements.identifyProgressBar.style.width = `${Math.round(Math.min(1, Math.max(0, ratio)) * 100)}%`;
     }
 
     private hideIdentifyStatus(): void {
       this.elements.identifyStatus.classList.add("hidden");
-      this.elements.identifyStatus.classList.remove("is-running");
-      this.elements.identifyProgressBar.style.width = "0%";
     }
 
     private getSelectedLines(includeIgnored = false): Domain.ReceiptLine[] {
@@ -805,15 +855,22 @@ namespace ReceiptRing.App {
       // Parsing always runs through the server proxy, which uses the user's own
       // saved key or the shared server key. Only block when neither exists.
       if (!this.userHasGeminiKey && !this.serverHasGeminiKey) {
-        this.setOcrStatus("Please add your Gemini API key in Settings first.", 1);
-        this.openSettings();
+        this.setOcrStatus("Please add your Gemini API key in Settings first.");
+        this.openGeminiSettings();
         return;
       }
 
       if (this.isParsing) return;
       this.isParsing = true;
-      this.setOcrStatus("Analyzing receipt with Gemini...", 0.15);
+      this.hideOcrStatus();
       this.elements.parseButton.setAttribute("disabled", "true");
+      // One loader for the whole read: the receipt ring over the lines it is
+      // about to fill, rather than a spinner and a progress bar side by side.
+      const done = this.loading.show(
+        this.panelBody(this.elements.receiptLinesList),
+        "Reading your receipt…",
+        "Gemini is pulling out every item and price."
+      );
 
       try {
         // Shrunk before upload: a phone's original is routinely 5-10 MB, and
@@ -828,7 +885,7 @@ namespace ReceiptRing.App {
 
         this.failedParseFile = null;
         this.resetRetryBackoff();
-        this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`, 1);
+        this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`);
         window.setTimeout(() => this.hideOcrStatus(), 1600);
       } catch (error) {
         console.error("Gemini receipt parsing failed:", error);
@@ -847,10 +904,10 @@ namespace ReceiptRing.App {
           this.beginRetryBackoff();
         }
         this.setOcrStatus(
-          exhausted ? `${message} Try a clearer photo, or come back in a few minutes.` : this.withRetryHint(message, this.failedParseFile !== null),
-          1
+          exhausted ? `${message} Try a clearer photo, or come back in a few minutes.` : this.withRetryHint(message, this.failedParseFile !== null)
         );
       } finally {
+        done();
         this.isParsing = false;
         this.elements.parseButton.removeAttribute("disabled");
         this.renderRetryButton();
@@ -957,7 +1014,7 @@ namespace ReceiptRing.App {
 
       this.applyParsedReceiptJson(parsed);
       this.closePasteJsonModal();
-      this.setOcrStatus(`Found ${this.receiptLines.length} lines from pasted JSON`, 1);
+      this.setOcrStatus(`Found ${this.receiptLines.length} lines from pasted JSON`);
       window.setTimeout(() => this.hideOcrStatus(), 1600);
     }
 
@@ -1020,11 +1077,18 @@ namespace ReceiptRing.App {
         : "Enter Gemini API key";
       this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash-lite";
       this.renderGeminiKeyStatus();
-      this.elements.settingsModal.classList.remove("hidden");
+      // Even when Settings is already open: pressing it again refreshes it.
+      this.switchTab("settings");
+    }
+
+    /** Settings, scrolled to the Gemini key: where a missing key sends you. */
+    private openGeminiSettings(): void {
+      this.openSettings();
+      this.elements.geminiApiKey.closest<HTMLElement>(".settings-card")?.scrollIntoView?.({ block: "start" });
     }
 
     private closeSettings(): void {
-      this.elements.settingsModal.classList.add("hidden");
+      if (document.body.dataset.tab === "settings") this.switchTab(this.lastMainTab);
     }
 
     private renderGeminiKeyStatus(message?: string, isError = false): void {
@@ -1055,7 +1119,7 @@ namespace ReceiptRing.App {
       // Only touch the stored key when the user actually typed one; a blank
       // field means "keep whatever is already there" (the personal or shared key).
       if (!key) {
-        this.closeSettings();
+        this.renderGeminiKeyStatus("Model saved.");
         return;
       }
 
@@ -1065,7 +1129,8 @@ namespace ReceiptRing.App {
         this.userHasGeminiKey = true;
         this.elements.geminiApiKey.value = "";
         this.notificationService.success("Gemini key saved to your account.");
-        this.closeSettings();
+        this.elements.geminiApiKey.placeholder = "Saved — leave blank to keep it";
+        this.renderGeminiKeyStatus();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Could not save the key.";
         this.renderGeminiKeyStatus(message, true);
@@ -1097,22 +1162,17 @@ namespace ReceiptRing.App {
         .join(" ");
     }
 
-    private setOcrStatus(label: string, progress: number): void {
+    private setOcrStatus(label: string): void {
       this.elements.ocrStatus.classList.remove("hidden");
-      // Anything short of done is still running, so the loader turns beside it.
-      this.elements.ocrStatus.classList.toggle("is-running", progress < 1);
       // textContent, never innerHTML. This string can carry an error message
       // that originated at Gemini and was passed through the server, so it is
       // upstream text on a page -- it gets rendered, never parsed.
       this.elements.ocrStatusText.textContent = label;
-      this.elements.ocrProgressBar.style.width = `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
       this.renderRetryButton();
     }
 
     private hideOcrStatus(): void {
       this.elements.ocrStatus.classList.add("hidden");
-      this.elements.ocrStatus.classList.remove("is-running");
-      this.elements.ocrProgressBar.style.width = "0%";
       this.renderRetryButton();
     }
 
@@ -1213,7 +1273,7 @@ namespace ReceiptRing.App {
 
     private async openCamera(): Promise<void> {
       if (!navigator.mediaDevices?.getUserMedia) {
-        this.setOcrStatus("Camera is not available here. Opening file upload instead.", 1);
+        this.setOcrStatus("Camera is not available here. Opening file upload instead.");
         this.elements.receiptImage.click();
         return;
       }
@@ -1231,7 +1291,7 @@ namespace ReceiptRing.App {
         this.elements.cameraModal.classList.remove("hidden");
       } catch (error) {
         const message = error instanceof Error ? error.message : "Camera permission was denied.";
-        this.setOcrStatus(`Camera unavailable: ${message}. Opening file upload instead.`, 1);
+        this.setOcrStatus(`Camera unavailable: ${message}. Opening file upload instead.`);
         this.elements.receiptImage.click();
       }
     }
@@ -1271,7 +1331,6 @@ namespace ReceiptRing.App {
       this.failedParseFile = null;
       this.resetRetryBackoff();
       this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
-      this.setOcrStatus(`Loaded ${file.name || "receipt image"}`, 0.02);
       // Start shrinking the photo now so it is ready by the time the parse
       // finishes and the receipt can be saved with it.
       this.receiptImage = this.receiptImageService.toStorableDataUrl(file);
@@ -1461,6 +1520,7 @@ namespace ReceiptRing.App {
           await this.receiptApiService.save(payload);
           this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
         }
+        void this.refreshRecentReceipts();
         // Unless a different receipt was opened while this one was saving.
         if (this.editingReceipt?.id === editing?.id) {
           this.savedSnapshot = snapshot;
@@ -1628,18 +1688,10 @@ namespace ReceiptRing.App {
         // receipt without refetching.
         this.receipts = receipts;
         this.elements.historyEmpty.classList.toggle("hidden", receipts.length > 0);
-        this.splitWorkspaceView.renderHistory(
-          this.elements.historyList,
-          receipts,
-          (receipt) => void this.deleteReceipt(receipt),
-          (receiptId, lineId, isFood) => void this.updateLineFood(receiptId, lineId, isFood),
-          // Attaching a receipt to a bank transaction is a bank feature, so a
-          // regular account gets no link buttons rather than ones that 403.
-          this.isAdmin ? (receipt) => this.openTransactionLinkModal(receipt.id) : undefined,
-          this.isAdmin ? (receipt) => void this.unlinkReceiptFromHistory(receipt) : undefined,
-          (receipt) => this.editSavedReceipt(receipt)
-        );
+        this.renderHistoryList();
+        this.renderReceiptSidebars();
       } catch (error) {
+        this.elements.historyNoMatch.classList.add("hidden");
         this.elements.historyEmpty.classList.remove("hidden");
         // Error messages can echo server/network response text; render as
         // text nodes, never HTML.
@@ -1652,6 +1704,72 @@ namespace ReceiptRing.App {
       } finally {
         done();
       }
+    }
+
+    /**
+     * The saved receipts, narrowed by the search box. Matches the store, the
+     * category, and every item on the receipt -- printed or identified -- so
+     * "mozzarella" finds the receipt that printed "GV SHRD MOZZ".
+     */
+    private renderHistoryList(): void {
+      const query = this.elements.historySearch.value.trim().toLowerCase();
+      const receipts = query
+        ? this.receipts.filter((receipt) =>
+            [
+              receipt.storeName ?? "",
+              receipt.category,
+              receipt.budgetCategory ?? "",
+              ...receipt.lines.flatMap((line) => [line.label, line.identification?.resolvedName ?? ""])
+            ].some((text) => text.toLowerCase().includes(query))
+          )
+        : this.receipts;
+      this.elements.historyNoMatch.classList.toggle("hidden", receipts.length > 0 || this.receipts.length === 0);
+      this.splitWorkspaceView.renderHistory(
+        this.elements.historyList,
+        receipts,
+        (receipt) => void this.deleteReceipt(receipt),
+        (receiptId, lineId, isFood) => void this.updateLineFood(receiptId, lineId, isFood),
+        // Attaching a receipt to a bank transaction is a bank feature, so a
+        // regular account gets no link buttons rather than ones that 403.
+        this.isAdmin ? (receipt) => this.openTransactionLinkModal(receipt.id) : undefined,
+        this.isAdmin ? (receipt) => void this.unlinkReceiptFromHistory(receipt) : undefined,
+        (receipt) => this.editSavedReceipt(receipt)
+      );
+    }
+
+    // The side panels that read the saved receipts: History's overview and
+    // the Split tab's recent list.
+    private renderReceiptSidebars(): void {
+      this.insightsView.renderHistoryOverview(
+        this.elements.historyOverview,
+        this.insightsService.historyOverview(this.receipts)
+      );
+      const recent = [...this.receipts]
+        .sort((left, right) => (left.createdAt < right.createdAt ? 1 : -1))
+        .slice(0, 5);
+      this.insightsView.renderRecentReceipts(this.elements.recentReceipts, recent, (receipt) =>
+        this.editSavedReceipt(receipt)
+      );
+    }
+
+    private async refreshRecentReceipts(): Promise<void> {
+      try {
+        this.receipts = await this.receiptApiService.list();
+        this.renderReceiptSidebars();
+      } catch (error) {
+        console.error("Failed to load recent receipts:", error);
+      }
+    }
+
+    private renderMonthGlance(): void {
+      const month = this.selectedMonth;
+      this.insightsView.renderMonthGlance(
+        this.elements.monthGlance,
+        month
+          ? this.insightsService.monthGlance(month, this.monthlySpend, this.receipts, this.bankTransactions)
+          : null,
+        month ? this.formatMonthLabel(month) : ""
+      );
     }
 
     private async deleteReceipt(receipt: Services.SavedReceiptSummary): Promise<void> {
@@ -1761,28 +1879,22 @@ namespace ReceiptRing.App {
     }
 
     private async loadBudgeting(options: { sync?: boolean } = {}): Promise<void> {
-      // Every panel is covered while its figures are fetched and added up.
-      // The education panel's own fetch (renderEducationExpenses) holds its
-      // loader a little longer, until its lists are in.
-      const spending = "Adding up your spending…";
-      const releases = [
-        this.loading.show(this.panelBody(this.elements.monthlyTrend), spending),
-        this.loading.show(this.panelBody(this.elements.budgetRing), spending),
-        this.loading.show(this.panelBody(this.elements.foodItemsList), "Totalling education expenses…")
-      ];
-      if (this.isAdmin) {
-        releases.push(
-          this.loading.show(
-            this.panelBody(this.elements.transactionsList),
-            options.sync === false ? "Loading transactions…" : "Checking your bank for new transactions…"
-          )
-        );
-      }
+      // One loader for the whole view, over a blurred screen, rather than a
+      // spinner in every panel. The education panel's own fetches join it
+      // (see showBudgetingLoader) and hold it until their lists are in.
+      const done = this.showBudgetingLoader(
+        "Adding up your spending…",
+        this.isAdmin && options.sync !== false ? "Checking your bank for new transactions." : undefined
+      );
       try {
         await this.fetchAndRenderBudgeting(options);
       } finally {
-        releases.forEach((release) => release());
+        done();
       }
+    }
+
+    private showBudgetingLoader(label: string, hint?: string): () => void {
+      return this.loading.show(this.elements.budgetingView, label, hint, { screen: "budgeting" });
     }
 
     private async fetchAndRenderBudgeting(options: { sync?: boolean }): Promise<void> {
@@ -1802,25 +1914,33 @@ namespace ReceiptRing.App {
         }
       }
 
+      // Fetched into locals and swapped in together. Clearing the fields first
+      // left them empty for as long as the requests took, so anything acting
+      // on the view meanwhile -- sorting the month, linking a receipt -- saw a
+      // month with no bank transactions in it.
+      let receipts: Services.SavedReceiptSummary[] = [];
+      let bankTransactions: Services.BankTransaction[] = [];
+      let bankConnections: Services.BankConnection[] = [];
       try {
-        this.receipts = await this.receiptApiService.list();
+        receipts = await this.receiptApiService.list();
       } catch {
-        this.receipts = [];
+        receipts = [];
       }
-      this.bankTransactions = [];
-      this.bankConnections = [];
       if (this.isAdmin) {
         try {
-          this.bankTransactions = await this.bankApiService.listTransactions();
+          bankTransactions = await this.bankApiService.listTransactions();
         } catch {
-          this.bankTransactions = [];
+          bankTransactions = [];
         }
         try {
-          this.bankConnections = await this.bankApiService.listConnections();
+          bankConnections = await this.bankApiService.listConnections();
         } catch {
-          this.bankConnections = [];
+          bankConnections = [];
         }
       }
+      this.receipts = receipts;
+      this.bankTransactions = bankTransactions;
+      this.bankConnections = bankConnections;
       this.monthlySpend = this.spendingAggregatorService.aggregate(
         this.receipts,
         this.bankTransactions,
@@ -1834,6 +1954,8 @@ namespace ReceiptRing.App {
       this.renderTransactions();
       this.renderTrend();
       this.renderRing();
+      this.renderMonthGlance();
+      this.renderReceiptSidebars();
     }
 
     /**
@@ -2003,6 +2125,87 @@ namespace ReceiptRing.App {
     private renderRing(): void {
       const month = this.monthlySpend.find((entry) => entry.month === this.selectedMonth) ?? null;
       this.budgetRingView.render(this.elements.budgetRing, this.elements.budgetLegend, month);
+      this.renderCategorizeNote();
+    }
+
+    // Says whether the month in focus has been sorted yet, so the button reads
+    // as a re-run rather than a first run once it has.
+    private renderCategorizeNote(): void {
+      const month = this.selectedMonth;
+      const button = this.elements.categorizeMonthButton;
+      if (!month) {
+        button.disabled = true;
+        return;
+      }
+      const ids = this.spendingAggregatorService.idsForMonth(month, this.receipts, this.bankTransactions);
+      const total = ids.receiptIds.length + ids.transactionIds.length;
+      const sorted =
+        this.receipts.filter((receipt) => ids.receiptIds.includes(receipt.id) && receipt.budgetCategory).length +
+        this.bankTransactions.filter((txn) => ids.transactionIds.includes(txn.id) && txn.budgetCategory).length;
+      if (!button.classList.contains("is-busy")) button.disabled = total === 0;
+      this.elements.categorizeMonthNote.textContent =
+        total === 0
+          ? "Nothing to sort in this month yet."
+          : sorted === total
+            ? `All ${total} sorted by Gemini. Run it again after adding more.`
+            : sorted > 0
+              ? `${sorted} of ${total} sorted by Gemini. Run it again to sort the rest.`
+              : "Gemini reads each receipt and transaction and files it under the right category.";
+    }
+
+    /**
+     * One Gemini pass over the month in focus: every receipt and spending
+     * transaction is filed under a proper budget category, and the ring is
+     * redrawn from those. The originals are kept server-side.
+     */
+    private async categorizeMonth(): Promise<void> {
+      const month = this.selectedMonth;
+      if (!month) return;
+      if (!this.userHasGeminiKey && !this.serverHasGeminiKey) {
+        this.notificationService.error("Add your Gemini API key in Settings first.");
+        this.openGeminiSettings();
+        return;
+      }
+      const ids = this.spendingAggregatorService.idsForMonth(month, this.receipts, this.bankTransactions);
+      if (ids.receiptIds.length + ids.transactionIds.length === 0) {
+        this.notificationService.info("Nothing to sort in this month yet.");
+        return;
+      }
+
+      const button = this.elements.categorizeMonthButton;
+      UI.setBusy(button, true);
+      const done = this.showBudgetingLoader(
+        `Sorting ${this.formatMonthLabel(month)}…`,
+        "Gemini is reading your receipts and transactions."
+      );
+      try {
+        const model = localStorage.getItem("gemini_model") || "gemini-3.5-flash-lite";
+        const result = await this.bankApiService.categorizeMonth(month, ids.receiptIds, ids.transactionIds, model);
+        this.receipts = this.receipts.map((receipt) =>
+          result.receipts[receipt.id] ? { ...receipt, budgetCategory: result.receipts[receipt.id] } : receipt
+        );
+        this.bankTransactions = this.bankTransactions.map((txn) =>
+          result.transactions[txn.id] ? { ...txn, budgetCategory: result.transactions[txn.id] } : txn
+        );
+        this.monthlySpend = this.spendingAggregatorService.aggregate(
+          this.receipts,
+          this.bankTransactions,
+          this.getSelfShares()
+        );
+        this.renderTrend();
+        this.renderRing();
+        this.renderTransactions();
+        this.renderMonthGlance();
+        this.notificationService.success(
+          `Sorted ${result.updated} ${result.updated === 1 ? "item" : "items"} into categories.`
+        );
+      } catch (error) {
+        this.notificationService.error(error instanceof Error ? error.message : "Could not sort this month.");
+      } finally {
+        done();
+        UI.setBusy(button, false);
+        this.renderCategorizeNote();
+      }
     }
 
     private renderTrend(): void {
@@ -2021,6 +2224,7 @@ namespace ReceiptRing.App {
       this.elements.budgetMonth.value = month ?? "";
       this.renderTrend();
       this.renderRing();
+      this.renderMonthGlance();
       this.renderRentEntries();
       void this.renderEducationExpenses();
       this.renderTransactions();
@@ -2077,7 +2281,8 @@ namespace ReceiptRing.App {
       const meta = document.createElement("span");
       meta.className = "transaction-meta";
       const date = this.formatTransactionDate(txn.date);
-      meta.textContent = txn.category ? `${date} \u00b7 ${txn.category}` : date;
+      const category = txn.budgetCategory || txn.category;
+      meta.textContent = category ? `${date} \u00b7 ${category}` : date;
       main.append(desc);
 
       const linkedReceipt = this.findLinkedReceipt(txn);
@@ -2388,6 +2593,7 @@ namespace ReceiptRing.App {
       );
       this.renderTrend();
       this.renderRing();
+      this.renderMonthGlance();
     }
 
     private async toggleTransactionFood(transactionId: string, isFood: boolean): Promise<void> {
@@ -2485,7 +2691,7 @@ namespace ReceiptRing.App {
     private renderRentEntries(): void {
       void (async () => {
         // The rent list lives in the education panel, under the same loader.
-        const done = this.loading.show(this.panelBody(this.elements.rentEntriesList), "Totalling education expenses…");
+        const done = this.showBudgetingLoader("Totalling education expenses…");
         try {
           // No month in focus (fresh account) still shows the current month's
           // rent, mirroring renderEducationExpenses' fallback.
@@ -2593,6 +2799,112 @@ namespace ReceiptRing.App {
       const wholeYear = this.elements.educationExportScope.value === "year";
       this.elements.educationExportMonthField.classList.toggle("hidden", wholeYear);
       this.elements.educationExportYearField.classList.toggle("hidden", !wholeYear);
+    }
+
+    /**
+     * Everything the account holds, as one ZIP: every receipt photo and rent
+     * proof, plus CSVs of every transaction and receipt line. Built in the
+     * browser from the same endpoints the app already reads, so it is not
+     * bound by the size cap on a serverless response.
+     */
+    private async downloadAllData(): Promise<void> {
+      if (this.isExportingAll) return;
+      this.isExportingAll = true;
+      this.elements.exportAllDataButtons.forEach((button) => UI.setBusy(button, true));
+      const host = document.body;
+      const done = this.loading.show(host, "Gathering your data…", "Receipts, transactions and rent.", {
+        screen: "all"
+      });
+      try {
+        const [receipts, transactions, rentEntries] = await Promise.all([
+          this.receiptApiService.list(),
+          this.isAdmin ? this.bankApiService.listTransactions().catch(() => []) : Promise.resolve([]),
+          this.rentEntryApiService.list()
+        ]);
+        this.receipts = receipts;
+        const exportedAt = new Date();
+        const blob = await this.dataExportService.build(
+          { receipts, transactions, rentEntries, selfShares: this.getSelfShares(), exportedAt },
+          async (url) => {
+            const response = await fetch(url, { credentials: "same-origin" });
+            return response.ok ? response.blob() : null;
+          },
+          ({ done: fetched, total }) =>
+            this.loading.relabel(
+              host,
+              "Packing your photos…",
+              total === 0 ? "No photos to pack." : `${fetched} of ${total} photos`
+            )
+        );
+        const fileName = this.dataExportService.fileName(exportedAt);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        this.notificationService.success(`Downloaded ${fileName}.`);
+      } catch (error) {
+        this.notificationService.error(error instanceof Error ? error.message : "Could not export your data.");
+      } finally {
+        done();
+        this.elements.exportAllDataButtons.forEach((button) => UI.setBusy(button, false));
+        this.isExportingAll = false;
+      }
+    }
+
+    /**
+     * Admin only: the whole database, every account, as one ZIP of JSON
+     * tables. The server hands it over a page at a time; this stitches it.
+     */
+    private async downloadDatabaseBackup(): Promise<void> {
+      if (!this.isAdmin || this.isExportingAll) return;
+      const includeSecrets = this.elements.backupIncludeSecrets.checked;
+      if (
+        includeSecrets &&
+        !window.confirm(
+          "Include password hashes and encrypted keys? Anyone with the file and the server's encryption key could use them. Keep it private."
+        )
+      ) {
+        return;
+      }
+
+      this.isExportingAll = true;
+      const button = this.elements.databaseBackupButton;
+      UI.setBusy(button, true);
+      const host = document.body;
+      const done = this.loading.show(host, "Backing up the database…", "Reading the table list.", { screen: "all" });
+      try {
+        const now = new Date();
+        const blob = await this.adminBackupService.build(
+          includeSecrets,
+          ({ table, rowsDone, rowsTotal }) =>
+            this.loading.relabel(
+              host,
+              "Backing up the database…",
+              `${table.replace(/_/g, " ")} · ${rowsDone} of ${rowsTotal} rows`
+            ),
+          now
+        );
+        const fileName = this.adminBackupService.fileName(now);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        this.notificationService.success(`Downloaded ${fileName}.`);
+      } catch (error) {
+        this.notificationService.error(error instanceof Error ? error.message : "The backup failed.");
+      } finally {
+        done();
+        UI.setBusy(button, false);
+        this.isExportingAll = false;
+      }
     }
 
     // Admin only: everything spent, as a CSV, not just education expenses.
@@ -3039,7 +3351,7 @@ namespace ReceiptRing.App {
     }
 
     private async renderEducationExpenses(): Promise<void> {
-      const done = this.loading.show(this.panelBody(this.elements.foodItemsList), "Totalling education expenses…");
+      const done = this.showBudgetingLoader("Totalling education expenses…");
       try {
         const month = this.selectedMonth ?? (this.spendingAggregatorService.monthKey(new Date().toISOString()) ?? undefined);
         const foodSummary = await this.receiptApiService.getFoodSummary(month);

@@ -19,6 +19,20 @@ namespace ReceiptRing {
   const rentEntryApiService = new Services.RentEntryApiService();
   const educationExportApiService = new Services.EducationExportApiService();
   const notificationService = new Services.NotificationService();
+  const insightsService = new Services.InsightsService(spendingAggregatorService);
+  const preferencesService = new Services.PreferencesService(localStorage);
+  const accountApiService = new Services.AccountApiService();
+  const adminApiService = new Services.AdminApiService();
+  const adminBackupService = new Services.AdminBackupService(async (url) => {
+    const response = await fetch(url, { credentials: "same-origin" });
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    if (!response.ok) throw new Error(body.error || `Backup failed (${response.status}).`);
+    return body;
+  });
+  const dataExportService = new Services.DataExportService(
+    (receiptId) => receiptApiService.imageUrl(receiptId),
+    (entryId) => `/api/rent-entries/${encodeURIComponent(entryId)}/photo`
+  );
 
   // Identification, cheapest tier first. The alias store is what makes the
   // second receipt from a shop mostly free, so it gets the API backend that
@@ -36,8 +50,7 @@ namespace ReceiptRing {
     new Services.ItemIdentityApiService()
   );
   const elements = new UI.DomRegistryFactory().create();
-  // The spinners written into the page's own markup, such as the one beside
-  // a receipt scan's status, get their drawing here.
+  // Any loader written into the page's own markup gets its drawing here.
   UI.mountLoaders(document);
   const categoryPromptView = new UI.CategoryPromptView(categories, elements);
   const splitWorkspaceView = new UI.SplitWorkspaceView(currencyFormatService, receiptApiService);
@@ -74,7 +87,12 @@ namespace ReceiptRing {
     itemIdentityService,
     itemAliasStoreService,
     authApiService,
-    educationExportApiService
+    educationExportApiService,
+    dataExportService,
+    insightsService,
+    new UI.InsightsView(currencyFormatService),
+    adminBackupService,
+    preferencesService
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.
@@ -82,6 +100,21 @@ namespace ReceiptRing {
   const startApp = (user: Services.AuthUser): void => {
     if (started) return;
     started = true;
+    // Settings is every account's; the admin tools are started only for an
+    // admin (the server refuses their routes to anyone else regardless).
+    const settings = new App.AccountSettingsController(accountApiService, preferencesService, notificationService);
+    settings.start(user);
+    controller.hooks.onShowSettings = () => settings.show();
+    if (user.isAdmin) {
+      const admin = new App.AdminToolsController(
+        adminApiService,
+        new UI.AdminView(currencyFormatService),
+        notificationService,
+        user.id
+      );
+      admin.start();
+      controller.hooks.onShowAdmin = () => void admin.load();
+    }
     controller.start(user);
   };
 
@@ -93,8 +126,42 @@ namespace ReceiptRing {
     document.body.dataset.auth = state;
   };
 
+  // A signed-in user can still visit the public home page: the logo in the
+  // app bar opens it, and its "Open app" button (or Back) returns. Kept in
+  // history so the browser's Back button behaves the way it looks like it
+  // should.
+  const showLanding = (show: boolean): void => {
+    if (show) {
+      document.body.dataset.view = "landing";
+    } else {
+      delete document.body.dataset.view;
+    }
+    window.scrollTo(0, 0);
+  };
+  const openLanding = (): void => {
+    if (document.body.dataset.view === "landing") return;
+    history.pushState({ view: "landing" }, "", "#home");
+    showLanding(true);
+  };
+  const openApp = (): void => {
+    if ((history.state as { view?: string } | null)?.view === "landing") {
+      history.back();
+    } else {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+      showLanding(false);
+    }
+  };
+  window.addEventListener("popstate", (event) => {
+    if (document.body.dataset.auth !== "user") return;
+    showLanding((event.state as { view?: string } | null)?.view === "landing");
+  });
+  elements.appBrandLink.addEventListener("click", (event) => {
+    event.preventDefault();
+    openLanding();
+  });
+
   authView.init();
-  landingView.init((mode) => authView.show(mode));
+  landingView.init((mode) => authView.show(mode), openApp);
   authView.onAuthenticated = (user) => {
     authView.hide();
     setAuthState("user");

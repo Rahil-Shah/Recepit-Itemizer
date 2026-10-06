@@ -123,3 +123,40 @@ test("only the attached receipt is skipped, not every receipt", () => {
   const [august] = aggregator.aggregate(receipts, transactions);
   assert.equal(august.total, 55);
 });
+
+test("a budget category from the Gemini pass wins, used exactly as given", () => {
+  const aggregator = new ReceiptRing.Services.SpendingAggregatorService(ReceiptRing.Config.CATEGORIES);
+  const receipts = [
+    { id: "r1", category: "Groceries", budgetCategory: "Shopping", total: 30, createdAt: "2026-03-10", people: [], lines: [] }
+  ];
+  const transactions = [
+    { id: "t1", date: "2026-03-11", amount: -20, category: "TRAVEL", budgetCategory: "Travel", linkedReceiptId: null },
+    { id: "t2", date: "2026-03-12", amount: -5, category: "travel", budgetCategory: null, linkedReceiptId: null }
+  ];
+
+  const [march] = aggregator.aggregate(receipts, transactions);
+  const byName = Object.fromEntries(march.categories.map((c) => [c.category, c.amount]));
+
+  assert.equal(byName.Shopping, 30);
+  // Not folded into Transport the way the bank's own "travel" still is.
+  assert.equal(byName.Travel, 20);
+  assert.equal(byName.Transport, 5);
+});
+
+test("idsForMonth lists the month's receipts and spending, minus attached receipts", () => {
+  const aggregator = new ReceiptRing.Services.SpendingAggregatorService(ReceiptRing.Config.CATEGORIES);
+  const receipts = [
+    { id: "r1", createdAt: "2026-03-10", category: "Other", total: 1, people: [], lines: [] },
+    { id: "r2", createdAt: "2026-03-11", category: "Other", total: 1, people: [], lines: [] },
+    { id: "r3", createdAt: "2026-04-01", category: "Other", total: 1, people: [], lines: [] }
+  ];
+  const transactions = [
+    { id: "t1", date: "2026-03-05", amount: -9, linkedReceiptId: "r2" },
+    { id: "t2", date: "2026-03-06", amount: 40, linkedReceiptId: null }
+  ];
+
+  const ids = aggregator.idsForMonth("2026-03", receipts, transactions);
+
+  assert.deepEqual(Array.from(ids.receiptIds), ["r1"]);
+  assert.deepEqual(Array.from(ids.transactionIds), ["t1"]);
+});

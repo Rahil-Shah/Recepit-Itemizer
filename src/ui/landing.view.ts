@@ -6,7 +6,13 @@ namespace ReceiptRing.UI {
   export class LandingView {
     constructor(private readonly elements: DomRegistry) {}
 
-    init(openAuth: (mode: "login" | "register") => void): void {
+    /**
+     * @param openApp Takes a signed-in visitor back to the workspace. They
+     *   reach this page from the app's logo, so every call to action here --
+     *   "Get started", "Start splitting" -- means "back to my receipts" for
+     *   them rather than a sign-up form.
+     */
+    init(openAuth: (mode: "login" | "register") => void, openApp: () => void): void {
       const { landingMenu, landingMenuToggle } = this.elements;
 
       landingMenuToggle.addEventListener("click", () => {
@@ -35,7 +41,18 @@ namespace ReceiptRing.UI {
       this.elements.authActionButtons.forEach((button) => {
         button.addEventListener("click", () => {
           this.setMenuOpen(false);
+          if (document.body.dataset.auth === "user") {
+            openApp();
+            return;
+          }
           openAuth(button.dataset.authAction === "register" ? "register" : "login");
+        });
+      });
+
+      this.elements.openAppButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          this.setMenuOpen(false);
+          openApp();
         });
       });
     }

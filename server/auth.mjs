@@ -1,8 +1,12 @@
 // Authentication: registration, login, logout, and a requireAuth middleware.
 //
-// Sessions are opaque random tokens stored as an httpOnly, SameSite=Lax cookie.
-// Only the SHA-256 hash of the token is persisted, so a database leak does not
-// expose usable sessions. Login is rate-limited in memory to blunt brute force.
+// Sessions are opaque random tokens. A browser on this site holds one as an
+// httpOnly, SameSite=Lax cookie. A client that cannot -- a mobile app, or a
+// front end served from another site -- asks for it in the response body by
+// sending `X-Auth-Mode: token` when it signs in, and then presents it as
+// `Authorization: Bearer <token>`. Either way the session is the same row and
+// only the SHA-256 hash of the token is persisted, so a database leak does not
+// expose usable sessions. Login is rate-limited to blunt brute force.
 
 import {
   hashPassword,
@@ -25,6 +29,10 @@ const SESSION_COOKIE = "rr_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
+// scrypt takes the whole input, so an unbounded password is a cheap way to
+// make the server do expensive work.
+const MAX_PASSWORD_LENGTH = 200;
+const MAX_NAME_LENGTH = 80;
 
 // Per-account login throttle: how many guesses one address may make against
 // one email before it has to wait. Counted in Postgres rather than in memory,
@@ -38,6 +46,19 @@ const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 // enforces the same line on every route regardless.
 function publicUser(user) {
   return { id: user.id, email: user.email, name: user.name, isAdmin: isAdmin(user.email) };
+}
+
+/** The session token a request carries: a bearer token, else the cookie. */
+export function sessionTokenOf(req) {
+  const header = String(req.headers?.authorization ?? "");
+  const bearer = /^Bearer\s+([A-Za-z0-9_-]{20,200})$/.exec(header.trim());
+  if (bearer) return bearer[1];
+  return req.cookies?.[SESSION_COOKIE] || null;
+}
+
+/** Whether the client asked for its session token in the response body. */
+export function wantsTokenInBody(req) {
+  return String(req.headers?.["x-auth-mode"] ?? "").toLowerCase() === "token";
 }
 
 export function createAuth(prisma, limitStore = null) {
@@ -85,19 +106,24 @@ export function createAuth(prisma, limitStore = null) {
   async function startSession(req, res, userId) {
     await purgeExpiredSessions();
     const token = generateSessionToken();
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
     await prisma.session.create({
       data: {
         tokenHash: hashToken(token),
         userId,
-        expiresAt: new Date(Date.now() + SESSION_TTL_MS)
+        expiresAt
       }
     });
+    // A token client gets the token in the body and no cookie: it has
+    // nowhere to keep one, and a stray cookie would only confuse it.
+    if (wantsTokenInBody(req)) return { token, expiresAt: expiresAt.toISOString() };
     res.cookie(SESSION_COOKIE, token, cookieOptions(req));
+    return {};
   }
 
   const requireAuth = async (req, res, next) => {
     try {
-      const token = req.cookies?.[SESSION_COOKIE];
+      const token = sessionTokenOf(req);
       if (!token) return res.status(401).json({ error: "Authentication required." });
 
       const session = await prisma.session.findUnique({
@@ -116,6 +142,7 @@ export function createAuth(prisma, limitStore = null) {
       }
 
       req.userId = session.userId;
+      req.sessionId = session.id;
       req.userEmail = session.user.email;
       req.isAdmin = isAdmin(session.user.email);
       next();
@@ -156,6 +183,9 @@ export function createAuth(prisma, limitStore = null) {
       if (password.length < MIN_PASSWORD_LENGTH) {
         return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
       }
+      if (password.length > MAX_PASSWORD_LENGTH) {
+        return res.status(400).json({ error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters.` });
+      }
 
       try {
         const existing = await prisma.user.findUnique({ where: { email } });
@@ -183,8 +213,8 @@ export function createAuth(prisma, limitStore = null) {
         const user = await prisma.user.create({
           data: { email, name, passwordHash: await hashPassword(password) }
         });
-        await startSession(req, res, user.id);
-        res.status(201).json(publicUser(user));
+        const session = await startSession(req, res, user.id);
+        res.status(201).json({ ...publicUser(user), ...session });
       } catch (error) {
         console.error("Registration failed:", error);
         res.status(500).json({ error: "Could not create account." });
@@ -194,6 +224,10 @@ export function createAuth(prisma, limitStore = null) {
     app.post("/api/auth/login", async (req, res) => {
       const email = String(req.body?.email ?? "").trim().toLowerCase();
       const password = String(req.body?.password ?? "");
+      // No account has a longer password, and hashing one would be expensive.
+      if (password.length > MAX_PASSWORD_LENGTH) {
+        return res.status(401).json({ error: "Invalid email or password." });
+      }
       // Keyed on both address and email so one person guessing at one account
       // cannot lock out everybody else behind the same address.
       const throttleKey = `login-account:${req.ip}:${email}`;
@@ -225,8 +259,8 @@ export function createAuth(prisma, limitStore = null) {
           return res.status(401).json({ error: "Invalid email or password." });
         }
         if (limitStore) await limitStore.reset(throttleKey);
-        await startSession(req, res, user.id);
-        res.json(publicUser(user));
+        const session = await startSession(req, res, user.id);
+        res.json({ ...publicUser(user), ...session });
       } catch (error) {
         console.error("Login failed:", error);
         res.status(500).json({ error: "Could not log in." });
@@ -234,7 +268,7 @@ export function createAuth(prisma, limitStore = null) {
     });
 
     app.post("/api/auth/logout", async (req, res) => {
-      const token = req.cookies?.[SESSION_COOKIE];
+      const token = sessionTokenOf(req);
       if (token) {
         await prisma.session.deleteMany({ where: { tokenHash: hashToken(token) } }).catch(() => {});
       }
@@ -277,6 +311,89 @@ export function createAuth(prisma, limitStore = null) {
       } catch (error) {
         console.error("Account deletion failed:", error);
         res.status(500).json({ error: "Could not delete your account." });
+      }
+    });
+
+    // --- Account settings, for every account ------------------------------
+
+    app.patch("/api/auth/profile", requireAuth, async (req, res) => {
+      const raw = req.body?.name;
+      if (raw !== null && typeof raw !== "string") {
+        return res.status(400).json({ error: "name must be a string." });
+      }
+      const name = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim() : "";
+      if (name.length > MAX_NAME_LENGTH) {
+        return res.status(400).json({ error: `Name must be at most ${MAX_NAME_LENGTH} characters.` });
+      }
+      try {
+        const user = await prisma.user.update({ where: { id: req.userId }, data: { name: name || null } });
+        res.json(publicUser(user));
+      } catch (error) {
+        console.error("Profile update failed:", error);
+        res.status(500).json({ error: "Could not update your profile." });
+      }
+    });
+
+    // Changing the password signs every other session out: whoever might
+    // have known the old one should not stay signed in with it.
+    app.post("/api/auth/password", requireAuth, async (req, res) => {
+      const currentPassword = String(req.body?.currentPassword ?? "");
+      const newPassword = String(req.body?.newPassword ?? "");
+      if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+        return res.status(400).json({
+          error: `The new password must be ${MIN_PASSWORD_LENGTH} to ${MAX_PASSWORD_LENGTH} characters.`
+        });
+      }
+      try {
+        const user = await prisma.user.findUnique({ where: { id: req.userId } });
+        const ok = user?.passwordHash ? await verifyPassword(currentPassword, user.passwordHash) : false;
+        if (!ok) return res.status(403).json({ error: "Your current password is not correct." });
+        if (await verifyPassword(newPassword, user.passwordHash)) {
+          return res.status(400).json({ error: "The new password is the same as the current one." });
+        }
+        await prisma.$transaction([
+          prisma.user.update({ where: { id: req.userId }, data: { passwordHash: await hashPassword(newPassword) } }),
+          prisma.session.deleteMany({ where: { userId: req.userId, id: { not: req.sessionId } } })
+        ]);
+        res.json({ changed: true });
+      } catch (error) {
+        console.error("Password change failed:", error);
+        res.status(500).json({ error: "Could not change your password." });
+      }
+    });
+
+    // How many places this account is signed in, without saying anything
+    // about them that a session row does not hold (no addresses, no agents).
+    app.get("/api/auth/sessions", requireAuth, async (req, res) => {
+      try {
+        const sessions = await prisma.session.findMany({
+          where: { userId: req.userId, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, createdAt: true, expiresAt: true }
+        });
+        res.json({
+          active: sessions.length,
+          sessions: sessions.map((session) => ({
+            current: session.id === req.sessionId,
+            signedInAt: session.createdAt,
+            expiresAt: session.expiresAt
+          }))
+        });
+      } catch (error) {
+        console.error("Failed to list sessions:", error);
+        res.status(500).json({ error: "Could not load your sessions." });
+      }
+    });
+
+    app.post("/api/auth/sessions/revoke-others", requireAuth, async (req, res) => {
+      try {
+        const { count } = await prisma.session.deleteMany({
+          where: { userId: req.userId, id: { not: req.sessionId } }
+        });
+        res.json({ revoked: count });
+      } catch (error) {
+        console.error("Failed to revoke sessions:", error);
+        res.status(500).json({ error: "Could not sign out your other sessions." });
       }
     });
 

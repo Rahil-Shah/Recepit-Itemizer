@@ -45,6 +45,7 @@ export class FakeElement {
     this.text = "";
     this.disabled = false;
     this.classList = new FakeClassList(this);
+    this.dataset = {};
   }
 
   get className() {

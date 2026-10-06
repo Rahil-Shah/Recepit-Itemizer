@@ -179,8 +179,12 @@
           </div>
 
           <div class="pillnav-actions">
-            <button class="btn btn-ghost" type="button" data-auth-action="login">Log in</button>
-            <button class="btn btn-primary" type="button" data-auth-action="register">Get started</button>
+            <button class="btn btn-ghost signed-out-only" type="button" data-auth-action="login">Log in</button>
+            <button class="btn btn-primary signed-out-only" type="button" data-auth-action="register">Get started</button>
+            <button class="btn btn-primary signed-in-only" type="button" data-app-action="open">
+              Open app
+              <svg class="btn-icon"><use href="#i-arrow-right" /></svg>
+            </button>
           </div>
 
           <button
@@ -202,8 +206,9 @@
           <a href="#identification">Identification</a>
           <a href="#faq">FAQ</a>
           <div class="pillnav-menu-actions">
-            <button class="btn btn-outline btn-block" type="button" data-auth-action="login">Log in</button>
-            <button class="btn btn-primary btn-block" type="button" data-auth-action="register">Get started</button>
+            <button class="btn btn-outline btn-block signed-out-only" type="button" data-auth-action="login">Log in</button>
+            <button class="btn btn-primary btn-block signed-out-only" type="button" data-auth-action="register">Get started</button>
+            <button class="btn btn-primary btn-block signed-in-only" type="button" data-app-action="open">Open app</button>
           </div>
         </div>
       </header>
@@ -609,19 +614,34 @@
     <div class="app-shell">
       <header class="appbar">
         <div class="appbar-inner">
-          <div class="brand">
+          <!-- The logo opens the public home page, the one visitors see; its
+               "Open app" button comes back here. -->
+          <a class="brand brand-link" id="appBrandLink" href="#home" title="Receipt Ring home page">
             <span class="brand-logo" aria-hidden="true"><svg><use href="#i-receipt" /></svg></span>
             <span class="brand-name">Receipt Ring</span>
-          </div>
+          </a>
 
           <nav class="tab-nav" aria-label="Sections">
-            <button class="tab-button is-active" id="tabReceipts" type="button" data-tab="receipts">Split</button>
-            <button class="tab-button" id="tabHistory" type="button" data-tab="history">History</button>
-            <button class="tab-button" id="tabBudgeting" type="button" data-tab="budgeting">Budgets</button>
+            <button class="tab-button is-active" id="tabReceipts" type="button" data-tab="receipts">
+              <svg class="tab-icon" aria-hidden="true"><use href="#i-receipt" /></svg>
+              <span>Split</span>
+            </button>
+            <button class="tab-button" id="tabHistory" type="button" data-tab="history">
+              <svg class="tab-icon" aria-hidden="true"><use href="#i-history" /></svg>
+              <span>History</span>
+            </button>
+            <button class="tab-button" id="tabBudgeting" type="button" data-tab="budgeting">
+              <svg class="tab-icon" aria-hidden="true"><use href="#i-pie" /></svg>
+              <span>Budgets</span>
+            </button>
           </nav>
 
           <div class="appbar-actions">
             <button class="btn btn-secondary" id="sampleButton" type="button">Load sample</button>
+            <button class="btn btn-ghost admin-only" id="adminToolsButton" type="button" data-open-admin>
+              <svg class="btn-icon" aria-hidden="true"><use href="#i-shield" /></svg>
+              <span class="btn-label">Admin</span>
+            </button>
             <button class="btn btn-ghost" id="logoutButton" type="button">Log out</button>
             <button class="btn btn-ghost" id="settingsButton" type="button">
               <svg class="btn-icon" aria-hidden="true"><use href="#i-settings" /></svg>
@@ -645,6 +665,7 @@
             <button class="btn btn-ghost btn-small" id="cancelEditButton" type="button">Cancel</button>
           </div>
           <div class="workspace" aria-label="Receipt workspace">
+            <div class="workspace-stack">
             <section class="panel" aria-label="Scan receipt">
               <header class="panel-header">
                 <h2>Scan receipt</h2>
@@ -663,21 +684,19 @@
                   <button class="icon-button" id="clearImageButton" type="button" aria-label="Remove image">×</button>
                 </figure>
 
-                <!-- aria-live sits on the message alone, not on this wrapper.
+                <!-- What a scan came to: how many lines, or why it failed. The
+                     wait itself is the receipt-ring loader over Line items.
+                     aria-live sits on the message alone, not on this wrapper.
                      With it on the wrapper, the retry button counted down inside
                      the live region and re-announced the whole status four times
                      a second. -->
                 <div class="ocr-status hidden" id="ocrStatus">
                   <span class="status-line">
-                    <span class="loader loader-sm" data-loader aria-hidden="true"></span>
-                    <span id="ocrStatusText" role="status" aria-live="polite">Reading receipt…</span>
+                    <span id="ocrStatusText" role="status" aria-live="polite"></span>
                   </span>
                   <button class="btn btn-secondary btn-small ocr-retry hidden" id="retryParseButton" type="button">
                     Try again
                   </button>
-                  <div class="ocr-progress">
-                    <span id="ocrProgressBar"></span>
-                  </div>
                 </div>
 
                 <div class="field">
@@ -701,6 +720,19 @@
                 </div>
               </div>
             </section>
+
+            <!-- Fills the column under the scanner: the last few receipts,
+                 one click from being reopened here. -->
+            <section class="panel recent-panel" aria-label="Recent receipts">
+              <header class="panel-header">
+                <h2>Recent receipts</h2>
+                <button class="btn btn-ghost btn-small" type="button" data-tab-jump="history">See all</button>
+              </header>
+              <div class="panel-body">
+                <div id="recentReceipts"></div>
+              </div>
+            </section>
+            </div>
 
             <section class="panel" aria-label="Line items">
               <header class="panel-header">
@@ -734,11 +766,7 @@
 
                 <div class="identify-status hidden" id="identifyStatus" aria-live="polite">
                   <span class="status-line">
-                    <span class="loader loader-sm" data-loader aria-hidden="true"></span>
-                    <span id="identifyStatusText">Identifying items…</span>
-                  </span>
-                  <span class="identify-progress">
-                    <span id="identifyProgressBar"></span>
+                    <span id="identifyStatusText"></span>
                   </span>
                 </div>
 
@@ -810,13 +838,24 @@
         </div>
 
         <div class="tab-view hidden" id="historyView">
+          <div class="history-layout">
           <section class="panel history-panel" aria-label="Saved receipts">
             <header class="panel-header">
               <h2>Saved receipts</h2>
-              <button class="btn btn-secondary" id="refreshHistoryButton" type="button">Refresh</button>
+              <div class="panel-actions">
+                <input
+                  class="table-input history-search"
+                  id="historySearch"
+                  type="search"
+                  placeholder="Search stores, items, categories"
+                  aria-label="Search saved receipts"
+                />
+                <button class="btn btn-secondary" id="refreshHistoryButton" type="button">Refresh</button>
+              </div>
             </header>
             <div class="panel-body">
               <div class="history-list" id="historyList"></div>
+              <p class="history-no-match hidden" id="historyNoMatch">No saved receipts match that search.</p>
               <div class="empty-state" id="historyEmpty">
                 <span class="empty-icon-wrap"><svg class="empty-icon" aria-hidden="true"><use href="#i-folder" /></svg></span>
                 <strong>No saved receipts</strong>
@@ -824,6 +863,24 @@
               </div>
             </div>
           </section>
+
+          <aside class="panel history-aside" aria-label="Overview">
+            <header class="panel-header">
+              <h2>Overview</h2>
+            </header>
+            <div class="panel-body">
+              <div id="historyOverview"></div>
+              <div class="aside-export">
+                <h3 class="insight-heading">Your data</h3>
+                <p>Every receipt photo, plus a spreadsheet of every transaction naming its photo.</p>
+                <button class="btn btn-secondary btn-block" type="button" data-export-all>
+                  <svg class="btn-icon" aria-hidden="true"><use href="#i-download" /></svg>
+                  Download all data (.zip)
+                </button>
+              </div>
+            </div>
+          </aside>
+          </div>
         </div>
 
         <div class="tab-view hidden" id="budgetingView">
@@ -837,6 +894,7 @@
               </div>
             </section>
 
+            <div class="workspace-stack">
             <section class="panel" aria-label="Monthly spending">
               <header class="panel-header">
                 <h2>Monthly spending</h2>
@@ -847,8 +905,29 @@
                   <div class="budget-ring" id="budgetRing"></div>
                   <div class="budget-legend" id="budgetLegend"></div>
                 </div>
+                <!-- One Gemini pass over the month's receipts and transactions,
+                     filing each under a proper budget category for the ring. -->
+                <div class="categorize-row">
+                  <button class="btn btn-secondary" id="categorizeMonthButton" type="button">
+                    <svg class="btn-icon" aria-hidden="true"><use href="#i-sparkle" /></svg>
+                    Sort this month with AI
+                  </button>
+                  <span class="categorize-note" id="categorizeMonthNote">
+                    Gemini reads each receipt and transaction and files it under the right category.
+                  </span>
+                </div>
               </div>
             </section>
+
+            <section class="panel" aria-label="Month at a glance">
+              <header class="panel-header">
+                <h2>Month at a glance</h2>
+              </header>
+              <div class="panel-body">
+                <div id="monthGlance"></div>
+              </div>
+            </section>
+            </div>
 
             <section class="panel" aria-label="Education expenses (529)">
               <header class="panel-header">
@@ -965,6 +1044,284 @@
             </section>
           </div>
         </div>
+
+        <!-- ================================================================
+             Settings: every account. Opened from the app bar; Back returns
+             to the tab you were on. Sections are cards, with a sticky
+             index beside them on a wide screen.
+             ================================================================ -->
+        <div class="tab-view hidden" id="settingsView">
+          <div class="page-head">
+            <button class="btn btn-ghost btn-small" id="closeSettingsButton" type="button">
+              <svg class="btn-icon back-icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              Back
+            </button>
+            <div>
+              <h1 class="page-title">Settings</h1>
+              <p class="page-lede">Your account, sign-in, Gemini key, preferences and data.</p>
+            </div>
+          </div>
+
+          <div class="settings-layout">
+            <nav class="settings-nav" aria-label="Settings sections">
+              <a href="#settingsProfile">Profile</a>
+              <a href="#settingsSecurity">Sign-in &amp; security</a>
+              <a href="#settingsGemini">Gemini</a>
+              <a href="#settingsPreferences">Preferences</a>
+              <a href="#settingsData">Your data</a>
+              <a class="admin-only" href="#settingsAdmin">Admin</a>
+              <a class="settings-nav-danger" href="#settingsDanger">Delete account</a>
+            </nav>
+
+            <div class="settings-sections">
+              <section class="panel settings-card" id="settingsProfile" aria-labelledby="settingsProfileTitle">
+                <header class="panel-header"><h2 id="settingsProfileTitle">Profile</h2></header>
+                <div class="panel-body">
+                  <div class="profile-row">
+                    <span class="profile-avatar" id="profileAvatar" aria-hidden="true">?</span>
+                    <div class="profile-identity">
+                      <strong id="profileEmail"></strong>
+                      <span class="role-badge" id="profileRole"></span>
+                    </div>
+                  </div>
+                  <form class="settings-inline-form" id="profileForm">
+                    <div class="field">
+                      <label class="field-label" for="profileName">Display name</label>
+                      <input class="table-input" id="profileName" maxlength="80" autocomplete="name" placeholder="Your name" />
+                    </div>
+                    <button class="btn btn-primary" id="saveProfileButton" type="submit">Save name</button>
+                  </form>
+                  <p class="settings-status" id="profileStatus" role="status"></p>
+                </div>
+              </section>
+
+              <section class="panel settings-card" id="settingsSecurity" aria-labelledby="settingsSecurityTitle">
+                <header class="panel-header"><h2 id="settingsSecurityTitle">Sign-in &amp; security</h2></header>
+                <div class="panel-body">
+                  <h3 class="settings-subhead">Change password</h3>
+                  <form class="settings-grid-form" id="passwordForm">
+                    <div class="field">
+                      <label class="field-label" for="currentPassword">Current password</label>
+                      <input class="table-input" id="currentPassword" type="password" autocomplete="current-password" required />
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="newPassword">New password</label>
+                      <input class="table-input" id="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="200" required />
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="confirmPassword">Repeat new password</label>
+                      <input class="table-input" id="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="200" required />
+                    </div>
+                    <button class="btn btn-primary" id="changePasswordButton" type="submit">Change password</button>
+                  </form>
+                  <p class="settings-status" id="passwordStatus" role="status"></p>
+                  <p class="settings-note">Changing your password signs you out everywhere else.</p>
+
+                  <h3 class="settings-subhead">Where you're signed in</h3>
+                  <ul class="session-list" id="sessionList"></ul>
+                  <button class="btn btn-secondary" id="revokeSessionsButton" type="button">Sign out everywhere else</button>
+                  <p class="settings-status" id="sessionStatus" role="status"></p>
+                </div>
+              </section>
+
+              <section class="panel settings-card" id="settingsGemini" aria-labelledby="settingsGeminiTitle">
+                <header class="panel-header"><h2 id="settingsGeminiTitle">Gemini</h2></header>
+                <div class="panel-body">
+                  <div class="settings-form">
+                    <div class="field">
+                      <label class="field-label" for="geminiApiKey">Gemini API key</label>
+                      <!-- The placeholder is rewritten when a key is already saved, so a
+                           blank box never reads as "your key is gone". -->
+                      <input class="table-input" id="geminiApiKey" type="password" autocomplete="off" placeholder="Enter Gemini API key" />
+                      <p class="settings-status" id="geminiKeyStatus"></p>
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="geminiModel">Model</label>
+                      <select class="table-select" id="geminiModel">
+                        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
+                        <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                        <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image</option>
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      </select>
+                    </div>
+                    <p class="settings-note">
+                      Your key is sent once to the server, encrypted at rest, and never stored in or returned to
+                      the browser. Leave the field blank to keep the key already in use. Admin accounts fall back
+                      to the server's shared key; every other account needs its own.
+                    </p>
+                  </div>
+                  <div class="settings-actions">
+                    <button class="btn btn-ghost" id="removeKeyButton" type="button">Remove key</button>
+                    <button class="btn btn-primary" id="saveSettingsButton" type="button">Save Gemini settings</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel settings-card" id="settingsPreferences" aria-labelledby="settingsPreferencesTitle">
+                <header class="panel-header"><h2 id="settingsPreferencesTitle">Preferences</h2></header>
+                <div class="panel-body">
+                  <div class="settings-grid-form">
+                    <div class="field">
+                      <label class="field-label" for="prefStartTab">Open the app on</label>
+                      <select class="table-select" id="prefStartTab">
+                        <option value="receipts">Split</option>
+                        <option value="history">History</option>
+                        <option value="budgeting">Budgets</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="prefCategory">Category for new receipts</label>
+                      <select class="table-select" id="prefCategory">
+                        <option>Groceries</option>
+                        <option>Dining</option>
+                        <option>Entertainment</option>
+                        <option>Travel</option>
+                        <option>Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p class="settings-note">Saved on this device as soon as you change them.</p>
+                </div>
+              </section>
+
+              <section class="panel settings-card" id="settingsData" aria-labelledby="settingsDataTitle">
+                <header class="panel-header"><h2 id="settingsDataTitle">Your data</h2></header>
+                <div class="panel-body">
+                  <p class="settings-copy">
+                    Everything in one ZIP: every receipt photo and rent proof, plus a spreadsheet of every
+                    receipt, bank transaction and rent payment naming the photo that goes with it.
+                  </p>
+                  <button class="btn btn-secondary" id="exportAllDataButton" type="button" data-export-all>
+                    <svg class="btn-icon" aria-hidden="true"><use href="#i-download" /></svg>
+                    Download all data (.zip)
+                  </button>
+                </div>
+              </section>
+
+              <!-- Admin accounts only. Hidden for everyone else by the
+                   stylesheet, and refused by the server either way. -->
+              <section class="panel settings-card admin-only" id="settingsAdmin" aria-labelledby="settingsAdminTitle">
+                <header class="panel-header">
+                  <h2 id="settingsAdminTitle">Admin</h2>
+                  <span class="role-badge is-admin">Admin only</span>
+                </header>
+                <div class="panel-body">
+                  <div class="admin-entry">
+                    <div>
+                      <h3 class="settings-subhead">Admin tools</h3>
+                      <p class="settings-copy">Accounts, usage and storage across the whole instance.</p>
+                    </div>
+                    <button class="btn btn-primary" type="button" data-open-admin>
+                      <svg class="btn-icon" aria-hidden="true"><use href="#i-shield" /></svg>
+                      Open admin tools
+                    </button>
+                  </div>
+                  <h3 class="settings-subhead">Database backup</h3>
+                  <p class="settings-copy">
+                    Every account's data -- users, receipts with photos, people, splits, rent, item names
+                    and bank transactions -- as one ZIP of JSON tables, ready to restore from.
+                  </p>
+                  <label class="checkbox-row">
+                    <input id="backupIncludeSecrets" type="checkbox" />
+                    <span>Include credentials (password hashes, encrypted keys and bank tokens) so a restore keeps sign-ins working</span>
+                  </label>
+                  <button class="btn btn-secondary" id="databaseBackupButton" type="button">
+                    <svg class="btn-icon" aria-hidden="true"><use href="#i-database" /></svg>
+                    Download database backup
+                  </button>
+                </div>
+              </section>
+
+              <section class="panel settings-card settings-danger-card" id="settingsDanger" aria-labelledby="settingsDangerTitle">
+                <header class="panel-header"><h2 id="settingsDangerTitle">Delete account</h2></header>
+                <div class="panel-body">
+                  <p class="settings-copy">
+                    Removes your account and everything in it: receipts, photos, saved item names, people, rent
+                    entries and any bank connection. This cannot be undone.
+                  </p>
+                  <div class="settings-danger-row">
+                    <input
+                      class="table-input"
+                      id="deleteAccountPassword"
+                      type="password"
+                      autocomplete="current-password"
+                      placeholder="Confirm your password"
+                    />
+                    <button class="btn btn-danger" id="deleteAccountButton" type="button">Delete account</button>
+                  </div>
+                  <p class="settings-status" id="deleteAccountStatus"></p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================================================================
+             Admin tools: admin accounts only. The server refuses every
+             /api/admin route to anyone else; this page just has nothing
+             to show them.
+             ================================================================ -->
+        <div class="tab-view hidden admin-only" id="adminView">
+          <div class="page-head">
+            <button class="btn btn-ghost btn-small" id="closeAdminButton" type="button">
+              <svg class="btn-icon back-icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              Back
+            </button>
+            <div>
+              <h1 class="page-title">Admin tools</h1>
+              <p class="page-lede" id="adminGeneratedAt">Usage across every account on this instance.</p>
+            </div>
+            <button class="btn btn-secondary page-head-action" id="refreshAdminButton" type="button">Refresh</button>
+          </div>
+
+          <div class="admin-stats" id="adminStats"></div>
+
+          <div class="admin-grid">
+            <section class="panel" aria-labelledby="adminActivityTitle">
+              <header class="panel-header">
+                <h2 id="adminActivityTitle">Last 12 months</h2>
+                <div class="chart-key">
+                  <span class="chart-key-item is-receipts">Receipts</span>
+                  <span class="chart-key-item is-signups">Sign-ups</span>
+                </div>
+              </header>
+              <div class="panel-body"><div class="admin-chart" id="adminChart"></div></div>
+            </section>
+            <section class="panel" aria-labelledby="adminCapacityTitle">
+              <header class="panel-header"><h2 id="adminCapacityTitle">Capacity &amp; storage</h2></header>
+              <div class="panel-body"><div id="adminCapacity"></div></div>
+            </section>
+          </div>
+
+          <section class="panel admin-users-panel" aria-labelledby="adminUsersTitle">
+            <header class="panel-header">
+              <h2 id="adminUsersTitle">Accounts</h2>
+              <input class="table-input history-search" id="adminUserSearch" type="search" placeholder="Search name or email" aria-label="Search accounts" />
+            </header>
+            <div class="panel-body">
+              <div class="admin-table-wrap">
+                <table class="admin-table" id="adminUsersTable">
+                  <thead>
+                    <tr>
+                      <th scope="col"><button type="button" data-sort="email">Account</button></th>
+                      <th scope="col"><button type="button" data-sort="joinedAt">Joined</button></th>
+                      <th scope="col"><button type="button" data-sort="lastSignInAt">Last sign-in</button></th>
+                      <th scope="col" class="is-number"><button type="button" data-sort="receipts">Receipts</button></th>
+                      <th scope="col" class="is-number"><button type="button" data-sort="lines">Items itemized</button></th>
+                      <th scope="col" class="is-number"><button type="button" data-sort="spend">Spend saved</button></th>
+                      <th scope="col" class="is-number"><button type="button" data-sort="photos">Photos</button></th>
+                      <th scope="col">Setup</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminUsersBody"></tbody>
+                </table>
+              </div>
+              <p class="history-no-match hidden" id="adminUsersEmpty">No accounts match that search.</p>
+            </div>
+          </section>
+
+          <section class="panel admin-detail hidden" id="adminUserDetail" aria-live="polite"></section>
+        </div>
       </main>
     </div>
 
@@ -1004,62 +1361,6 @@
         <div class="modal-actions">
           <button class="btn btn-secondary" id="closeCameraButton" type="button">Close</button>
           <button class="btn btn-primary" id="capturePhotoButton" type="button">Capture</button>
-        </div>
-      </section>
-    </div>
-
-    <div class="modal-backdrop hidden" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-      <section class="modal-card">
-        <header class="modal-heading">
-          <h2 id="settingsTitle">Settings</h2>
-          <p>Configure the Gemini API used to parse receipts.</p>
-        </header>
-        <div class="settings-form">
-          <div class="field">
-            <label class="field-label" for="geminiApiKey">Gemini API key</label>
-            <!-- The placeholder is rewritten when a key is already saved, so a
-                 blank box never reads as "your key is gone". -->
-            <input class="table-input" id="geminiApiKey" type="password" autocomplete="off" placeholder="Enter Gemini API key" />
-            <p class="settings-status" id="geminiKeyStatus"></p>
-          </div>
-          <div class="field">
-            <label class="field-label" for="geminiModel">Model</label>
-            <select class="table-select" id="geminiModel">
-              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
-              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-              <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image</option>
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-            </select>
-          </div>
-          <p class="settings-note">
-            Your key is sent once to the server, encrypted at rest, and never stored in or returned to the
-            browser. Leave the field blank to keep the key already in use. Admin accounts fall back to the
-            server's shared key; every other account needs its own.
-          </p>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-ghost" id="removeKeyButton" type="button">Remove key</button>
-          <button class="btn btn-secondary" id="closeSettingsButton" type="button">Cancel</button>
-          <button class="btn btn-primary" id="saveSettingsButton" type="button">Save settings</button>
-        </div>
-
-        <div class="settings-danger">
-          <h3>Delete account</h3>
-          <p>
-            Removes your account and everything in it: receipts, photos, saved item names, people, rent
-            entries and any bank connection. This cannot be undone.
-          </p>
-          <div class="settings-danger-row">
-            <input
-              class="table-input"
-              id="deleteAccountPassword"
-              type="password"
-              autocomplete="current-password"
-              placeholder="Confirm your password"
-            />
-            <button class="btn btn-danger" id="deleteAccountButton" type="button">Delete account</button>
-          </div>
-          <p class="settings-status" id="deleteAccountStatus"></p>
         </div>
       </section>
     </div>

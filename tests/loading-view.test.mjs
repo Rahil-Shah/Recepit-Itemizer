@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import vm from "node:vm";
 import { loadReceiptRing } from "./helpers/load-bundle.mjs";
 import { createFakeDocument, FakeElement } from "./helpers/fake-dom.mjs";
 
@@ -16,8 +15,12 @@ function setup() {
     }
   };
   const clock = { now: 1_000 };
-  const { ReceiptRing, context } = loadReceiptRing({ document, window, __clock: clock });
-  vm.runInContext("Date.now = () => __clock.now;", context);
+  class ClockDate extends Date {
+    static now() {
+      return clock.now;
+    }
+  }
+  const { ReceiptRing } = loadReceiptRing({ document, window, Date: ClockDate });
   const runTimers = () => {
     while (timers.length > 0) timers.shift().callback();
   };
@@ -159,4 +162,27 @@ test("mountLoaders draws the mark into each placeholder, once", () => {
   for (const placeholder of placeholders) {
     assert.equal(placeholder.querySelectorAll(".loader-mark").length, 1);
   }
+});
+
+test("a screen overlay sits on the body, tagged with its tab, and leaves with the load", () => {
+  const { UI, document, clock, runTimers } = setup();
+  const overlays = new UI.LoadingOverlays();
+  const view = document.createElement("div");
+  document.body.append(view);
+
+  const done = overlays.show(view, "Adding up your spending…", undefined, { screen: "budgeting" });
+  const overlay = document.body.querySelector(".loading-overlay");
+
+  assert.ok(overlay.classList.contains("is-screen"));
+  assert.equal(overlay.dataset.for, "budgeting");
+  assert.equal(view.querySelector(".loading-overlay"), null);
+  assert.equal(view.getAttribute("aria-busy"), "true");
+
+  overlays.relabel(view, "Totalling education expenses…");
+  assert.equal(overlay.querySelector(".loader-label").textContent, "Totalling education expenses…");
+
+  clock.now += 1_000;
+  done();
+  runTimers();
+  assert.equal(document.body.querySelector(".loading-overlay"), null);
 });

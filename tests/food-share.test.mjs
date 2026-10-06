@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { summariseReceiptFood, getLineShares, distributeProportionally } from "../server/food-share.mjs";
+import {
+  summariseReceiptFood,
+  getLineShares,
+  distributeProportionally,
+  createCentLedger
+} from "../server/food-share.mjs";
 
 const ME = "acct-me";
 const BRYCE = "acct-bryce";
@@ -173,12 +178,26 @@ test("a receipt whose food is entirely someone else's yields no items", () => {
 });
 
 test("odd cents rotate between people across lines", () => {
-  const luck = new Map();
+  const ledger = createCentLedger();
   const people = ["a", "b", "c", "d"].map((id) => ({ accountPersonId: id, mode: "equal", value: 0 }));
   const owed = new Map(people.map((p) => [p.accountPersonId, 0]));
   for (let i = 0; i < 4; i += 1) {
-    const shares = getLineShares(99, people, luck);
+    const shares = getLineShares(99, people, ledger);
     shares.forEach((cents, id) => owed.set(id, owed.get(id) + cents));
   }
   assert.deepEqual([...owed.values()], [99, 99, 99, 99]);
+});
+
+test("odd cents across many lines leave nobody more than a cent from even", () => {
+  const ledger = createCentLedger();
+  const people = ["a", "b", "c", "d"].map((id) => ({ accountPersonId: id, mode: "equal", value: 0 }));
+  const owed = new Map(people.map((p) => [p.accountPersonId, 0]));
+  for (let i = 0; i < 10; i += 1) {
+    getLineShares(99, people, ledger).forEach((cents, id) => owed.set(id, owed.get(id) + cents));
+  }
+  const values = [...owed.values()];
+  assert.equal(values.reduce((a, b) => a + b, 0), 990);
+  assert.ok(Math.max(...values) - Math.min(...values) <= 1);
+  // The first person picked is not the one who always pays extra.
+  assert.ok(owed.get("a") <= 248);
 });

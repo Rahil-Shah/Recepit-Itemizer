@@ -96,6 +96,9 @@ model BankTransaction {
   description     String?
   amount          Decimal     @db.Decimal(10, 2)
   category        String?
+  // What the month's Gemini categorization pass filed this under for the
+  // budget ring. The original category above is kept as the bank sent it.
+  budgetCategory  String?
   // Marked by the user in the budgeting view so a whole transaction (e.g. a
   // dinner out) counts toward the education-expense food total.
   isFood          Boolean     @default(false)
@@ -116,6 +119,8 @@ model Receipt {
   receiptDate       DateTime?
   receiptNumber     String?
   category          String           @default("Other")
+  // See BankTransaction.budgetCategory.
+  budgetCategory    String?
   subtotal          Decimal?         @db.Decimal(10, 2)
   tax               Decimal?         @db.Decimal(10, 2)
   total             Decimal?         @db.Decimal(10, 2)

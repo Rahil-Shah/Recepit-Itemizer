@@ -43,6 +43,10 @@ THE ITEM CODE IS THE PRIMARY EVIDENCE. It is the retailer's own SKU/PLU/DPCI for
 
 When an item has no code, decode the abbreviation using the store name and the price, and search for the decoded name plus the store when you are unsure.
 
+Some items carry a dictionaryGuess: what a simple abbreviation table made of the text. It is a hint, often partial or wrong. Use it if it helps, ignore it if it does not.
+
+Every item gets a name. When the receipt text is already plain words, return the clearest full product name the evidence supports - no more specific than that. When you are unsure, give your best guess with a low confidence rather than leaving the item out.
+
 Confidence rules - these matter more than being decisive:
 
 - 0.9 or above: a search confirmed the code (or the exact product) at this retailer.
@@ -56,7 +60,7 @@ Other rules:
 - Give up to 3 alternatives when genuinely ambiguous. Leave alternatives empty when it is not.
 - brand and size are optional. Omit rather than invent.
 - reasoning is one short sentence. When a search settled it, say what the code resolved to.
-- Return one entry for every id you were given, and none for ids you were not given. Do not merge, split, reorder or invent items.
+- Return exactly one entry for EVERY id you were given - no exceptions, no skipping - and none for ids you were not given. Do not merge, split, reorder or invent items.
 - Return valid JSON only. No markdown, no backticks, no commentary before or after.
 
 Return JSON in exactly this shape:
@@ -105,9 +109,12 @@ export function validateIdentifyRequest(body) {
     const itemCode = typeof item?.itemCode === "string" ? item.itemCode.trim() : "";
     const amount = Number(item?.amount);
 
+    const hint = typeof item?.hint === "string" ? item.hint.replace(/\s+/g, " ").trim() : "";
+
     cleaned.push({
       id,
       label: label.slice(0, MAX_LABEL_LENGTH),
+      hint: hint ? hint.slice(0, MAX_LABEL_LENGTH) : null,
       itemCode: /^\d{1,20}$/.test(itemCode) ? itemCode : null,
       amount: Number.isFinite(amount) ? Number(amount.toFixed(2)) : null
     });
@@ -128,7 +135,8 @@ export function buildIdentifyPrompt(items, storeName) {
     // point of this pass is that the code beats the abbreviation.
     ...(item.itemCode ? { itemCode: item.itemCode } : {}),
     receiptText: item.label,
-    ...(item.amount !== null ? { price: item.amount } : {})
+    ...(item.amount !== null ? { price: item.amount } : {}),
+    ...(item.hint ? { dictionaryGuess: item.hint } : {})
   }));
 
   const coded = lines.filter((line) => line.itemCode !== undefined).length;

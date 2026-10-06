@@ -106,6 +106,16 @@ namespace ReceiptRing.UI {
     }
   }
 
+  export interface OverlayOptions {
+    /**
+     * Cover the whole screen below the app bar, blurring everything behind
+     * it, instead of only the container. Names the tab the wait belongs to:
+     * the overlay lives on <body> and shows only while body[data-tab] is that
+     * tab, so switching away mid-load does not leave the other tabs covered.
+     */
+    screen?: string;
+  }
+
   interface ActiveOverlay {
     count: number;
     overlay: HTMLElement;
@@ -130,7 +140,7 @@ namespace ReceiptRing.UI {
      * Start covering `container`. Returns the function that ends this load;
      * calling it more than once is harmless.
      */
-    show(container: HTMLElement, label: string, hint?: string): () => void {
+    show(container: HTMLElement, label: string, hint?: string, options: OverlayOptions = {}): () => void {
       const existing = this.active.get(container);
       if (existing) {
         existing.count += 1;
@@ -140,7 +150,7 @@ namespace ReceiptRing.UI {
       } else {
         // Label and hint are both always there, so a later load can reword
         // them; an empty hint is hidden by the stylesheet.
-        const loader = createLoader();
+        const loader = createLoader({ size: options.screen ? "lg" : "md" });
         const labelText = document.createElement("span");
         labelText.className = "loader-label";
         labelText.textContent = label;
@@ -156,7 +166,13 @@ namespace ReceiptRing.UI {
 
         container.classList.add("is-loading");
         container.setAttribute("aria-busy", "true");
-        container.append(overlay);
+        if (options.screen) {
+          overlay.classList.add("is-screen");
+          overlay.dataset.for = options.screen;
+          document.body.append(overlay);
+        } else {
+          container.append(overlay);
+        }
         this.active.set(container, { count: 1, overlay, label: labelText, hint: hintText, shownAt: Date.now() });
       }
 
@@ -166,6 +182,14 @@ namespace ReceiptRing.UI {
         ended = true;
         this.release(container);
       };
+    }
+
+    /** Reword a load that is already showing, as it moves through stages. */
+    relabel(container: HTMLElement, label: string, hint?: string): void {
+      const entry = this.active.get(container);
+      if (!entry) return;
+      entry.label.textContent = label;
+      entry.hint.textContent = hint ?? "";
     }
 
     isLoading(container: HTMLElement): boolean {

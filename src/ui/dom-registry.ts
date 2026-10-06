@@ -8,7 +8,6 @@ namespace ReceiptRing.UI {
     clearImageButton: HTMLButtonElement;
     ocrStatus: HTMLElement;
     ocrStatusText: HTMLElement;
-    ocrProgressBar: HTMLElement;
     retryParseButton: HTMLButtonElement;
     receiptText: HTMLTextAreaElement;
     openCameraButton: HTMLButtonElement;
@@ -28,7 +27,6 @@ namespace ReceiptRing.UI {
     identifyItemsButton: HTMLButtonElement;
     identifyStatus: HTMLElement;
     identifyStatusText: HTMLElement;
-    identifyProgressBar: HTMLElement;
     emptyState: HTMLElement;
     unassignedCount: HTMLElement;
     storeNameInput: HTMLInputElement;
@@ -60,7 +58,10 @@ namespace ReceiptRing.UI {
     categoryPromptSkip: HTMLButtonElement;
     categoryPromptSave: HTMLButtonElement;
     settingsButton: HTMLButtonElement;
-    settingsModal: HTMLElement;
+    settingsView: HTMLElement;
+    adminView: HTMLElement;
+    closeAdminButton: HTMLButtonElement;
+    openAdminButtons: HTMLButtonElement[];
     geminiApiKey: HTMLInputElement;
     geminiModel: HTMLSelectElement;
     geminiKeyStatus: HTMLElement;
@@ -77,6 +78,19 @@ namespace ReceiptRing.UI {
     landingMenu: HTMLElement;
     landingMenuToggle: HTMLButtonElement;
     authActionButtons: HTMLButtonElement[];
+    openAppButtons: HTMLButtonElement[];
+    categorizeMonthButton: HTMLButtonElement;
+    exportAllDataButtons: HTMLButtonElement[];
+    databaseBackupButton: HTMLButtonElement;
+    backupIncludeSecrets: HTMLInputElement;
+    recentReceipts: HTMLElement;
+    historyOverview: HTMLElement;
+    historySearch: HTMLInputElement;
+    historyNoMatch: HTMLElement;
+    monthGlance: HTMLElement;
+    tabJumpButtons: HTMLButtonElement[];
+    categorizeMonthNote: HTMLElement;
+    appBrandLink: HTMLAnchorElement;
     authOverlay: HTMLElement;
     authCloseButton: HTMLButtonElement;
     authForm: HTMLFormElement;
@@ -155,7 +169,6 @@ namespace ReceiptRing.UI {
         clearImageButton: this.getElement("#clearImageButton", HTMLButtonElement),
         ocrStatus: this.getElement("#ocrStatus", HTMLElement),
         ocrStatusText: this.getElement("#ocrStatusText", HTMLElement),
-        ocrProgressBar: this.getElement("#ocrProgressBar", HTMLElement),
         retryParseButton: this.getElement("#retryParseButton", HTMLButtonElement),
         receiptText: this.getElement("#receiptText", HTMLTextAreaElement),
         openCameraButton: this.getElement("#openCameraButton", HTMLButtonElement),
@@ -175,7 +188,6 @@ namespace ReceiptRing.UI {
         identifyItemsButton: this.getElement("#identifyItemsButton", HTMLButtonElement),
         identifyStatus: this.getElement("#identifyStatus", HTMLElement),
         identifyStatusText: this.getElement("#identifyStatusText", HTMLElement),
-        identifyProgressBar: this.getElement("#identifyProgressBar", HTMLElement),
         emptyState: this.getElement("#emptyState", HTMLElement),
         unassignedCount: this.getElement("#unassignedCount", HTMLElement),
         storeNameInput: this.getElement("#storeNameInput", HTMLInputElement),
@@ -209,7 +221,12 @@ namespace ReceiptRing.UI {
         categoryPromptSkip: this.getElement("#categoryPromptSkip", HTMLButtonElement),
         categoryPromptSave: this.getElement("#categoryPromptSave", HTMLButtonElement),
         settingsButton: this.getElement("#settingsButton", HTMLButtonElement),
-        settingsModal: this.getElement("#settingsModal", HTMLElement),
+        settingsView: this.getElement("#settingsView", HTMLElement),
+        adminView: this.getElement("#adminView", HTMLElement),
+        closeAdminButton: this.getElement("#closeAdminButton", HTMLButtonElement),
+        openAdminButtons: Array.from(document.querySelectorAll("[data-open-admin]")).filter(
+          (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
+        ),
         geminiApiKey: this.getElement("#geminiApiKey", HTMLInputElement),
         geminiModel: this.getElement("#geminiModel", HTMLSelectElement),
         geminiKeyStatus: this.getElement("#geminiKeyStatus", HTMLElement),
@@ -228,6 +245,25 @@ namespace ReceiptRing.UI {
         authActionButtons: Array.from(document.querySelectorAll("[data-auth-action]")).filter(
           (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
         ),
+        openAppButtons: Array.from(document.querySelectorAll("[data-app-action='open']")).filter(
+          (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
+        ),
+        appBrandLink: this.getElement("#appBrandLink", HTMLAnchorElement),
+        categorizeMonthButton: this.getElement("#categorizeMonthButton", HTMLButtonElement),
+        exportAllDataButtons: Array.from(document.querySelectorAll("[data-export-all]")).filter(
+          (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
+        ),
+        recentReceipts: this.getElement("#recentReceipts", HTMLElement),
+        databaseBackupButton: this.getElement("#databaseBackupButton", HTMLButtonElement),
+        backupIncludeSecrets: this.getElement("#backupIncludeSecrets", HTMLInputElement),
+        historyOverview: this.getElement("#historyOverview", HTMLElement),
+        historySearch: this.getElement("#historySearch", HTMLInputElement),
+        historyNoMatch: this.getElement("#historyNoMatch", HTMLElement),
+        monthGlance: this.getElement("#monthGlance", HTMLElement),
+        tabJumpButtons: Array.from(document.querySelectorAll("[data-tab-jump]")).filter(
+          (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
+        ),
+        categorizeMonthNote: this.getElement("#categorizeMonthNote", HTMLElement),
         authOverlay: this.getElement("#authOverlay", HTMLElement),
         authCloseButton: this.getElement("#authCloseButton", HTMLButtonElement),
         authForm: this.getElement("#authForm", HTMLFormElement),

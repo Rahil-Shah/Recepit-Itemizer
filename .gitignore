@@ -24,3 +24,6 @@ dist/
 
 # Vercel CLI project link
 .vercel
+
+# Coverage reports (npm run coverage)
+coverage/

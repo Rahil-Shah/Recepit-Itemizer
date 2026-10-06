@@ -1,0 +1,23 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run check
+      # Every test, with coverage; fails under 80% of lines (scripts/coverage.mjs).
+      # The route and UI tests bring their own database (PGlite), so no
+      # service container is needed.
+      - run: npm run coverage

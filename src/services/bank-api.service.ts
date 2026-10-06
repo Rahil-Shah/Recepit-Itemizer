@@ -37,6 +37,8 @@ namespace ReceiptRing.Services {
     description: string | null;
     amount: number;
     category: string | null;
+    // See SavedReceiptSummary.budgetCategory.
+    budgetCategory?: string | null;
     isFood: boolean;
     account: string | null;
     // The receipt attached to this transaction, if any. Sent on every list so
@@ -65,6 +67,12 @@ namespace ReceiptRing.Services {
     institutionName: string | null;
     message: string;
     reconnectRequired: boolean;
+  }
+
+  export interface CategorizeResult {
+    updated: number;
+    receipts: Record<string, string>;
+    transactions: Record<string, string>;
   }
 
   export interface SyncResult {
@@ -126,6 +134,25 @@ namespace ReceiptRing.Services {
       const response = await this.request("/api/transactions");
       if (!response.ok) throw new Error(await this.parseError(response));
       return (await response.json()) as BankTransaction[];
+    }
+
+    /**
+     * Ask Gemini to sort one month's receipts and transactions into budget
+     * categories. Answers with the category given to each id.
+     */
+    async categorizeMonth(
+      month: string,
+      receiptIds: readonly string[],
+      transactionIds: readonly string[],
+      model: string
+    ): Promise<CategorizeResult> {
+      const response = await this.request("/api/budget/categorize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, receiptIds, transactionIds, model })
+      });
+      if (!response.ok) throw new Error(await this.parseError(response));
+      return (await response.json()) as CategorizeResult;
     }
 
     async updateTransactionFood(id: string, isFood: boolean): Promise<void> {

@@ -79,6 +79,9 @@ namespace ReceiptRing.Services {
     id: string;
     storeName: string | null;
     category: string;
+    // Where the month's Gemini pass filed this receipt for the budget ring,
+    // when it has been run. Wins over `category` in the ring only.
+    budgetCategory?: string | null;
     subtotal: number | null;
     tax: number | null;
     total: number | null;

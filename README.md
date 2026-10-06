@@ -47,9 +47,12 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 
   PDF and WebP attachments cannot be placed inside either file, so their rows say so. The dialog remembers the format you used last, and **Cancel** stops a file that is still being built. Both formats share one limit of 10 exports per 15 minutes per account, one at a time.
 - **Bank Connection (Plaid)**: Securely link a bank through [Plaid Link](https://plaid.com/docs/link/) to import **read-only** transactions. Access tokens are exchanged server-side and stored AES-256-GCM encrypted at rest — they never reach the browser.
-- **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring.
+- **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring, with a **Month at a glance** panel beside it (change from last month, per-day average, biggest category, top merchant).
+- **Sort a month with AI**: **Sort this month with AI** under the ring sends the month's receipts (with their items) and transactions to Gemini in one request, which files each under a budget category (Groceries, Dining, Transport, Travel, Shopping, Home, Utilities, Health, Subscriptions, …). The result is stored as `budgetCategory` beside the original category, which is never overwritten; changing a receipt's category by hand clears the AI's guess.
+- **Full data export**: **Settings → Your data** (or **History → Overview**) downloads one ZIP with every receipt photo and rent proof, `transactions.csv` (every receipt, bank transaction and rent payment, each naming the photo that belongs to it), `items.csv` (every receipt line) and a README. The ZIP is assembled in the browser from the app's own endpoints, so it is not limited by the size cap on a serverless response.
+- **Even splits, to the cent**: when odd amounts are split evenly — a batch of $0.99 items four ways — the spare cents go to whoever has paid least against their exact share so far, and tax is shared on those exact shares, so nobody ends up more than a cent from even.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
-- **Landing Page**: Visitors without a session land on a page that explains the app, with **Log in** / **Get started** opening the account dialog. Signed-in users go straight to the workspace. Everything the browser loads lives in `public/`: plain HTML + CSS (`styles.css` holds the design tokens and app components, `landing.css` the landing sections) and `app.js`, the TypeScript under `src/` compiled by `npm run build`.
+- **Landing Page**: Visitors without a session land on a page that explains the app, with **Log in** / **Get started** opening the account dialog. Signed-in users go straight to the workspace, and can open the home page again by clicking the Receipt Ring logo (its **Open app** button, or Back, returns). Everything the browser loads lives in `public/`: plain HTML + CSS (`styles.css` holds the design tokens and app components, `landing.css` the landing sections) and `app.js`, the TypeScript under `src/` compiled by `npm run build`.
 
 ---
 
@@ -67,6 +70,9 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 | Imported bank transactions | yes | no |
 | Attach a receipt to a transaction | yes | no |
 | Log rent from a bank transaction | yes | no |
+| Settings: profile, password, sessions, preferences, full data export | yes | yes |
+| Admin tools (usage across every account) | yes | no |
+| Database backup | yes | no |
 
 An account is an admin when its email is listed in `ADMIN_EMAILS`. Nothing in the database marks it,
 so promoting or demoting someone is an environment change and a redeploy.
@@ -76,19 +82,81 @@ controls, rather than a missing panel: the feature exists, it is just not open t
 enforces the same line independently — every Plaid route, the receipt-to-transaction link, and rent
 backed by a transaction all answer 403 for a non-admin, whatever the page shows.
 
+### Settings
+
+**Settings** in the app bar opens a page every account gets:
+
+- **Profile**: the display name.
+- **Sign-in & security**: change the password (needs the current one, and signs every other session
+  out), see where the account is signed in, and sign out everywhere else.
+- **Gemini**: the personal API key (write-only from the browser) and the model.
+- **Preferences**: the tab the app opens on and the category new receipts start in, kept on the device.
+- **Your data**: the full export (every photo plus a CSV of every transaction).
+- **Admin** (admin accounts only): a way into Admin tools, and the database backup.
+- **Delete account**.
+
+### Admin tools
+
+Admin accounts get an **Admin** button in the app bar. The page shows accounts (new, active in the last
+30 days, with their own Gemini key), receipts, items itemized and how many were named, spend recorded,
+photos and the storage they take, bank links, rent and saved item names; twelve months of receipts and
+sign-ups; capacity against `MAX_USERS`; and every account in a searchable, sortable table. Selecting an
+account shows its usage, its receipts by month and its recent receipts' store, date, category and total,
+with a button to sign it out of every device.
+
+What an admin sees is counts and metadata. The admin routes return no password hashes, Gemini keys,
+bank tokens, photos or receipt contents, and every `/api/admin/*` route answers 403 to a non-admin
+whatever the page shows. A test checks the responses for leaked secrets.
+
+### Database backup
+
+**Settings → Admin → Download database backup** saves one ZIP: `manifest.json`, then every table as
+JSON Lines in the order a restore loads them (users, people, item names, receipts with their photos,
+lines, splits, rent, bank connections, accounts and transactions). Sessions and rate-limit counters are
+left out. Credential columns (password hashes, encrypted Gemini keys and Plaid tokens) are left out
+unless you tick **Include credentials** and confirm; with them, a restore keeps sign-ins and bank links
+working, and the encrypted values still need the server's `TOKEN_ENCRYPTION_KEY`. The server hands the
+tables over a page at a time (`GET /api/admin/backup`, then `GET /api/admin/backup/:table?cursor=`), so
+no single response outgrows a serverless limit.
+
+---
+
+## 🔌 Using the API from another app
+
+The browser app is one client of the API; a separate front end or a mobile app can be another.
+
+- **Base path**: every route answers under `/api/v1/...` (and `/api/...`, which this repo's page uses).
+  Use `/api/v1` from anything else, so a breaking change can ship as `/api/v2` without stranding you.
+- **Discovery**: `GET /api/v1/meta` says how to sign in; `GET /api/v1/openapi.json` is an OpenAPI 3.1
+  description of every route. A test fails if a route is added without being documented there.
+- **Sign-in without cookies** (mobile apps, other origins): send `X-Auth-Mode: token` to
+  `POST /api/v1/auth/login` or `/register`. The response carries `token` and `expiresAt` and sets no
+  cookie. Send it as `Authorization: Bearer <token>`; `POST /api/v1/auth/logout` ends it. It is the same
+  kind of session as the cookie, stored only as a hash.
+- **Browsers on another origin**: list the origin in `CORS_ORIGINS` (comma-separated, e.g.
+  `https://app.example.com`). Nothing else is allowed; there is no wildcard.
+
+```bash
+TOKEN=$(curl -s -X POST https://your-app/api/v1/auth/login \
+  -H 'Content-Type: application/json' -H 'X-Auth-Mode: token' \
+  -d '{"email":"you@example.com","password":"..."}' | jq -r .token)
+curl -s https://your-app/api/v1/receipts -H "Authorization: Bearer $TOKEN"
+```
+
 ---
 
 ## 🔍 How item identification works
 
-Receipt shorthand is ambiguous, so identification runs in tiers — cheapest
-first, and each tier only ever sees what the one before it could not place:
+Receipt shorthand is ambiguous, so identification runs in tiers. Names you
+saved come first and are free; every other line goes to Gemini in one batched
+request, so the whole receipt gets a real name:
 
 | Tier | What it is | Cost | Confidence |
 | --- | --- | --- | --- |
 | 1 | **Names you confirmed before**, looked up by item code or label, scoped to the store | free, instant | 100% |
-| 2 | **Local abbreviation dictionary** — `GV`→Great Value, `MLK`→Milk, `8Z`→8 oz | free, instant | up to 90% |
-| 3 | **Gemini**, one batched request for the whole receipt | one API call | self-reported, clamped |
-| 4 | **Unresolved** — the app says it doesn't know rather than guessing | — | — |
+| 2 | **Gemini**, one batched request for every line tier 1 did not cover, with the local abbreviation dictionary's guess (`GV`→Great Value, `MLK`→Milk, `8Z`→8 oz) sent along as a hint | one API call | self-reported, clamped |
+| 3 | **Local abbreviation dictionary** — the fallback when Gemini skips a line twice or has no better answer, and the only tier besides yours when no key is set | free, instant | up to 90% |
+| 4 | **Unresolved** — only when nothing at all could be made of the line | — | — |
 
 A few consequences worth knowing:
 
@@ -100,12 +168,12 @@ A few consequences worth knowing:
   keeps it and the lookup prefers it.
 - **A confidence chip only appears when it should change what you do.** Nothing
   is shown on a name you confirmed, or on one the app is confident about.
-- **Nothing is invented.** A line the tiers cannot place is reported as
-  unidentified, keeping any low-confidence guess as an alternative rather than
-  presenting it as the answer.
+- **Every line gets a name.** A line Gemini skips is asked about once more on
+  its own. A low-confidence guess is still shown, with a "not sure" chip so
+  you know to check it, rather than leaving the row in shorthand.
 - **It costs money per receipt**, so the identify endpoint is rate limited
-  separately from the rest of the API, and the free tiers run first
-  specifically to shrink what reaches the model.
+  separately from the rest of the API. It is one request per receipt however
+  many lines it has.
 
 Identifications are saved with the receipt, so reopening it from **History**
 shows the names without paying for them again.
@@ -311,10 +379,20 @@ things decide whether it is lossless:
 | `npm run db:deploy` | Apply existing migrations (production) |
 | `npm run build` | Generate the Prisma client and compile the TypeScript frontend to `public/app.js` |
 | `npm run check` | Typecheck the frontend without emitting |
-| `npm test` | Build the test bundle and run the unit tests |
+| `npm test` | Build the test bundles and run every test (unit, API routes, and UI) |
+| `npm run coverage` | The same, with coverage of `src/` and `server/`; fails under 80% of lines |
 | `npm run dev` | Run the server with `--watch` for reloads |
 | `npm run start` | Build the frontend and start the server |
 | `npm run vercel-build` | What Vercel runs on deploy: generate the client, `migrate deploy`, compile |
+
+### Tests
+
+`npm test` needs nothing running. The route tests start the real Express app (`createApp` in
+`server/app.mjs`) on PGlite, Postgres compiled to WebAssembly, with every migration applied. The UI
+tests open `public/index.html` and the app compiled from `src/` in jsdom, pointed at that same test
+server. Gemini and Plaid are stubbed. `npm run coverage` reports against the TypeScript and server
+sources, counting files no test loads as zero, and CI (`.github/workflows/test.yml`) runs it on every
+push and pull request.
 
 ---
 

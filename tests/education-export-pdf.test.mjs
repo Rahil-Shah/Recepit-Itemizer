@@ -31,8 +31,14 @@ function streams(buffer) {
 }
 
 // Text in the standard fonts is WinAnsi (cp1252): its dashes and quotes are
-// not where latin1 would put them.
-const winAnsi = new TextDecoder("windows-1252");
+// not where latin1 would put them. Decoded by hand rather than with
+// TextDecoder("windows-1252"), which a Node built without full ICU quietly
+// treats as latin1 -- leaving an em dash as the control character \x97.
+const CP1252_HIGH = "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ";
+const winAnsi = {
+  decode: (bytes) =>
+    Array.from(bytes, (byte) => (byte >= 0x80 && byte <= 0x9f ? CP1252_HIGH[byte - 0x80] : String.fromCharCode(byte))).join("")
+};
 
 /** Each page's text, in page order, one string per page. */
 function pageTexts(buffer) {
