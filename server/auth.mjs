@@ -1,8 +1,12 @@
 // Authentication: registration, login, logout, and a requireAuth middleware.
 //
-// Sessions are opaque random tokens stored as an httpOnly, SameSite=Lax cookie.
-// Only the SHA-256 hash of the token is persisted, so a database leak does not
-// expose usable sessions. Login is rate-limited in memory to blunt brute force.
+// Sessions are opaque random tokens. A browser on this site holds one as an
+// httpOnly, SameSite=Lax cookie. A client that cannot -- a mobile app, or a
+// front end served from another site -- asks for it in the response body by
+// sending `X-Auth-Mode: token` when it signs in, and then presents it as
+// `Authorization: Bearer <token>`. Either way the session is the same row and
+// only the SHA-256 hash of the token is persisted, so a database leak does not
+// expose usable sessions. Login is rate-limited to blunt brute force.
 
 import {
   hashPassword,
@@ -38,6 +42,19 @@ const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 // enforces the same line on every route regardless.
 function publicUser(user) {
   return { id: user.id, email: user.email, name: user.name, isAdmin: isAdmin(user.email) };
+}
+
+/** The session token a request carries: a bearer token, else the cookie. */
+export function sessionTokenOf(req) {
+  const header = String(req.headers?.authorization ?? "");
+  const bearer = /^Bearer\s+([A-Za-z0-9_-]{20,200})$/.exec(header.trim());
+  if (bearer) return bearer[1];
+  return req.cookies?.[SESSION_COOKIE] || null;
+}
+
+/** Whether the client asked for its session token in the response body. */
+export function wantsTokenInBody(req) {
+  return String(req.headers?.["x-auth-mode"] ?? "").toLowerCase() === "token";
 }
 
 export function createAuth(prisma, limitStore = null) {
@@ -85,19 +102,24 @@ export function createAuth(prisma, limitStore = null) {
   async function startSession(req, res, userId) {
     await purgeExpiredSessions();
     const token = generateSessionToken();
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
     await prisma.session.create({
       data: {
         tokenHash: hashToken(token),
         userId,
-        expiresAt: new Date(Date.now() + SESSION_TTL_MS)
+        expiresAt
       }
     });
+    // A token client gets the token in the body and no cookie: it has
+    // nowhere to keep one, and a stray cookie would only confuse it.
+    if (wantsTokenInBody(req)) return { token, expiresAt: expiresAt.toISOString() };
     res.cookie(SESSION_COOKIE, token, cookieOptions(req));
+    return {};
   }
 
   const requireAuth = async (req, res, next) => {
     try {
-      const token = req.cookies?.[SESSION_COOKIE];
+      const token = sessionTokenOf(req);
       if (!token) return res.status(401).json({ error: "Authentication required." });
 
       const session = await prisma.session.findUnique({
@@ -183,8 +205,8 @@ export function createAuth(prisma, limitStore = null) {
         const user = await prisma.user.create({
           data: { email, name, passwordHash: await hashPassword(password) }
         });
-        await startSession(req, res, user.id);
-        res.status(201).json(publicUser(user));
+        const session = await startSession(req, res, user.id);
+        res.status(201).json({ ...publicUser(user), ...session });
       } catch (error) {
         console.error("Registration failed:", error);
         res.status(500).json({ error: "Could not create account." });
@@ -225,8 +247,8 @@ export function createAuth(prisma, limitStore = null) {
           return res.status(401).json({ error: "Invalid email or password." });
         }
         if (limitStore) await limitStore.reset(throttleKey);
-        await startSession(req, res, user.id);
-        res.json(publicUser(user));
+        const session = await startSession(req, res, user.id);
+        res.json({ ...publicUser(user), ...session });
       } catch (error) {
         console.error("Login failed:", error);
         res.status(500).json({ error: "Could not log in." });
@@ -234,7 +256,7 @@ export function createAuth(prisma, limitStore = null) {
     });
 
     app.post("/api/auth/logout", async (req, res) => {
-      const token = req.cookies?.[SESSION_COOKIE];
+      const token = sessionTokenOf(req);
       if (token) {
         await prisma.session.deleteMany({ where: { tokenHash: hashToken(token) } }).catch(() => {});
       }

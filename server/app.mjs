@@ -34,6 +34,8 @@ import { buildSpendingCsv, spendingExportFileName, SPENDING_EXPORT_RATE_LIMIT } 
 import { summariseReceiptFood } from "./food-share.mjs";
 import { registerBudgetCategorize, CATEGORIZE_RATE_LIMIT } from "./budget-categorize.mjs";
 import { maxReceiptsPerUser } from "./access.mjs";
+import { apiVersionAlias, corsMiddleware, registerApiPlatform } from "./api-platform.mjs";
+import { registerAdminBackup, BACKUP_RATE_LIMIT } from "./admin-backup.mjs";
 import { isVercel } from "./deployment.mjs";
 
 
@@ -44,6 +46,12 @@ const __dirname = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
  */
 export function createApp({ prisma }) {
   const app = express();
+
+  // First of all: /api/v1 paths become /api paths, so everything mounted
+  // below applies to both, and an allowed origin's preflight is answered
+  // before any limit or auth check (see server/api-platform.mjs).
+  app.use(apiVersionAlias());
+  app.use(corsMiddleware());
 
   // Behind a reverse proxy, req.ip (used by rate limiting and the login throttle)
   // only reflects the real client when Express is told to trust the proxy. Opt in
@@ -88,7 +96,13 @@ export function createApp({ prisma }) {
   // each serverless instance keeps its own copy and a cold start forgets it --
   // so the routes worth protecting also count in Postgres, shared by every
   // instance (see server/rate-limit-db.mjs).
-  app.use("/api", createRateLimiter({ windowMs: 15 * 60 * 1000, max: 300 }));
+  // An admin backup is one request per page of every table, which a large
+  // database can push past this blanket count; those pages have their own,
+  // higher limit (see server/admin-backup.mjs) and still require an admin.
+  const blanketLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 300 });
+  app.use("/api", (req, res, next) =>
+    req.path.startsWith("/admin/backup/") ? next() : blanketLimiter(req, res, next)
+  );
   const limitStore = createRateLimitStore(prisma);
 
   const authLimiter = createRateLimiter({
@@ -226,6 +240,13 @@ export function createApp({ prisma }) {
   });
 
   auth.register(app);
+  registerApiPlatform(app);
+
+  // Whole-database backup for admins, a page at a time.
+  registerAdminBackup(app, requireAuth, requireAdmin, prisma, [
+    createRateLimiter(BACKUP_RATE_LIMIT),
+    dbRateLimiter(limitStore, { bucket: "backup", ...BACKUP_RATE_LIMIT, keyOf: (req) => req.userId })
+  ]);
 
   // Bank routes are admin-only (see server/access.mjs): the Plaid keys are the
   // operator's, and a regular account has no bank side at all.
