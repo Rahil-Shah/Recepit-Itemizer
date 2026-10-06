@@ -47,9 +47,12 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 
   PDF and WebP attachments cannot be placed inside either file, so their rows say so. The dialog remembers the format you used last, and **Cancel** stops a file that is still being built. Both formats share one limit of 10 exports per 15 minutes per account, one at a time.
 - **Bank Connection (Plaid)**: Securely link a bank through [Plaid Link](https://plaid.com/docs/link/) to import **read-only** transactions. Access tokens are exchanged server-side and stored AES-256-GCM encrypted at rest — they never reach the browser.
-- **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring.
+- **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring, with a **Month at a glance** panel beside it (change from last month, per-day average, biggest category, top merchant).
+- **Sort a month with AI**: **Sort this month with AI** under the ring sends the month's receipts (with their items) and transactions to Gemini in one request, which files each under a budget category (Groceries, Dining, Transport, Travel, Shopping, Home, Utilities, Health, Subscriptions, …). The result is stored as `budgetCategory` beside the original category, which is never overwritten; changing a receipt's category by hand clears the AI's guess.
+- **Full data export**: **Settings → Your data** (or **History → Overview**) downloads one ZIP with every receipt photo and rent proof, `transactions.csv` (every receipt, bank transaction and rent payment, each naming the photo that belongs to it), `items.csv` (every receipt line) and a README. The ZIP is assembled in the browser from the app's own endpoints, so it is not limited by the size cap on a serverless response.
+- **Even splits, to the cent**: when odd amounts are split evenly — a batch of $0.99 items four ways — the spare cents go to whoever has paid least against their exact share so far, and tax is shared on those exact shares, so nobody ends up more than a cent from even.
 - **Device Camera Support**: Snap receipt photos directly from your phone's or laptop's camera.
-- **Landing Page**: Visitors without a session land on a page that explains the app, with **Log in** / **Get started** opening the account dialog. Signed-in users go straight to the workspace. Everything the browser loads lives in `public/`: plain HTML + CSS (`styles.css` holds the design tokens and app components, `landing.css` the landing sections) and `app.js`, the TypeScript under `src/` compiled by `npm run build`.
+- **Landing Page**: Visitors without a session land on a page that explains the app, with **Log in** / **Get started** opening the account dialog. Signed-in users go straight to the workspace, and can open the home page again by clicking the Receipt Ring logo (its **Open app** button, or Back, returns). Everything the browser loads lives in `public/`: plain HTML + CSS (`styles.css` holds the design tokens and app components, `landing.css` the landing sections) and `app.js`, the TypeScript under `src/` compiled by `npm run build`.
 
 ---
 
@@ -80,15 +83,16 @@ backed by a transaction all answer 403 for a non-admin, whatever the page shows.
 
 ## 🔍 How item identification works
 
-Receipt shorthand is ambiguous, so identification runs in tiers — cheapest
-first, and each tier only ever sees what the one before it could not place:
+Receipt shorthand is ambiguous, so identification runs in tiers. Names you
+saved come first and are free; every other line goes to Gemini in one batched
+request, so the whole receipt gets a real name:
 
 | Tier | What it is | Cost | Confidence |
 | --- | --- | --- | --- |
 | 1 | **Names you confirmed before**, looked up by item code or label, scoped to the store | free, instant | 100% |
-| 2 | **Local abbreviation dictionary** — `GV`→Great Value, `MLK`→Milk, `8Z`→8 oz | free, instant | up to 90% |
-| 3 | **Gemini**, one batched request for the whole receipt | one API call | self-reported, clamped |
-| 4 | **Unresolved** — the app says it doesn't know rather than guessing | — | — |
+| 2 | **Gemini**, one batched request for every line tier 1 did not cover, with the local abbreviation dictionary's guess (`GV`→Great Value, `MLK`→Milk, `8Z`→8 oz) sent along as a hint | one API call | self-reported, clamped |
+| 3 | **Local abbreviation dictionary** — the fallback when Gemini skips a line twice or has no better answer, and the only tier besides yours when no key is set | free, instant | up to 90% |
+| 4 | **Unresolved** — only when nothing at all could be made of the line | — | — |
 
 A few consequences worth knowing:
 
@@ -100,12 +104,12 @@ A few consequences worth knowing:
   keeps it and the lookup prefers it.
 - **A confidence chip only appears when it should change what you do.** Nothing
   is shown on a name you confirmed, or on one the app is confident about.
-- **Nothing is invented.** A line the tiers cannot place is reported as
-  unidentified, keeping any low-confidence guess as an alternative rather than
-  presenting it as the answer.
+- **Every line gets a name.** A line Gemini skips is asked about once more on
+  its own. A low-confidence guess is still shown, with a "not sure" chip so
+  you know to check it, rather than leaving the row in shorthand.
 - **It costs money per receipt**, so the identify endpoint is rate limited
-  separately from the rest of the API, and the free tiers run first
-  specifically to shrink what reaches the model.
+  separately from the rest of the API. It is one request per receipt however
+  many lines it has.
 
 Identifications are saved with the receipt, so reopening it from **History**
 shows the names without paying for them again.
