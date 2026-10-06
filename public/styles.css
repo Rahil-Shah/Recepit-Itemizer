@@ -818,6 +818,34 @@ input[type="date"].table-input {
   animation: loading-leave 200ms var(--ease) both;
 }
 
+/* The whole screen, for a wait that fills a tab (the budgeting view). It sits
+   under the app bar so the tabs stay usable, blurs everything behind it, and
+   holds the loader on a card in the middle of the viewport wherever the page
+   is scrolled to. Shown only while its tab is the one open. */
+.loading-overlay.is-screen {
+  position: fixed;
+  z-index: 25;
+  padding: calc(var(--nav-height) + var(--nav-gap) * 2) 16px 16px;
+  border-radius: 0;
+  background: rgba(253, 252, 248, 0.38);
+  -webkit-backdrop-filter: blur(5px) saturate(0.94);
+  backdrop-filter: blur(5px) saturate(0.94);
+}
+
+.loading-overlay.is-screen .loader {
+  min-width: 240px;
+  padding: 30px 40px 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: rgba(254, 254, 250, 0.94);
+  box-shadow: var(--shadow-lift);
+}
+
+body:not([data-auth="user"]) .loading-overlay.is-screen,
+body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
+  display: none;
+}
+
 @keyframes loader-turn {
   to {
     transform: rotate(360deg);
@@ -1270,25 +1298,11 @@ input[type="date"].table-input {
   display: none !important;
 }
 
-/* The message, with the loader turning beside it while the job runs. */
+/* What the job came to. The wait itself is the loader laid over the panel. */
 .status-line {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.ocr-status:not(.is-running) .status-line > .loader,
-.identify-status:not(.is-running) .status-line > .loader {
-  display: none;
-}
-
-/* In the moss status block the ring takes the block's own moss. */
-.status-line .loader-track {
-  stroke: rgba(93, 112, 82, 0.2);
-}
-
-.status-line .loader-arc {
-  stroke: var(--moss);
 }
 
 /* The retry sits inside the status block, beside the message that explains why
@@ -1299,25 +1313,6 @@ input[type="date"].table-input {
 
 .ocr-retry.hidden {
   display: none !important;
-}
-
-.ocr-progress,
-.identify-progress {
-  display: block;
-  overflow: hidden;
-  height: 5px;
-  border-radius: var(--radius-pill);
-  background: rgba(93, 112, 82, 0.16);
-}
-
-.ocr-progress span,
-.identify-progress span {
-  display: block;
-  width: 0%;
-  height: 100%;
-  border-radius: var(--radius-pill);
-  background: var(--moss);
-  transition: width 260ms var(--ease);
 }
 
 /* --- Toolbar above the table --- */

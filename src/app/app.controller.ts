@@ -129,6 +129,9 @@ namespace ReceiptRing.App {
       // The stylesheet hides admin-only surfaces (the bank panel) for a
       // regular account. The server refuses the same routes either way.
       document.body.dataset.access = user.isAdmin ? "admin" : "regular";
+      // Which tab is showing, so a full-screen loader that belongs to one tab
+      // (see UI.OverlayOptions.screen) hides while another is open.
+      document.body.dataset.tab = "receipts";
       this.bindEvents();
       this.render();
       void this.initGeminiSettings();
@@ -280,6 +283,7 @@ namespace ReceiptRing.App {
     }
 
     private switchTab(tab: TabName): void {
+      document.body.dataset.tab = tab;
       this.elements.tabButtons.forEach((button) => {
         button.classList.toggle("is-active", button.dataset.tab === tab);
       });
@@ -621,6 +625,11 @@ namespace ReceiptRing.App {
 
       this.isIdentifying = true;
       this.elements.identifyItemsButton.setAttribute("disabled", "true");
+      this.hideIdentifyStatus();
+      // The same receipt-ring loader as every other wait, laid over the lines
+      // being named; the stage it is on is written under it.
+      const linesPanel = this.panelBody(this.elements.receiptLinesList);
+      const done = this.loading.show(linesPanel, "Identifying items…", "Checking what you've named before…");
 
       try {
         const resolved = await this.itemIdentityService.identify(
@@ -628,7 +637,13 @@ namespace ReceiptRing.App {
           this.identifications,
           {
             storeName: this.elements.storeNameInput.value.trim(),
-            onProgress: (progress) => this.setIdentifyStatus(progress)
+            onProgress: (progress) => {
+              if (progress.stage !== "complete") {
+                this.loading.relabel(linesPanel, "Identifying items…", progress.message.replace(/\.\.\.$/, "…"));
+              } else {
+                this.setIdentifyMessage(progress.message);
+              }
+            }
           }
         );
 
@@ -650,9 +665,10 @@ namespace ReceiptRing.App {
         console.error("Item identification failed:", error);
         const message =
           error instanceof Error ? error.message : "Could not identify these items.";
-        this.setIdentifyMessage(message, 1);
+        this.setIdentifyMessage(message);
         this.notificationService.error(message);
       } finally {
+        done();
         this.isIdentifying = false;
         this.elements.identifyItemsButton.removeAttribute("disabled");
       }
@@ -734,30 +750,15 @@ namespace ReceiptRing.App {
       if (details) details.open = false;
     }
 
-    private setIdentifyStatus(progress: Services.IdentifyProgress): void {
-      // The free tiers land before the first paint, so the bar would jump from
-      // nothing to nearly full and sit there. Give the stages a floor so the
-      // movement the user sees tracks the wait they are actually having.
-      const stageFloor: Record<Services.IdentifyProgress["stage"], number> = {
-        aliases: 0.08,
-        dictionary: 0.2,
-        ai: 0.45,
-        complete: 1
-      };
-      this.setIdentifyMessage(progress.message, stageFloor[progress.stage]);
-    }
-
-    private setIdentifyMessage(message: string, ratio: number): void {
+    // Where a finished identification says how it went. The wait itself is
+    // shown by the loader over the lines, so this carries no spinner.
+    private setIdentifyMessage(message: string): void {
       this.elements.identifyStatus.classList.remove("hidden");
-      this.elements.identifyStatus.classList.toggle("is-running", ratio < 1);
       this.elements.identifyStatusText.textContent = message;
-      this.elements.identifyProgressBar.style.width = `${Math.round(Math.min(1, Math.max(0, ratio)) * 100)}%`;
     }
 
     private hideIdentifyStatus(): void {
       this.elements.identifyStatus.classList.add("hidden");
-      this.elements.identifyStatus.classList.remove("is-running");
-      this.elements.identifyProgressBar.style.width = "0%";
     }
 
     private getSelectedLines(includeIgnored = false): Domain.ReceiptLine[] {
@@ -805,15 +806,22 @@ namespace ReceiptRing.App {
       // Parsing always runs through the server proxy, which uses the user's own
       // saved key or the shared server key. Only block when neither exists.
       if (!this.userHasGeminiKey && !this.serverHasGeminiKey) {
-        this.setOcrStatus("Please add your Gemini API key in Settings first.", 1);
+        this.setOcrStatus("Please add your Gemini API key in Settings first.");
         this.openSettings();
         return;
       }
 
       if (this.isParsing) return;
       this.isParsing = true;
-      this.setOcrStatus("Analyzing receipt with Gemini...", 0.15);
+      this.hideOcrStatus();
       this.elements.parseButton.setAttribute("disabled", "true");
+      // One loader for the whole read: the receipt ring over the lines it is
+      // about to fill, rather than a spinner and a progress bar side by side.
+      const done = this.loading.show(
+        this.panelBody(this.elements.receiptLinesList),
+        "Reading your receipt…",
+        "Gemini is pulling out every item and price."
+      );
 
       try {
         // Shrunk before upload: a phone's original is routinely 5-10 MB, and
@@ -828,7 +836,7 @@ namespace ReceiptRing.App {
 
         this.failedParseFile = null;
         this.resetRetryBackoff();
-        this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`, 1);
+        this.setOcrStatus(`Found ${this.receiptLines.length} lines via Gemini`);
         window.setTimeout(() => this.hideOcrStatus(), 1600);
       } catch (error) {
         console.error("Gemini receipt parsing failed:", error);
@@ -847,10 +855,10 @@ namespace ReceiptRing.App {
           this.beginRetryBackoff();
         }
         this.setOcrStatus(
-          exhausted ? `${message} Try a clearer photo, or come back in a few minutes.` : this.withRetryHint(message, this.failedParseFile !== null),
-          1
+          exhausted ? `${message} Try a clearer photo, or come back in a few minutes.` : this.withRetryHint(message, this.failedParseFile !== null)
         );
       } finally {
+        done();
         this.isParsing = false;
         this.elements.parseButton.removeAttribute("disabled");
         this.renderRetryButton();
@@ -957,7 +965,7 @@ namespace ReceiptRing.App {
 
       this.applyParsedReceiptJson(parsed);
       this.closePasteJsonModal();
-      this.setOcrStatus(`Found ${this.receiptLines.length} lines from pasted JSON`, 1);
+      this.setOcrStatus(`Found ${this.receiptLines.length} lines from pasted JSON`);
       window.setTimeout(() => this.hideOcrStatus(), 1600);
     }
 
@@ -1097,22 +1105,17 @@ namespace ReceiptRing.App {
         .join(" ");
     }
 
-    private setOcrStatus(label: string, progress: number): void {
+    private setOcrStatus(label: string): void {
       this.elements.ocrStatus.classList.remove("hidden");
-      // Anything short of done is still running, so the loader turns beside it.
-      this.elements.ocrStatus.classList.toggle("is-running", progress < 1);
       // textContent, never innerHTML. This string can carry an error message
       // that originated at Gemini and was passed through the server, so it is
       // upstream text on a page -- it gets rendered, never parsed.
       this.elements.ocrStatusText.textContent = label;
-      this.elements.ocrProgressBar.style.width = `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
       this.renderRetryButton();
     }
 
     private hideOcrStatus(): void {
       this.elements.ocrStatus.classList.add("hidden");
-      this.elements.ocrStatus.classList.remove("is-running");
-      this.elements.ocrProgressBar.style.width = "0%";
       this.renderRetryButton();
     }
 
@@ -1213,7 +1216,7 @@ namespace ReceiptRing.App {
 
     private async openCamera(): Promise<void> {
       if (!navigator.mediaDevices?.getUserMedia) {
-        this.setOcrStatus("Camera is not available here. Opening file upload instead.", 1);
+        this.setOcrStatus("Camera is not available here. Opening file upload instead.");
         this.elements.receiptImage.click();
         return;
       }
@@ -1231,7 +1234,7 @@ namespace ReceiptRing.App {
         this.elements.cameraModal.classList.remove("hidden");
       } catch (error) {
         const message = error instanceof Error ? error.message : "Camera permission was denied.";
-        this.setOcrStatus(`Camera unavailable: ${message}. Opening file upload instead.`, 1);
+        this.setOcrStatus(`Camera unavailable: ${message}. Opening file upload instead.`);
         this.elements.receiptImage.click();
       }
     }
@@ -1271,7 +1274,6 @@ namespace ReceiptRing.App {
       this.failedParseFile = null;
       this.resetRetryBackoff();
       this.imagePreviewService.show(file, this.elements.receiptPreview, this.elements.receiptPreviewWrap);
-      this.setOcrStatus(`Loaded ${file.name || "receipt image"}`, 0.02);
       // Start shrinking the photo now so it is ready by the time the parse
       // finishes and the receipt can be saved with it.
       this.receiptImage = this.receiptImageService.toStorableDataUrl(file);
@@ -1761,28 +1763,22 @@ namespace ReceiptRing.App {
     }
 
     private async loadBudgeting(options: { sync?: boolean } = {}): Promise<void> {
-      // Every panel is covered while its figures are fetched and added up.
-      // The education panel's own fetch (renderEducationExpenses) holds its
-      // loader a little longer, until its lists are in.
-      const spending = "Adding up your spending…";
-      const releases = [
-        this.loading.show(this.panelBody(this.elements.monthlyTrend), spending),
-        this.loading.show(this.panelBody(this.elements.budgetRing), spending),
-        this.loading.show(this.panelBody(this.elements.foodItemsList), "Totalling education expenses…")
-      ];
-      if (this.isAdmin) {
-        releases.push(
-          this.loading.show(
-            this.panelBody(this.elements.transactionsList),
-            options.sync === false ? "Loading transactions…" : "Checking your bank for new transactions…"
-          )
-        );
-      }
+      // One loader for the whole view, over a blurred screen, rather than a
+      // spinner in every panel. The education panel's own fetches join it
+      // (see showBudgetingLoader) and hold it until their lists are in.
+      const done = this.showBudgetingLoader(
+        "Adding up your spending…",
+        this.isAdmin && options.sync !== false ? "Checking your bank for new transactions." : undefined
+      );
       try {
         await this.fetchAndRenderBudgeting(options);
       } finally {
-        releases.forEach((release) => release());
+        done();
       }
+    }
+
+    private showBudgetingLoader(label: string, hint?: string): () => void {
+      return this.loading.show(this.elements.budgetingView, label, hint, { screen: "budgeting" });
     }
 
     private async fetchAndRenderBudgeting(options: { sync?: boolean }): Promise<void> {
@@ -2485,7 +2481,7 @@ namespace ReceiptRing.App {
     private renderRentEntries(): void {
       void (async () => {
         // The rent list lives in the education panel, under the same loader.
-        const done = this.loading.show(this.panelBody(this.elements.rentEntriesList), "Totalling education expenses…");
+        const done = this.showBudgetingLoader("Totalling education expenses…");
         try {
           // No month in focus (fresh account) still shows the current month's
           // rent, mirroring renderEducationExpenses' fallback.
@@ -3039,7 +3035,7 @@ namespace ReceiptRing.App {
     }
 
     private async renderEducationExpenses(): Promise<void> {
-      const done = this.loading.show(this.panelBody(this.elements.foodItemsList), "Totalling education expenses…");
+      const done = this.showBudgetingLoader("Totalling education expenses…");
       try {
         const month = this.selectedMonth ?? (this.spendingAggregatorService.monthKey(new Date().toISOString()) ?? undefined);
         const foodSummary = await this.receiptApiService.getFoodSummary(month);

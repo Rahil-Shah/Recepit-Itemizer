@@ -8,7 +8,6 @@ namespace ReceiptRing.UI {
     clearImageButton: HTMLButtonElement;
     ocrStatus: HTMLElement;
     ocrStatusText: HTMLElement;
-    ocrProgressBar: HTMLElement;
     retryParseButton: HTMLButtonElement;
     receiptText: HTMLTextAreaElement;
     openCameraButton: HTMLButtonElement;
@@ -28,7 +27,6 @@ namespace ReceiptRing.UI {
     identifyItemsButton: HTMLButtonElement;
     identifyStatus: HTMLElement;
     identifyStatusText: HTMLElement;
-    identifyProgressBar: HTMLElement;
     emptyState: HTMLElement;
     unassignedCount: HTMLElement;
     storeNameInput: HTMLInputElement;
@@ -155,7 +153,6 @@ namespace ReceiptRing.UI {
         clearImageButton: this.getElement("#clearImageButton", HTMLButtonElement),
         ocrStatus: this.getElement("#ocrStatus", HTMLElement),
         ocrStatusText: this.getElement("#ocrStatusText", HTMLElement),
-        ocrProgressBar: this.getElement("#ocrProgressBar", HTMLElement),
         retryParseButton: this.getElement("#retryParseButton", HTMLButtonElement),
         receiptText: this.getElement("#receiptText", HTMLTextAreaElement),
         openCameraButton: this.getElement("#openCameraButton", HTMLButtonElement),
@@ -175,7 +172,6 @@ namespace ReceiptRing.UI {
         identifyItemsButton: this.getElement("#identifyItemsButton", HTMLButtonElement),
         identifyStatus: this.getElement("#identifyStatus", HTMLElement),
         identifyStatusText: this.getElement("#identifyStatusText", HTMLElement),
-        identifyProgressBar: this.getElement("#identifyProgressBar", HTMLElement),
         emptyState: this.getElement("#emptyState", HTMLElement),
         unassignedCount: this.getElement("#unassignedCount", HTMLElement),
         storeNameInput: this.getElement("#storeNameInput", HTMLInputElement),

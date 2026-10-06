@@ -36,8 +36,7 @@ namespace ReceiptRing {
     new Services.ItemIdentityApiService()
   );
   const elements = new UI.DomRegistryFactory().create();
-  // The spinners written into the page's own markup, such as the one beside
-  // a receipt scan's status, get their drawing here.
+  // Any loader written into the page's own markup gets its drawing here.
   UI.mountLoaders(document);
   const categoryPromptView = new UI.CategoryPromptView(categories, elements);
   const splitWorkspaceView = new UI.SplitWorkspaceView(currencyFormatService, receiptApiService);
