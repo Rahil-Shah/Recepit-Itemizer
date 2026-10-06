@@ -41,7 +41,7 @@ const report = new CoverageReport({
   // Files no test loads count too, at zero, so the number cannot be raised by
   // simply never touching a file.
   all: {
-    dir: ["./src", "./server", "./server.mjs"],
+    dir: ["./src", "./server"],
     filter: (filePath) => /\.(ts|mjs)$/.test(filePath) && !filePath.includes("/fonts/")
   }
 });

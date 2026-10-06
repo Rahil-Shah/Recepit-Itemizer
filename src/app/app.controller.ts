@@ -1873,25 +1873,33 @@ namespace ReceiptRing.App {
         }
       }
 
+      // Fetched into locals and swapped in together. Clearing the fields first
+      // left them empty for as long as the requests took, so anything acting
+      // on the view meanwhile -- sorting the month, linking a receipt -- saw a
+      // month with no bank transactions in it.
+      let receipts: Services.SavedReceiptSummary[] = [];
+      let bankTransactions: Services.BankTransaction[] = [];
+      let bankConnections: Services.BankConnection[] = [];
       try {
-        this.receipts = await this.receiptApiService.list();
+        receipts = await this.receiptApiService.list();
       } catch {
-        this.receipts = [];
+        receipts = [];
       }
-      this.bankTransactions = [];
-      this.bankConnections = [];
       if (this.isAdmin) {
         try {
-          this.bankTransactions = await this.bankApiService.listTransactions();
+          bankTransactions = await this.bankApiService.listTransactions();
         } catch {
-          this.bankTransactions = [];
+          bankTransactions = [];
         }
         try {
-          this.bankConnections = await this.bankApiService.listConnections();
+          bankConnections = await this.bankApiService.listConnections();
         } catch {
-          this.bankConnections = [];
+          bankConnections = [];
         }
       }
+      this.receipts = receipts;
+      this.bankTransactions = bankTransactions;
+      this.bankConnections = bankConnections;
       this.monthlySpend = this.spendingAggregatorService.aggregate(
         this.receipts,
         this.bankTransactions,
