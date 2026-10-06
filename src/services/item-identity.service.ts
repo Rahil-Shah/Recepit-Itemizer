@@ -5,6 +5,9 @@ namespace ReceiptRing.Services {
     label: string;
     itemCode?: string;
     amount: number;
+    // What the local dictionary made of the label, when it made anything.
+    // A head start for the model, never an answer it has to keep.
+    hint?: string;
   }
 
   /**
@@ -122,35 +125,27 @@ namespace ReceiptRing.Services {
         message: "Expanding receipt shorthand..."
       });
 
-      // A line carrying an item code is skipped past the dictionary when there
-      // is an AI tier to send it to.
+      // With a model to ask, every line the saved names could not place goes
+      // to it, in the one batched request a receipt costs anyway.
       //
-      // The dictionary reads the abbreviation; the code identifies the product
-      // outright. Letting a name-based guess settle a line that had an exact
-      // identifier printed on it was the wrong answer arriving first and
-      // stopping the right one -- "GV SHRD MOZZ 8Z" expanded confidently
-      // enough to score 0.9 and never reach the lookup that would have named
-      // the actual product.
-      //
-      // The expansion is kept rather than thrown away: if the model comes back
-      // with nothing for that line, a decoded name still beats no name.
+      // The dictionary used to settle lines on its own first, which left
+      // receipts half named: a label it "read as printed" came back as the
+      // same words (and so showed nothing new), a partial expansion like
+      // "Kirkland Sig Chicken Brst" stood in for the product, and only the
+      // leftovers ever reached the model. Its expansion now rides along as a
+      // hint, and is kept as the fallback when the model has nothing better.
       const dictionaryFallbacks = new Map<string, Domain.ItemIdentification>();
-      const unresolvedByDictionary: Domain.ReceiptLine[] = [];
-
       unresolvedByAlias.forEach((line) => {
         const expansion = this.dictionaryResolverService.resolve(line);
-        const prefersCodeLookup = Boolean(line.itemCode) && this.aiIdentifier !== null;
-
-        if (expansion && !prefersCodeLookup) {
-          resolved.set(line.id, expansion);
-          return;
-        }
         if (expansion) dictionaryFallbacks.set(line.id, expansion);
-        unresolvedByDictionary.push(line);
       });
 
-      if (unresolvedByDictionary.length > 0 && this.aiIdentifier) {
-        const count = unresolvedByDictionary.length;
+      if (!this.aiIdentifier) {
+        unresolvedByAlias.forEach((line) => {
+          resolved.set(line.id, dictionaryFallbacks.get(line.id) ?? this.unresolved(line, null));
+        });
+      } else if (unresolvedByAlias.length > 0) {
+        const count = unresolvedByAlias.length;
         report({
           stage: "ai",
           done: resolved.size,
@@ -158,34 +153,9 @@ namespace ReceiptRing.Services {
           message: `Looking up ${count} ${count === 1 ? "item" : "items"}...`
         });
 
-        const answers = await this.aiIdentifier.identify(
-          unresolvedByDictionary.map((line) => this.toRequest(line)),
-          storeName
-        );
-        // The model is asked about specific lines and answers about whichever
-        // it likes. Index the reply and take only what was asked for, so a
-        // hallucinated line id cannot introduce a row that is not on the
-        // receipt.
-        const byLineId = new Map(answers.map((answer) => [answer.lineId, answer]));
-        unresolvedByDictionary.forEach((line) => {
-          const answer = byLineId.get(line.id);
-          if (answer && answer.confidence >= MIN_REPORTABLE_CONFIDENCE) {
-            resolved.set(line.id, answer);
-            return;
-          }
-          // The model had nothing, or nothing it believed. A dictionary
-          // expansion set aside earlier is better than admitting defeat, so
-          // take it back rather than reporting the line unread.
-          const fallback = dictionaryFallbacks.get(line.id);
-          if (fallback) {
-            resolved.set(line.id, fallback);
-            return;
-          }
-          resolved.set(line.id, this.unresolved(line, answer ?? null));
-        });
-      } else {
-        unresolvedByDictionary.forEach((line) => {
-          resolved.set(line.id, this.unresolved(line, null));
+        const answers = await this.askModel(unresolvedByAlias, dictionaryFallbacks, storeName);
+        unresolvedByAlias.forEach((line) => {
+          resolved.set(line.id, this.pickAnswer(line, answers.get(line.id), dictionaryFallbacks.get(line.id)));
         });
       }
 
@@ -202,6 +172,71 @@ namespace ReceiptRing.Services {
       });
 
       return resolved;
+    }
+
+    /**
+     * The model's answers, keyed by line id.
+     *
+     * The model is asked about specific lines and answers about whichever it
+     * likes, so the reply is indexed and only what was asked for is kept -- a
+     * hallucinated line id cannot introduce a row that is not on the receipt.
+     * Models also skip lines in a long batch now and then; those are asked
+     * about once more on their own, so one dropped row does not leave an item
+     * unnamed.
+     */
+    private async askModel(
+      lines: readonly Domain.ReceiptLine[],
+      hints: ReadonlyMap<string, Domain.ItemIdentification>,
+      storeName: string
+    ): Promise<Map<string, Domain.ItemIdentification>> {
+      const ai = this.aiIdentifier;
+      const byLineId = new Map<string, Domain.ItemIdentification>();
+      if (!ai) return byLineId;
+
+      const wanted = new Set(lines.map((line) => line.id));
+      const take = (answers: readonly Domain.ItemIdentification[]): void => {
+        answers.forEach((answer) => {
+          if (wanted.has(answer.lineId) && answer.resolvedName && !byLineId.has(answer.lineId)) {
+            byLineId.set(answer.lineId, answer);
+          }
+        });
+      };
+
+      take(await ai.identify(lines.map((line) => this.toRequest(line, hints.get(line.id))), storeName));
+
+      const skipped = lines.filter((line) => !byLineId.has(line.id));
+      if (skipped.length > 0) {
+        try {
+          take(await ai.identify(skipped.map((line) => this.toRequest(line, hints.get(line.id))), storeName));
+        } catch {
+          // The first pass already landed; the second is a bonus, and failing
+          // it must not throw away everything the first one named.
+        }
+      }
+      return byLineId;
+    }
+
+    /**
+     * The better of what the model said and what the dictionary made of the
+     * label. A model answer below the reporting bar loses to a dictionary
+     * expansion when there is one; without one it is still shown -- as a
+     * flagged guess, with its low confidence on the chip -- because a named
+     * row the user is told to check beats a row left in shorthand.
+     */
+    private pickAnswer(
+      line: Domain.ReceiptLine,
+      answer: Domain.ItemIdentification | undefined,
+      fallback: Domain.ItemIdentification | undefined
+    ): Domain.ItemIdentification {
+      if (answer && answer.confidence >= MIN_REPORTABLE_CONFIDENCE) return answer;
+      if (fallback && (!answer || fallback.confidence >= answer.confidence)) return fallback;
+      if (answer) {
+        return {
+          ...answer,
+          reasoning: answer.reasoning ?? "A low-confidence guess -- worth checking by hand."
+        };
+      }
+      return this.unresolved(line, null);
     }
 
     /**
@@ -246,12 +281,13 @@ namespace ReceiptRing.Services {
       return `Identified ${done} of ${total} items.`;
     }
 
-    private toRequest(line: Domain.ReceiptLine): AiIdentifyRequest {
+    private toRequest(line: Domain.ReceiptLine, hint?: Domain.ItemIdentification): AiIdentifyRequest {
       return {
         lineId: line.id,
         label: line.label,
         ...(line.itemCode ? { itemCode: line.itemCode } : {}),
-        amount: line.amount
+        amount: line.amount,
+        ...(hint && hint.resolvedName !== line.label ? { hint: hint.resolvedName } : {})
       };
     }
   }

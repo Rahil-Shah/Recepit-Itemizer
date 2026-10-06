@@ -53,7 +53,8 @@ namespace ReceiptRing.Services {
             id: request.lineId,
             label: request.label,
             ...(request.itemCode ? { itemCode: request.itemCode } : {}),
-            amount: request.amount
+            amount: request.amount,
+            ...(request.hint ? { hint: request.hint } : {})
           }))
         })
       });

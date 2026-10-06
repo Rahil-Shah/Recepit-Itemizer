@@ -17,9 +17,20 @@ test("accepts a well-formed batch and trims it", () => {
   assert.deepEqual(result.items[0], {
     id: "l1",
     label: "GV SHRD MOZZ 8Z",
+    hint: null,
     itemCode: "007874203922",
     amount: 3.24
   });
+});
+
+test("carries the dictionary's guess into the prompt as a hint", () => {
+  const request = validateIdentifyRequest({
+    items: [{ id: "l1", label: "GV SHRD MOZZ 8Z", amount: 3, hint: "  Great Value\nShredded Mozzarella " }]
+  });
+  assert.equal(request.items[0].hint, "Great Value Shredded Mozzarella");
+
+  const prompt = buildIdentifyPrompt(request.items, "Walmart");
+  assert.match(prompt, /"dictionaryGuess": "Great Value Shredded Mozzarella"/);
 });
 
 test("rejects a body with no items", () => {

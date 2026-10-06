@@ -15,7 +15,7 @@ function recordingAi(answers = []) {
   return {
     calls,
     identify(requests, storeName) {
-      calls.push({ requests: requests.map((r) => r.lineId), storeName });
+      calls.push({ requests: requests.map((r) => r.lineId), hints: requests.map((r) => r.hint), storeName });
       return Promise.resolve(answers);
     }
   };
@@ -29,15 +29,59 @@ function makeService(ai = null) {
   return { service, aliases, dictionary };
 }
 
-test("expands what the dictionary knows without asking the model", async () => {
-  const ai = recordingAi();
+test("asks the model about every line, with the dictionary's expansion as a hint", async () => {
+  const ai = recordingAi([
+    {
+      lineId: "l1",
+      rawLabel: "GV SHRD MOZZ 8Z",
+      resolvedName: "Great Value Finely Shredded Mozzarella Cheese",
+      confidence: 0.8,
+      source: "ai",
+      alternatives: [],
+      confirmed: false
+    }
+  ]);
   const { service } = makeService(ai);
 
   const result = await service.identify([line("l1", "GV SHRD MOZZ 8Z")], new Map());
 
+  assert.equal(ai.calls.length, 1);
+  assert.deepEqual(Array.from(ai.calls[0].hints), ["Great Value Shredded Mozzarella"]);
+  assert.equal(result.get("l1").source, "ai");
+});
+
+test("falls back to the dictionary when the model skips a line twice", async () => {
+  const ai = recordingAi([]);
+  const { service } = makeService(ai);
+
+  const result = await service.identify([line("l1", "GV SHRD MOZZ 8Z")], new Map());
+
+  // Asked once, then once more for the line it skipped.
+  assert.equal(ai.calls.length, 2);
   assert.equal(result.get("l1").resolvedName, "Great Value Shredded Mozzarella");
   assert.equal(result.get("l1").source, "dictionary");
-  assert.equal(ai.calls.length, 0, "the model should not have been consulted");
+});
+
+test("asks again about lines the model skipped", async () => {
+  const answer = (lineId, name) => ({
+    lineId, rawLabel: lineId, resolvedName: name, confidence: 0.8, source: "ai", alternatives: [], confirmed: false
+  });
+  const calls = [];
+  const ai = {
+    identify(requests) {
+      calls.push(requests.map((r) => r.lineId));
+      return Promise.resolve(
+        calls.length === 1 ? [answer("l1", "First Thing")] : requests.map((r) => answer(r.lineId, "Second Thing"))
+      );
+    }
+  };
+  const { service } = makeService(ai);
+
+  const result = await service.identify([line("l1", "QQZ"), line("l2", "XZ9")], new Map());
+
+  assert.deepEqual(calls.map((c) => Array.from(c)), [["l1", "l2"], ["l2"]]);
+  assert.equal(result.get("l1").resolvedName, "First Thing");
+  assert.equal(result.get("l2").resolvedName, "Second Thing");
 });
 
 test("a saved alias beats the dictionary", async () => {
@@ -63,7 +107,7 @@ test("a saved alias beats the dictionary", async () => {
   assert.equal(result.get("l1").resolvedName, "Great Value Low-Moisture Mozzarella");
 });
 
-test("only sends the model what the free tiers could not place", async () => {
+test("only sends the model what the saved names could not place", async () => {
   const ai = recordingAi([
     {
       lineId: "l2",
@@ -75,7 +119,19 @@ test("only sends the model what the free tiers could not place", async () => {
       confirmed: false
     }
   ]);
-  const { service } = makeService(ai);
+  const { service, aliases } = makeService(ai);
+  aliases.remember(
+    {
+      lineId: "x",
+      rawLabel: "GV SHRD MOZZ 8Z",
+      resolvedName: "My Cheese",
+      confidence: 1,
+      source: "user-confirmed",
+      alternatives: [],
+      confirmed: true
+    },
+    ""
+  );
 
   const result = await service.identify(
     [line("l1", "GV SHRD MOZZ 8Z"), line("l2", "QQZ XZ9")],
@@ -83,6 +139,7 @@ test("only sends the model what the free tiers could not place", async () => {
   );
 
   assert.deepEqual(Array.from(ai.calls[0].requests), ["l2"]);
+  assert.equal(result.get("l1").resolvedName, "My Cheese");
   assert.equal(result.get("l2").resolvedName, "Mystery Item");
 });
 
@@ -202,7 +259,7 @@ test("does not announce an AI stage when there is nothing left to ask about", as
   const { service } = makeService(recordingAi());
   const stages = [];
 
-  await service.identify([line("l1", "GV SHRD MOZZ 8Z")], new Map(), {
+  await service.identify([line("l1", "GV SHRD MOZZ 8Z", { ignored: true })], new Map(), {
     onProgress: (progress) => stages.push(progress.stage)
   });
 
@@ -287,7 +344,7 @@ test("an unresolved line does not count as identified", async () => {
   assert.equal(last.message, "Identified 1 of 2 items.");
 });
 
-test("rejects an answer the model did not believe, keeping it as an alternative", async () => {
+test("keeps a low-confidence guess as the name rather than leaving the row unread", async () => {
   const ai = recordingAi([
     {
       lineId: "l1",
@@ -303,9 +360,10 @@ test("rejects an answer the model did not believe, keeping it as an alternative"
 
   const answer = (await service.identify([line("l1", "QQZ XZ9")], new Map())).get("l1");
 
-  assert.equal(answer.source, "unresolved");
-  assert.equal(answer.resolvedName, "QQZ XZ9");
-  assert.equal(answer.alternatives[0].name, "Possibly A Sponge");
+  assert.equal(answer.source, "ai");
+  assert.equal(answer.resolvedName, "Possibly A Sponge");
+  // The low score travels with it, so the row is flagged for checking.
+  assert.equal(answer.confidence, 0.2);
 });
 
 test("keeps an answer the model did believe", async () => {
@@ -354,13 +412,11 @@ test("a line with an item code goes to the code lookup, not the dictionary", asy
   assert.equal(result.get("l1").resolvedName, "Great Value Finely Shredded Mozzarella Cheese");
 });
 
-test("a line with no item code still stops at the dictionary", async () => {
-  const ai = recordingAi();
-  const { service } = makeService(ai);
+test("with no AI tier a line stops at the dictionary", async () => {
+  const { service } = makeService(null);
 
   const result = await service.identify([line("l1", "GV SHRD MOZZ 8Z")], new Map());
 
-  assert.equal(ai.calls.length, 0);
   assert.equal(result.get("l1").source, "dictionary");
 });
 
