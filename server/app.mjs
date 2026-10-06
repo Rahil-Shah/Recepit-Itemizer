@@ -102,8 +102,11 @@ export function createApp({ prisma, plaid }) {
   // database can push past this blanket count; those pages have their own,
   // higher limit (see server/admin-backup.mjs) and still require an admin.
   const blanketLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 300 });
+  // Counted per address before any session lookup, like the blanket limit,
+  // so a flood of made-up tokens on this path is turned away for free.
+  const backupLimiter = createRateLimiter(BACKUP_RATE_LIMIT);
   app.use("/api", (req, res, next) =>
-    req.path.startsWith("/admin/backup/") ? next() : blanketLimiter(req, res, next)
+    req.path.startsWith("/admin/backup/") ? backupLimiter(req, res, next) : blanketLimiter(req, res, next)
   );
   const limitStore = createRateLimitStore(prisma);
 
@@ -252,7 +255,6 @@ export function createApp({ prisma, plaid }) {
 
   // Whole-database backup for admins, a page at a time.
   registerAdminBackup(app, requireAuth, requireAdmin, prisma, [
-    createRateLimiter(BACKUP_RATE_LIMIT),
     dbRateLimiter(limitStore, { bucket: "backup", ...BACKUP_RATE_LIMIT, keyOf: (req) => req.userId })
   ]);
 
