@@ -124,7 +124,8 @@ namespace ReceiptRing.App {
       private readonly educationExportApiService: Services.EducationExportApiService,
       private readonly dataExportService: Services.DataExportService,
       private readonly insightsService: Services.InsightsService,
-      private readonly insightsView: UI.InsightsView
+      private readonly insightsView: UI.InsightsView,
+      private readonly adminBackupService: Services.AdminBackupService
     ) {
       this.items = this.storageService.load();
     }
@@ -203,6 +204,7 @@ namespace ReceiptRing.App {
       this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
       this.elements.refreshTransactionsButton.addEventListener("click", () => void this.refreshTransactions());
       this.elements.categorizeMonthButton.addEventListener("click", () => void this.categorizeMonth());
+      this.elements.databaseBackupButton.addEventListener("click", () => void this.downloadDatabaseBackup());
       this.elements.exportAllDataButtons.forEach((button) =>
         button.addEventListener("click", () => void this.downloadAllData())
       );
@@ -2801,6 +2803,59 @@ namespace ReceiptRing.App {
       } finally {
         done();
         this.elements.exportAllDataButtons.forEach((button) => UI.setBusy(button, false));
+        this.isExportingAll = false;
+      }
+    }
+
+    /**
+     * Admin only: the whole database, every account, as one ZIP of JSON
+     * tables. The server hands it over a page at a time; this stitches it.
+     */
+    private async downloadDatabaseBackup(): Promise<void> {
+      if (!this.isAdmin || this.isExportingAll) return;
+      const includeSecrets = this.elements.backupIncludeSecrets.checked;
+      if (
+        includeSecrets &&
+        !window.confirm(
+          "Include password hashes and encrypted keys? Anyone with the file and the server's encryption key could use them. Keep it private."
+        )
+      ) {
+        return;
+      }
+
+      this.isExportingAll = true;
+      this.closeSettings();
+      const button = this.elements.databaseBackupButton;
+      UI.setBusy(button, true);
+      const host = document.body;
+      const done = this.loading.show(host, "Backing up the database…", "Reading the table list.", { screen: "all" });
+      try {
+        const now = new Date();
+        const blob = await this.adminBackupService.build(
+          includeSecrets,
+          ({ table, rowsDone, rowsTotal }) =>
+            this.loading.relabel(
+              host,
+              "Backing up the database…",
+              `${table.replace(/_/g, " ")} · ${rowsDone} of ${rowsTotal} rows`
+            ),
+          now
+        );
+        const fileName = this.adminBackupService.fileName(now);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        this.notificationService.success(`Downloaded ${fileName}.`);
+      } catch (error) {
+        this.notificationService.error(error instanceof Error ? error.message : "The backup failed.");
+      } finally {
+        done();
+        UI.setBusy(button, false);
         this.isExportingAll = false;
       }
     }

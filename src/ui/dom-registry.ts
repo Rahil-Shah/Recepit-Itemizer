@@ -78,6 +78,8 @@ namespace ReceiptRing.UI {
     openAppButtons: HTMLButtonElement[];
     categorizeMonthButton: HTMLButtonElement;
     exportAllDataButtons: HTMLButtonElement[];
+    databaseBackupButton: HTMLButtonElement;
+    backupIncludeSecrets: HTMLInputElement;
     recentReceipts: HTMLElement;
     historyOverview: HTMLElement;
     historySearch: HTMLInputElement;
@@ -244,6 +246,8 @@ namespace ReceiptRing.UI {
           (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
         ),
         recentReceipts: this.getElement("#recentReceipts", HTMLElement),
+        databaseBackupButton: this.getElement("#databaseBackupButton", HTMLButtonElement),
+        backupIncludeSecrets: this.getElement("#backupIncludeSecrets", HTMLInputElement),
         historyOverview: this.getElement("#historyOverview", HTMLElement),
         historySearch: this.getElement("#historySearch", HTMLInputElement),
         historyNoMatch: this.getElement("#historyNoMatch", HTMLElement),

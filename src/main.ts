@@ -20,6 +20,12 @@ namespace ReceiptRing {
   const educationExportApiService = new Services.EducationExportApiService();
   const notificationService = new Services.NotificationService();
   const insightsService = new Services.InsightsService(spendingAggregatorService);
+  const adminBackupService = new Services.AdminBackupService(async (url) => {
+    const response = await fetch(url, { credentials: "same-origin" });
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    if (!response.ok) throw new Error(body.error || `Backup failed (${response.status}).`);
+    return body;
+  });
   const dataExportService = new Services.DataExportService(
     (receiptId) => receiptApiService.imageUrl(receiptId),
     (entryId) => `/api/rent-entries/${encodeURIComponent(entryId)}/photo`
@@ -81,7 +87,8 @@ namespace ReceiptRing {
     educationExportApiService,
     dataExportService,
     insightsService,
-    new UI.InsightsView(currencyFormatService)
+    new UI.InsightsView(currencyFormatService),
+    adminBackupService
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.

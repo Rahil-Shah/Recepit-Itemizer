@@ -1129,6 +1129,24 @@
           </button>
         </div>
 
+        <!-- Admin accounts only (see body[data-access] in styles.css): the
+             whole database, every account, as one archive. -->
+        <div class="settings-data admin-only">
+          <h3>Database backup</h3>
+          <p>
+            Every account's data -- users, receipts with photos, people, splits, rent, item names
+            and bank transactions -- as one ZIP of JSON tables, ready to restore from.
+          </p>
+          <label class="checkbox-row">
+            <input id="backupIncludeSecrets" type="checkbox" />
+            <span>Include credentials (password hashes, encrypted keys and bank tokens) so a restore keeps sign-ins working</span>
+          </label>
+          <button class="btn btn-secondary" id="databaseBackupButton" type="button">
+            <svg class="btn-icon" aria-hidden="true"><use href="#i-database" /></svg>
+            Download database backup
+          </button>
+        </div>
+
         <div class="settings-danger">
           <h3>Delete account</h3>
           <p>

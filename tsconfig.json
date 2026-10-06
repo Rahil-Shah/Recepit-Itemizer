@@ -42,6 +42,7 @@
     "src/services/education-export-api.service.ts",
     "src/services/zip-writer.service.ts",
     "src/services/data-export.service.ts",
+    "src/services/admin-backup.service.ts",
     "src/services/spending-aggregator.service.ts",
     "src/services/insights.service.ts",
     "src/services/notification.service.ts",
