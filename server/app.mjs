@@ -36,6 +36,7 @@ import { registerBudgetCategorize, CATEGORIZE_RATE_LIMIT } from "./budget-catego
 import { maxReceiptsPerUser } from "./access.mjs";
 import { apiVersionAlias, corsMiddleware, registerApiPlatform } from "./api-platform.mjs";
 import { registerAdminBackup, BACKUP_RATE_LIMIT } from "./admin-backup.mjs";
+import { registerAdminMetrics, ADMIN_RATE_LIMIT } from "./admin-metrics.mjs";
 import { isVercel } from "./deployment.mjs";
 
 
@@ -113,6 +114,9 @@ export function createApp({ prisma, plaid }) {
   });
   app.use("/api/auth/login", authLimiter);
   app.use("/api/auth/register", authLimiter);
+  // A password change checks the current password, so it is a guess like any
+  // login and is limited like one.
+  app.use("/api/auth/password", authLimiter);
 
   // Shared across instances: what actually bounds credential stuffing and mass
   // account creation on a public URL.
@@ -242,6 +246,9 @@ export function createApp({ prisma, plaid }) {
 
   auth.register(app);
   registerApiPlatform(app);
+
+  // Admin tools: usage across every account. Admin-only, and counts only.
+  registerAdminMetrics(app, requireAuth, requireAdmin, prisma, [createRateLimiter(ADMIN_RATE_LIMIT)]);
 
   // Whole-database backup for admins, a page at a time.
   registerAdminBackup(app, requireAuth, requireAdmin, prisma, [

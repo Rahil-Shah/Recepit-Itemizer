@@ -29,6 +29,10 @@ const SESSION_COOKIE = "rr_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
+// scrypt takes the whole input, so an unbounded password is a cheap way to
+// make the server do expensive work.
+const MAX_PASSWORD_LENGTH = 200;
+const MAX_NAME_LENGTH = 80;
 
 // Per-account login throttle: how many guesses one address may make against
 // one email before it has to wait. Counted in Postgres rather than in memory,
@@ -138,6 +142,7 @@ export function createAuth(prisma, limitStore = null) {
       }
 
       req.userId = session.userId;
+      req.sessionId = session.id;
       req.userEmail = session.user.email;
       req.isAdmin = isAdmin(session.user.email);
       next();
@@ -178,6 +183,9 @@ export function createAuth(prisma, limitStore = null) {
       if (password.length < MIN_PASSWORD_LENGTH) {
         return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
       }
+      if (password.length > MAX_PASSWORD_LENGTH) {
+        return res.status(400).json({ error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters.` });
+      }
 
       try {
         const existing = await prisma.user.findUnique({ where: { email } });
@@ -216,6 +224,10 @@ export function createAuth(prisma, limitStore = null) {
     app.post("/api/auth/login", async (req, res) => {
       const email = String(req.body?.email ?? "").trim().toLowerCase();
       const password = String(req.body?.password ?? "");
+      // No account has a longer password, and hashing one would be expensive.
+      if (password.length > MAX_PASSWORD_LENGTH) {
+        return res.status(401).json({ error: "Invalid email or password." });
+      }
       // Keyed on both address and email so one person guessing at one account
       // cannot lock out everybody else behind the same address.
       const throttleKey = `login-account:${req.ip}:${email}`;
@@ -299,6 +311,89 @@ export function createAuth(prisma, limitStore = null) {
       } catch (error) {
         console.error("Account deletion failed:", error);
         res.status(500).json({ error: "Could not delete your account." });
+      }
+    });
+
+    // --- Account settings, for every account ------------------------------
+
+    app.patch("/api/auth/profile", requireAuth, async (req, res) => {
+      const raw = req.body?.name;
+      if (raw !== null && typeof raw !== "string") {
+        return res.status(400).json({ error: "name must be a string." });
+      }
+      const name = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim() : "";
+      if (name.length > MAX_NAME_LENGTH) {
+        return res.status(400).json({ error: `Name must be at most ${MAX_NAME_LENGTH} characters.` });
+      }
+      try {
+        const user = await prisma.user.update({ where: { id: req.userId }, data: { name: name || null } });
+        res.json(publicUser(user));
+      } catch (error) {
+        console.error("Profile update failed:", error);
+        res.status(500).json({ error: "Could not update your profile." });
+      }
+    });
+
+    // Changing the password signs every other session out: whoever might
+    // have known the old one should not stay signed in with it.
+    app.post("/api/auth/password", requireAuth, async (req, res) => {
+      const currentPassword = String(req.body?.currentPassword ?? "");
+      const newPassword = String(req.body?.newPassword ?? "");
+      if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+        return res.status(400).json({
+          error: `The new password must be ${MIN_PASSWORD_LENGTH} to ${MAX_PASSWORD_LENGTH} characters.`
+        });
+      }
+      try {
+        const user = await prisma.user.findUnique({ where: { id: req.userId } });
+        const ok = user?.passwordHash ? await verifyPassword(currentPassword, user.passwordHash) : false;
+        if (!ok) return res.status(403).json({ error: "Your current password is not correct." });
+        if (await verifyPassword(newPassword, user.passwordHash)) {
+          return res.status(400).json({ error: "The new password is the same as the current one." });
+        }
+        await prisma.$transaction([
+          prisma.user.update({ where: { id: req.userId }, data: { passwordHash: await hashPassword(newPassword) } }),
+          prisma.session.deleteMany({ where: { userId: req.userId, id: { not: req.sessionId } } })
+        ]);
+        res.json({ changed: true });
+      } catch (error) {
+        console.error("Password change failed:", error);
+        res.status(500).json({ error: "Could not change your password." });
+      }
+    });
+
+    // How many places this account is signed in, without saying anything
+    // about them that a session row does not hold (no addresses, no agents).
+    app.get("/api/auth/sessions", requireAuth, async (req, res) => {
+      try {
+        const sessions = await prisma.session.findMany({
+          where: { userId: req.userId, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, createdAt: true, expiresAt: true }
+        });
+        res.json({
+          active: sessions.length,
+          sessions: sessions.map((session) => ({
+            current: session.id === req.sessionId,
+            signedInAt: session.createdAt,
+            expiresAt: session.expiresAt
+          }))
+        });
+      } catch (error) {
+        console.error("Failed to list sessions:", error);
+        res.status(500).json({ error: "Could not load your sessions." });
+      }
+    });
+
+    app.post("/api/auth/sessions/revoke-others", requireAuth, async (req, res) => {
+      try {
+        const { count } = await prisma.session.deleteMany({
+          where: { userId: req.userId, id: { not: req.sessionId } }
+        });
+        res.json({ revoked: count });
+      } catch (error) {
+        console.error("Failed to revoke sessions:", error);
+        res.status(500).json({ error: "Could not sign out your other sessions." });
       }
     });
 

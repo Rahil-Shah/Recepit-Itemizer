@@ -23,6 +23,10 @@ export const ROUTES = [
   ["post", "/auth/login", "Sign in", { auth: "none", tag: "Auth", body: "Credentials", response: "SignedIn" }],
   ["post", "/auth/logout", "End the current session", { auth: "none", tag: "Auth", status: 204 }],
   ["get", "/auth/me", "The signed-in account", { auth: "user", tag: "Auth", response: "User" }],
+  ["patch", "/auth/profile", "Change the account's display name", { auth: "user", tag: "Auth", response: "User" }],
+  ["post", "/auth/password", "Change the password (signs out every other session)", { auth: "user", tag: "Auth", body: "PasswordChange" }],
+  ["get", "/auth/sessions", "Where this account is signed in", { auth: "user", tag: "Auth" }],
+  ["post", "/auth/sessions/revoke-others", "Sign out every other session", { auth: "user", tag: "Auth" }],
   ["delete", "/auth/account", "Delete the account and everything in it", { auth: "user", tag: "Auth", body: "PasswordConfirmation", status: 204 }],
 
   ["get", "/gemini-config", "Model and whether a Gemini key is available", { auth: "user", tag: "Gemini" }],
@@ -69,6 +73,10 @@ export const ROUTES = [
   ["get", "/transactions", "Imported bank transactions", { auth: "admin", tag: "Bank", response: { type: "array", items: ref("BankTransaction") } }],
   ["patch", "/bank-transactions/{txnId}/food", "Flag a transaction as food", { auth: "admin", tag: "Bank", params: [idParam("txnId", "Transaction id")] }],
 
+  ["get", "/admin/overview", "Usage across the instance: accounts, receipts, storage, month by month", { auth: "admin", tag: "Admin" }],
+  ["get", "/admin/users", "Every account with its usage (no credentials or receipt contents)", { auth: "admin", tag: "Admin" }],
+  ["get", "/admin/users/{id}", "One account's usage and its recent receipts' metadata", { auth: "admin", tag: "Admin", params: [idParam("id", "User id")] }],
+  ["post", "/admin/users/{id}/sign-out", "End every session an account holds", { auth: "admin", tag: "Admin", params: [idParam("id", "User id")] }],
   ["get", "/admin/backup", "Backup manifest: every table and its row count", { auth: "admin", tag: "Admin", query: [queryParam("secrets", "true to include credential columns", { type: "boolean" })], response: "BackupManifest" }],
   ["get", "/admin/backup/{table}", "One page of a table's rows", { auth: "admin", tag: "Admin", params: [idParam("table", "Table name from the manifest")], query: [queryParam("cursor", "nextCursor from the previous page"), queryParam("secrets", "true to include credential columns", { type: "boolean" })], response: "BackupPage" }]
 ];
@@ -81,6 +89,11 @@ const SCHEMAS = {
     properties: { email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 }, name: { type: "string" } }
   },
   PasswordConfirmation: { type: "object", required: ["password"], properties: { password: { type: "string" } } },
+  PasswordChange: {
+    type: "object",
+    required: ["currentPassword", "newPassword"],
+    properties: { currentPassword: { type: "string" }, newPassword: { type: "string", minLength: 8, maxLength: 200 } }
+  },
   User: {
     type: "object",
     properties: { id: { type: "string" }, email: { type: "string" }, name: { type: ["string", "null"] }, isAdmin: { type: "boolean" } }
