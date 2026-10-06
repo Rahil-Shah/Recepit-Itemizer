@@ -37,6 +37,8 @@ namespace ReceiptRing.App {
     private readonly loading = new UI.LoadingOverlays();
     // The export download in flight, so closing its dialog can stop it.
     private exportAbort: AbortController | null = null;
+    // The full data export in flight, so a second click does not start another.
+    private isExportingAll = false;
     // The photo a parse failed on, so a retry has something to send.
     //
     // Held here rather than read back off the file input, because the input is
@@ -119,7 +121,8 @@ namespace ReceiptRing.App {
       private readonly itemIdentityService: Services.ItemIdentityService,
       private readonly itemAliasStoreService: Services.ItemAliasStoreService,
       private readonly authApiService: Services.AuthApiService,
-      private readonly educationExportApiService: Services.EducationExportApiService
+      private readonly educationExportApiService: Services.EducationExportApiService,
+      private readonly dataExportService: Services.DataExportService
     ) {
       this.items = this.storageService.load();
     }
@@ -197,6 +200,9 @@ namespace ReceiptRing.App {
       this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
       this.elements.refreshTransactionsButton.addEventListener("click", () => void this.refreshTransactions());
       this.elements.categorizeMonthButton.addEventListener("click", () => void this.categorizeMonth());
+      this.elements.exportAllDataButtons.forEach((button) =>
+        button.addEventListener("click", () => void this.downloadAllData())
+      );
       this.elements.budgetMonth.addEventListener("change", () => {
         this.selectMonth(this.elements.budgetMonth.value || null);
       });
@@ -2671,6 +2677,61 @@ namespace ReceiptRing.App {
       const wholeYear = this.elements.educationExportScope.value === "year";
       this.elements.educationExportMonthField.classList.toggle("hidden", wholeYear);
       this.elements.educationExportYearField.classList.toggle("hidden", !wholeYear);
+    }
+
+    /**
+     * Everything the account holds, as one ZIP: every receipt photo and rent
+     * proof, plus CSVs of every transaction and receipt line. Built in the
+     * browser from the same endpoints the app already reads, so it is not
+     * bound by the size cap on a serverless response.
+     */
+    private async downloadAllData(): Promise<void> {
+      if (this.isExportingAll) return;
+      this.isExportingAll = true;
+      this.closeSettings();
+      this.elements.exportAllDataButtons.forEach((button) => UI.setBusy(button, true));
+      const host = document.body;
+      const done = this.loading.show(host, "Gathering your data…", "Receipts, transactions and rent.", {
+        screen: "all"
+      });
+      try {
+        const [receipts, transactions, rentEntries] = await Promise.all([
+          this.receiptApiService.list(),
+          this.isAdmin ? this.bankApiService.listTransactions().catch(() => []) : Promise.resolve([]),
+          this.rentEntryApiService.list()
+        ]);
+        this.receipts = receipts;
+        const exportedAt = new Date();
+        const blob = await this.dataExportService.build(
+          { receipts, transactions, rentEntries, selfShares: this.getSelfShares(), exportedAt },
+          async (url) => {
+            const response = await fetch(url, { credentials: "same-origin" });
+            return response.ok ? response.blob() : null;
+          },
+          ({ done: fetched, total }) =>
+            this.loading.relabel(
+              host,
+              "Packing your photos…",
+              total === 0 ? "No photos to pack." : `${fetched} of ${total} photos`
+            )
+        );
+        const fileName = this.dataExportService.fileName(exportedAt);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        this.notificationService.success(`Downloaded ${fileName}.`);
+      } catch (error) {
+        this.notificationService.error(error instanceof Error ? error.message : "Could not export your data.");
+      } finally {
+        done();
+        this.elements.exportAllDataButtons.forEach((button) => UI.setBusy(button, false));
+        this.isExportingAll = false;
+      }
     }
 
     // Admin only: everything spent, as a CSV, not just education expenses.

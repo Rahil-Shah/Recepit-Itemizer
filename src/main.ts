@@ -19,6 +19,10 @@ namespace ReceiptRing {
   const rentEntryApiService = new Services.RentEntryApiService();
   const educationExportApiService = new Services.EducationExportApiService();
   const notificationService = new Services.NotificationService();
+  const dataExportService = new Services.DataExportService(
+    (receiptId) => receiptApiService.imageUrl(receiptId),
+    (entryId) => `/api/rent-entries/${encodeURIComponent(entryId)}/photo`
+  );
 
   // Identification, cheapest tier first. The alias store is what makes the
   // second receipt from a shop mostly free, so it gets the API backend that
@@ -73,7 +77,8 @@ namespace ReceiptRing {
     itemIdentityService,
     itemAliasStoreService,
     authApiService,
-    educationExportApiService
+    educationExportApiService,
+    dataExportService
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.

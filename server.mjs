@@ -689,6 +689,27 @@ app.get("/api/receipts/:id/image", requireAuth, async (req, res) => {
   }
 });
 
+// A rent entry's proof of payment, decoded back to binary, on the same terms
+// as a receipt photo above. The full data export fetches these one at a time.
+app.get("/api/rent-entries/:entryId/photo", requireAuth, async (req, res) => {
+  try {
+    const entry = await prisma.rentEntry.findFirst({
+      where: { id: req.params.entryId, userId: req.userId },
+      select: { photoData: true, photoMimeType: true }
+    });
+    if (!entry?.photoData || !entry.photoMimeType) {
+      return res.status(404).json({ error: "No photo for this rent entry." });
+    }
+    res.setHeader("Content-Type", entry.photoMimeType);
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.setHeader("Content-Disposition", "inline");
+    res.send(Buffer.from(entry.photoData, "base64"));
+  } catch (error) {
+    console.error("Failed to load rent photo:", error);
+    res.status(500).json({ error: "Failed to load rent photo." });
+  }
+});
+
 app.delete("/api/receipts/:id", requireAuth, async (req, res) => {
   try {
     // Scope the delete to the caller so one user can't remove another's

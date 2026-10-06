@@ -270,6 +270,30 @@ body[data-access="regular"] .regular-only {
   line-height: 1.55;
 }
 
+/* --- Settings: taking everything with you --- */
+.settings-data {
+  margin-top: 24px;
+  padding: 18px 20px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+
+.settings-data h3 {
+  margin: 0 0 6px;
+  color: var(--moss-deep);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-data p {
+  margin: 0 0 12px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 /* --- Settings: the part you cannot undo --- */
 .settings-danger {
   margin-top: 24px;

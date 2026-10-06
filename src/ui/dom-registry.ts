@@ -77,6 +77,7 @@ namespace ReceiptRing.UI {
     authActionButtons: HTMLButtonElement[];
     openAppButtons: HTMLButtonElement[];
     categorizeMonthButton: HTMLButtonElement;
+    exportAllDataButtons: HTMLButtonElement[];
     categorizeMonthNote: HTMLElement;
     appBrandLink: HTMLAnchorElement;
     authOverlay: HTMLElement;
@@ -233,6 +234,9 @@ namespace ReceiptRing.UI {
         ),
         appBrandLink: this.getElement("#appBrandLink", HTMLAnchorElement),
         categorizeMonthButton: this.getElement("#categorizeMonthButton", HTMLButtonElement),
+        exportAllDataButtons: Array.from(document.querySelectorAll("[data-export-all]")).filter(
+          (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
+        ),
         categorizeMonthNote: this.getElement("#categorizeMonthNote", HTMLElement),
         authOverlay: this.getElement("#authOverlay", HTMLElement),
         authCloseButton: this.getElement("#authCloseButton", HTMLButtonElement),
