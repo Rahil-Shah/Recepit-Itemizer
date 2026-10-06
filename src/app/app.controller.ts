@@ -196,6 +196,7 @@ namespace ReceiptRing.App {
       this.elements.refreshHistoryButton.addEventListener("click", () => void this.loadHistory());
       this.elements.connectBankButton.addEventListener("click", () => void this.connectBank());
       this.elements.refreshTransactionsButton.addEventListener("click", () => void this.refreshTransactions());
+      this.elements.categorizeMonthButton.addEventListener("click", () => void this.categorizeMonth());
       this.elements.budgetMonth.addEventListener("change", () => {
         this.selectMonth(this.elements.budgetMonth.value || null);
       });
@@ -1999,6 +2000,86 @@ namespace ReceiptRing.App {
     private renderRing(): void {
       const month = this.monthlySpend.find((entry) => entry.month === this.selectedMonth) ?? null;
       this.budgetRingView.render(this.elements.budgetRing, this.elements.budgetLegend, month);
+      this.renderCategorizeNote();
+    }
+
+    // Says whether the month in focus has been sorted yet, so the button reads
+    // as a re-run rather than a first run once it has.
+    private renderCategorizeNote(): void {
+      const month = this.selectedMonth;
+      const button = this.elements.categorizeMonthButton;
+      if (!month) {
+        button.disabled = true;
+        return;
+      }
+      const ids = this.spendingAggregatorService.idsForMonth(month, this.receipts, this.bankTransactions);
+      const total = ids.receiptIds.length + ids.transactionIds.length;
+      const sorted =
+        this.receipts.filter((receipt) => ids.receiptIds.includes(receipt.id) && receipt.budgetCategory).length +
+        this.bankTransactions.filter((txn) => ids.transactionIds.includes(txn.id) && txn.budgetCategory).length;
+      if (!button.classList.contains("is-busy")) button.disabled = total === 0;
+      this.elements.categorizeMonthNote.textContent =
+        total === 0
+          ? "Nothing to sort in this month yet."
+          : sorted === total
+            ? `All ${total} sorted by Gemini. Run it again after adding more.`
+            : sorted > 0
+              ? `${sorted} of ${total} sorted by Gemini. Run it again to sort the rest.`
+              : "Gemini reads each receipt and transaction and files it under the right category.";
+    }
+
+    /**
+     * One Gemini pass over the month in focus: every receipt and spending
+     * transaction is filed under a proper budget category, and the ring is
+     * redrawn from those. The originals are kept server-side.
+     */
+    private async categorizeMonth(): Promise<void> {
+      const month = this.selectedMonth;
+      if (!month) return;
+      if (!this.userHasGeminiKey && !this.serverHasGeminiKey) {
+        this.notificationService.error("Add your Gemini API key in Settings first.");
+        this.openSettings();
+        return;
+      }
+      const ids = this.spendingAggregatorService.idsForMonth(month, this.receipts, this.bankTransactions);
+      if (ids.receiptIds.length + ids.transactionIds.length === 0) {
+        this.notificationService.info("Nothing to sort in this month yet.");
+        return;
+      }
+
+      const button = this.elements.categorizeMonthButton;
+      UI.setBusy(button, true);
+      const done = this.showBudgetingLoader(
+        `Sorting ${this.formatMonthLabel(month)}…`,
+        "Gemini is reading your receipts and transactions."
+      );
+      try {
+        const model = localStorage.getItem("gemini_model") || "gemini-3.5-flash-lite";
+        const result = await this.bankApiService.categorizeMonth(month, ids.receiptIds, ids.transactionIds, model);
+        this.receipts = this.receipts.map((receipt) =>
+          result.receipts[receipt.id] ? { ...receipt, budgetCategory: result.receipts[receipt.id] } : receipt
+        );
+        this.bankTransactions = this.bankTransactions.map((txn) =>
+          result.transactions[txn.id] ? { ...txn, budgetCategory: result.transactions[txn.id] } : txn
+        );
+        this.monthlySpend = this.spendingAggregatorService.aggregate(
+          this.receipts,
+          this.bankTransactions,
+          this.getSelfShares()
+        );
+        this.renderTrend();
+        this.renderRing();
+        this.renderTransactions();
+        this.notificationService.success(
+          `Sorted ${result.updated} ${result.updated === 1 ? "item" : "items"} into categories.`
+        );
+      } catch (error) {
+        this.notificationService.error(error instanceof Error ? error.message : "Could not sort this month.");
+      } finally {
+        done();
+        UI.setBusy(button, false);
+        this.renderCategorizeNote();
+      }
     }
 
     private renderTrend(): void {
@@ -2073,7 +2154,8 @@ namespace ReceiptRing.App {
       const meta = document.createElement("span");
       meta.className = "transaction-meta";
       const date = this.formatTransactionDate(txn.date);
-      meta.textContent = txn.category ? `${date} \u00b7 ${txn.category}` : date;
+      const category = txn.budgetCategory || txn.category;
+      meta.textContent = category ? `${date} \u00b7 ${category}` : date;
       main.append(desc);
 
       const linkedReceipt = this.findLinkedReceipt(txn);

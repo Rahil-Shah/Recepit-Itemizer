@@ -31,6 +31,7 @@ import {
 import { buildEducationPdf } from "./server/education-export-pdf.mjs";
 import { buildSpendingCsv, spendingExportFileName, SPENDING_EXPORT_RATE_LIMIT } from "./server/spending-export.mjs";
 import { summariseReceiptFood } from "./server/food-share.mjs";
+import { registerBudgetCategorize, CATEGORIZE_RATE_LIMIT } from "./server/budget-categorize.mjs";
 import { assertAccessPolicy, maxReceiptsPerUser } from "./server/access.mjs";
 import { databaseUrl, isProduction, isVercel } from "./server/deployment.mjs";
 
@@ -267,6 +268,13 @@ registerGemini(app, requireAuth, prisma);
 // src/services/item-identity.service.ts for the tiers in front of it).
 registerItemIdentity(app, requireAuth, prisma, [identifyLimiter, identifyLimiterShared]);
 
+// Sorts a month's receipts and transactions into budget categories with one
+// Gemini call. Paid per request, so it has its own limit.
+registerBudgetCategorize(app, requireAuth, prisma, [
+  createRateLimiter(CATEGORIZE_RATE_LIMIT),
+  dbRateLimiter(limitStore, { bucket: "categorize", ...CATEGORIZE_RATE_LIMIT, keyOf: (req) => req.userId })
+]);
+
 // --- API -------------------------------------------------------------------
 
 const toNumber = (value) => (value === null || value === undefined ? null : Number(value));
@@ -275,6 +283,7 @@ function serializeReceipt(receipt) {
     id: receipt.id,
     storeName: receipt.storeName,
     category: receipt.category,
+    budgetCategory: receipt.budgetCategory ?? null,
     subtotal: toNumber(receipt.subtotal),
     tax: toNumber(receipt.tax),
     total: toNumber(receipt.total),
@@ -612,15 +621,19 @@ app.put("/api/receipts/:id", requireAuth, async (req, res) => {
       // Scoped to the caller, so one user can't overwrite another's receipt.
       const existing = await tx.receipt.findFirst({
         where: { id: req.params.id, userId: req.userId },
-        select: { id: true }
+        select: { id: true, category: true }
       });
       if (!existing) return null;
+      const category = body.category ?? "Other";
 
       await tx.receipt.update({
         where: { id: existing.id },
         data: {
           storeName: body.storeName ?? null,
-          category: body.category ?? "Other",
+          category,
+          // A category the user picked by hand outranks the budget pass's
+          // guess, so changing it drops the guess (see budget-categorize.mjs).
+          ...(category !== existing.category ? { budgetCategory: null } : {}),
           subtotal: body.subtotal ?? null,
           tax: body.tax ?? null,
           total: body.total ?? null,

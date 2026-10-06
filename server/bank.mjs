@@ -460,6 +460,7 @@ export function createBank(prisma) {
             description: txn.description,
             amount: Number(txn.amount),
             category: txn.category,
+            budgetCategory: txn.budgetCategory ?? null,
             isFood: txn.isFood,
             account: txn.account?.name ?? null,
             linkedReceiptId: txn.linkedReceiptId
