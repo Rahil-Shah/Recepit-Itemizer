@@ -1,10 +1,10 @@
 // The Receipt Ring brand as a PDF can draw it: the name, the palette from
 // public/styles.css, the logo, and the typefaces the app sets its text in.
 //
-// The logo is public/favicon.svg (the master mark: a moss tile, the spending
-// ring in clay with its gold arc, and a receipt slip) redrawn with PDFKit's
-// vector calls, so every page gets a crisp mark at any zoom without reading
-// an image off disk.
+// The logo is public/favicon.svg (the master mark: the site's moss disc with
+// its outline receipt, inside a spending ring whose peach arc runs along a
+// deep-moss track) redrawn with PDFKit's vector calls, so every page gets a
+// crisp mark at any zoom without reading an image off disk.
 
 import { readFileSync } from "node:fs";
 
@@ -22,21 +22,28 @@ export const BRAND_COLORS = Object.freeze({
   ink3: "#78786c",
   moss: "#5d7052",
   mossDeep: "#4d5e43",
-  mossTile: "#65785a",
   mossSoft: "#eef0ea",
+  mossMist: "#f3f4f1",
   clay: "#c18c5d",
   clayInk: "#9a6437",
-  gold: "#d4b060"
+  // The logo's ring arc: clay lifted to read against moss. Not a UI token.
+  clayGlow: "#e8b98f"
 });
 
 // favicon.svg, in its own 64-unit box.
 const MARK_BOX = 64;
-const RING_RADIUS = 21.5;
-const RING_WIDTH = 7.5;
-// The gold arc is stroke-dasharray="48 136" on a circle rotated to start at
-// twelve o'clock: 48 units of a 2πr ≈ 135.1 circumference, clockwise.
-const GOLD_ARC_SWEEP = (48 / (2 * Math.PI * RING_RADIUS)) * 2 * Math.PI;
-const SLIP_PATH = "M24 12.5h16v39.5l-2.7-2.2-2.7 2.2-2.6-2.2-2.7 2.2-2.6-2.2-2.7 2.2z";
+const RING_RADIUS = 26;
+const RING_WIDTH = 4;
+// The arc is pathLength="100" stroke-dasharray="62 38" on a circle rotated to
+// start at twelve o'clock: 62% of the circle, clockwise, with round caps.
+const RING_ARC_SWEEP = 0.62 * 2 * Math.PI;
+// The site's receipt icon (the 24px glyph in public/index.html's sprite),
+// scaled by 1.7 and centred on the disc.
+const RECEIPT_SCALE = 1.7;
+const RECEIPT_OFFSET = MARK_BOX / 2 - 12 * RECEIPT_SCALE;
+const RECEIPT_STROKE = 1.8;
+const RECEIPT_BODY = "M6 3.5h12a1 1 0 0 1 1 1v15l-2.4-1.6-2.4 1.6-2.2-1.6-2.2 1.6-2.4-1.6L5 20.5v-16a1 1 0 0 1 1-1Z";
+const RECEIPT_LINES = "M8.5 8.5h7M8.5 12h7M8.5 15.5h4";
 
 /** Draw the logo with its top-left corner at (x, y), `size` points square. */
 export function drawBrandMark(doc, x, y, size) {
@@ -44,27 +51,29 @@ export function drawBrandMark(doc, x, y, size) {
   doc.save();
   doc.translate(x, y).scale(scale);
 
-  // Moss tile, lit from the top left like the favicon's gradient.
-  const tile = doc.linearGradient(0, 0, MARK_BOX, MARK_BOX);
-  tile.stop(0, BRAND_COLORS.mossTile).stop(1, BRAND_COLORS.mossDeep);
-  doc.roundedRect(0, 0, MARK_BOX, MARK_BOX, 15).fill(tile);
-
-  // The ring, and the share of it the gold arc fills.
+  // The moss disc, as on the site.
   const center = MARK_BOX / 2;
+  doc.circle(center, center, MARK_BOX / 2).fill(BRAND_COLORS.moss);
+
+  // The ring: a deep-moss track, and the share of it the peach arc fills.
   doc.lineWidth(RING_WIDTH).lineCap("butt");
-  doc.circle(center, center, RING_RADIUS).stroke(BRAND_COLORS.clay);
+  doc.circle(center, center, RING_RADIUS).stroke(BRAND_COLORS.mossDeep);
   const start = -Math.PI / 2;
-  const end = start + GOLD_ARC_SWEEP;
+  const end = start + RING_ARC_SWEEP;
   const endX = center + RING_RADIUS * Math.cos(end);
   const endY = center + RING_RADIUS * Math.sin(end);
   doc
-    .path(`M${center} ${center - RING_RADIUS} A${RING_RADIUS} ${RING_RADIUS} 0 0 1 ${endX.toFixed(3)} ${endY.toFixed(3)}`)
-    .stroke(BRAND_COLORS.gold);
+    .lineCap("round")
+    .path(`M${center} ${center - RING_RADIUS} A${RING_RADIUS} ${RING_RADIUS} 0 1 1 ${endX.toFixed(3)} ${endY.toFixed(3)}`)
+    .stroke(BRAND_COLORS.clayGlow);
 
-  // The receipt slip and its two printed lines.
-  doc.path(SLIP_PATH).fill(BRAND_COLORS.paper);
-  doc.lineWidth(3).lineCap("round");
-  doc.moveTo(28, 23).lineTo(36, 23).moveTo(28, 31).lineTo(36, 31).stroke(BRAND_COLORS.moss);
+  // The receipt and its three printed lines, outlined in moss-mist.
+  doc.save();
+  doc.translate(RECEIPT_OFFSET, RECEIPT_OFFSET).scale(RECEIPT_SCALE);
+  doc.lineWidth(RECEIPT_STROKE).lineCap("round").lineJoin("round");
+  doc.path(RECEIPT_BODY).stroke(BRAND_COLORS.mossMist);
+  doc.path(RECEIPT_LINES).stroke(BRAND_COLORS.mossMist);
+  doc.restore();
 
   doc.restore();
 }

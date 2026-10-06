@@ -180,8 +180,8 @@ test("every page carries the logo and the app's name, and says which page it is"
     assert.match(text, /Education expenses/);
   });
   contents.forEach((content, index) => {
-    // The logo's gold arc (#d4b060) is stroked on every page.
-    assert.match(content, /0\.83\d* 0\.69\d* 0\.37\d* SCN/, `page ${index + 1} draws the logo`);
+    // The logo's peach ring arc (#e8b98f) is stroked on every page.
+    assert.match(content, /0\.90\d* 0\.72\d* 0\.56\d* SCN/, `page ${index + 1} draws the logo`);
   });
 });
 
