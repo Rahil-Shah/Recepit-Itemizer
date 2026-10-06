@@ -261,7 +261,7 @@ test("a photo is read by Gemini into lines, and a failed read offers a retry", a
 test("without a Gemini key, a photo sends you to Settings", async () => {
   const ui = await openApp(server, { as: await server.signUp() });
   ui.setFiles("#receiptImage", [ui.file("receipt.png", PNG_BYTES, "image/png")]);
-  await ui.waitFor(() => !ui.$("#settingsModal").classList.contains("hidden"), { message: "settings to open" });
+  await ui.waitFor(() => !ui.$("#settingsView").classList.contains("hidden"), { message: "settings to open" });
   assert.match(ui.text("#ocrStatusText"), /Gemini API key/);
 });
 

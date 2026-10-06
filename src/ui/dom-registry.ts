@@ -58,7 +58,10 @@ namespace ReceiptRing.UI {
     categoryPromptSkip: HTMLButtonElement;
     categoryPromptSave: HTMLButtonElement;
     settingsButton: HTMLButtonElement;
-    settingsModal: HTMLElement;
+    settingsView: HTMLElement;
+    adminView: HTMLElement;
+    closeAdminButton: HTMLButtonElement;
+    openAdminButtons: HTMLButtonElement[];
     geminiApiKey: HTMLInputElement;
     geminiModel: HTMLSelectElement;
     geminiKeyStatus: HTMLElement;
@@ -218,7 +221,12 @@ namespace ReceiptRing.UI {
         categoryPromptSkip: this.getElement("#categoryPromptSkip", HTMLButtonElement),
         categoryPromptSave: this.getElement("#categoryPromptSave", HTMLButtonElement),
         settingsButton: this.getElement("#settingsButton", HTMLButtonElement),
-        settingsModal: this.getElement("#settingsModal", HTMLElement),
+        settingsView: this.getElement("#settingsView", HTMLElement),
+        adminView: this.getElement("#adminView", HTMLElement),
+        closeAdminButton: this.getElement("#closeAdminButton", HTMLButtonElement),
+        openAdminButtons: Array.from(document.querySelectorAll("[data-open-admin]")).filter(
+          (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
+        ),
         geminiApiKey: this.getElement("#geminiApiKey", HTMLInputElement),
         geminiModel: this.getElement("#geminiModel", HTMLSelectElement),
         geminiKeyStatus: this.getElement("#geminiKeyStatus", HTMLElement),

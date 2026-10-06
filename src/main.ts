@@ -20,6 +20,9 @@ namespace ReceiptRing {
   const educationExportApiService = new Services.EducationExportApiService();
   const notificationService = new Services.NotificationService();
   const insightsService = new Services.InsightsService(spendingAggregatorService);
+  const preferencesService = new Services.PreferencesService(localStorage);
+  const accountApiService = new Services.AccountApiService();
+  const adminApiService = new Services.AdminApiService();
   const adminBackupService = new Services.AdminBackupService(async (url) => {
     const response = await fetch(url, { credentials: "same-origin" });
     const body = (await response.json().catch(() => ({}))) as { error?: string };
@@ -88,7 +91,8 @@ namespace ReceiptRing {
     dataExportService,
     insightsService,
     new UI.InsightsView(currencyFormatService),
-    adminBackupService
+    adminBackupService,
+    preferencesService
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.
@@ -96,6 +100,21 @@ namespace ReceiptRing {
   const startApp = (user: Services.AuthUser): void => {
     if (started) return;
     started = true;
+    // Settings is every account's; the admin tools are started only for an
+    // admin (the server refuses their routes to anyone else regardless).
+    const settings = new App.AccountSettingsController(accountApiService, preferencesService, notificationService);
+    settings.start(user);
+    controller.hooks.onShowSettings = () => settings.show();
+    if (user.isAdmin) {
+      const admin = new App.AdminToolsController(
+        adminApiService,
+        new UI.AdminView(currencyFormatService),
+        notificationService,
+        user.id
+      );
+      admin.start();
+      controller.hooks.onShowAdmin = () => void admin.load();
+    }
     controller.start(user);
   };
 

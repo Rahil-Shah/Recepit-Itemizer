@@ -83,6 +83,9 @@ export async function openApp(server, { as = null, setup } = {}) {
     return `blob:${server.baseUrl}/${downloads.length}`;
   };
   window.URL.revokeObjectURL = () => {};
+  // The app's URL is Node's (see installGlobals), so it needs the same stand-in.
+  globalThis.URL.createObjectURL = window.URL.createObjectURL;
+  globalThis.URL.revokeObjectURL = window.URL.revokeObjectURL;
   window.HTMLAnchorElement.prototype.click = function click() {
     if (this.download) downloads.push({ name: this.download, blob: ui.lastBlob, href: this.href });
   };

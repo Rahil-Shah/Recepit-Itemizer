@@ -1,5 +1,11 @@
 namespace ReceiptRing.App {
-  type TabName = "receipts" | "history" | "budgeting";
+  type TabName = "receipts" | "history" | "budgeting" | "settings" | "admin";
+
+  /** What the Settings and Admin pages need from the rest of the app. */
+  export interface PageHooks {
+    onShowSettings?(): void;
+    onShowAdmin?(): void;
+  }
 
   // Where the export dialog remembers the format it was last used with.
   const EXPORT_FORMAT_KEY = "education_export_format";
@@ -35,6 +41,10 @@ namespace ReceiptRing.App {
     // The loader laid over a panel while its content loads (see
     // src/ui/loading.view.ts).
     private readonly loading = new UI.LoadingOverlays();
+    // The tab to go back to when Settings or Admin tools close.
+    private lastMainTab: TabName = "receipts";
+    // Set by main.ts: the Settings and Admin pages load themselves on show.
+    hooks: PageHooks = {};
     // The export download in flight, so closing its dialog can stop it.
     private exportAbort: AbortController | null = null;
     // The full data export in flight, so a second click does not start another.
@@ -125,7 +135,8 @@ namespace ReceiptRing.App {
       private readonly dataExportService: Services.DataExportService,
       private readonly insightsService: Services.InsightsService,
       private readonly insightsView: UI.InsightsView,
-      private readonly adminBackupService: Services.AdminBackupService
+      private readonly adminBackupService: Services.AdminBackupService,
+      private readonly preferencesService: Services.PreferencesService
     ) {
       this.items = this.storageService.load();
     }
@@ -139,7 +150,12 @@ namespace ReceiptRing.App {
       // (see UI.OverlayOptions.screen) hides while another is open.
       document.body.dataset.tab = "receipts";
       this.bindEvents();
+      // Device preferences: the category new receipts start in, and the tab
+      // the app opens on.
+      const preferences = this.preferencesService.load();
+      this.setReceiptCategory(preferences.defaultCategory);
       this.render();
+      if (preferences.startTab !== "receipts") this.switchTab(preferences.startTab);
       void this.initGeminiSettings();
       void this.loadPeople();
       void this.refreshRecentReceipts();
@@ -193,6 +209,14 @@ namespace ReceiptRing.App {
       });
       this.elements.settingsButton.addEventListener("click", () => this.openSettings());
       this.elements.closeSettingsButton.addEventListener("click", () => this.closeSettings());
+      this.elements.closeAdminButton.addEventListener("click", () => this.switchTab(this.lastMainTab));
+      // Admin tools: the app-bar button and the one in Settings. Admin-only on
+      // the page; the server refuses the routes to anyone else regardless.
+      this.elements.openAdminButtons.forEach((button) =>
+        button.addEventListener("click", () => {
+          if (this.isAdmin) this.switchTab("admin");
+        })
+      );
       this.elements.saveSettingsButton.addEventListener("click", () => void this.saveSettings());
       this.elements.removeKeyButton.addEventListener("click", () => void this.removeGeminiKey());
       this.elements.pasteJsonButton.addEventListener("click", () => this.openPasteJsonModal());
@@ -299,13 +323,22 @@ namespace ReceiptRing.App {
     }
 
     private switchTab(tab: TabName): void {
+      if (tab === "admin" && !this.isAdmin) tab = "settings";
+      if (tab !== "settings" && tab !== "admin") this.lastMainTab = tab;
       document.body.dataset.tab = tab;
       this.elements.tabButtons.forEach((button) => {
         button.classList.toggle("is-active", button.dataset.tab === tab);
       });
+      this.elements.settingsButton.classList.toggle("is-active", tab === "settings");
       this.elements.receiptsView.classList.toggle("hidden", tab !== "receipts");
       this.elements.historyView.classList.toggle("hidden", tab !== "history");
       this.elements.budgetingView.classList.toggle("hidden", tab !== "budgeting");
+      this.elements.settingsView.classList.toggle("hidden", tab !== "settings");
+      this.elements.adminView.classList.toggle("hidden", tab !== "admin");
+      if (tab === "settings" || tab === "admin") window.scrollTo(0, 0);
+
+      if (tab === "settings") this.hooks.onShowSettings?.();
+      if (tab === "admin") this.hooks.onShowAdmin?.();
 
       if (tab === "history") {
         void this.loadHistory();
@@ -823,7 +856,7 @@ namespace ReceiptRing.App {
       // saved key or the shared server key. Only block when neither exists.
       if (!this.userHasGeminiKey && !this.serverHasGeminiKey) {
         this.setOcrStatus("Please add your Gemini API key in Settings first.");
-        this.openSettings();
+        this.openGeminiSettings();
         return;
       }
 
@@ -1044,11 +1077,18 @@ namespace ReceiptRing.App {
         : "Enter Gemini API key";
       this.elements.geminiModel.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash-lite";
       this.renderGeminiKeyStatus();
-      this.elements.settingsModal.classList.remove("hidden");
+      // Even when Settings is already open: pressing it again refreshes it.
+      this.switchTab("settings");
+    }
+
+    /** Settings, scrolled to the Gemini key: where a missing key sends you. */
+    private openGeminiSettings(): void {
+      this.openSettings();
+      this.elements.geminiApiKey.closest<HTMLElement>(".settings-card")?.scrollIntoView?.({ block: "start" });
     }
 
     private closeSettings(): void {
-      this.elements.settingsModal.classList.add("hidden");
+      if (document.body.dataset.tab === "settings") this.switchTab(this.lastMainTab);
     }
 
     private renderGeminiKeyStatus(message?: string, isError = false): void {
@@ -1079,7 +1119,7 @@ namespace ReceiptRing.App {
       // Only touch the stored key when the user actually typed one; a blank
       // field means "keep whatever is already there" (the personal or shared key).
       if (!key) {
-        this.closeSettings();
+        this.renderGeminiKeyStatus("Model saved.");
         return;
       }
 
@@ -1089,7 +1129,8 @@ namespace ReceiptRing.App {
         this.userHasGeminiKey = true;
         this.elements.geminiApiKey.value = "";
         this.notificationService.success("Gemini key saved to your account.");
-        this.closeSettings();
+        this.elements.geminiApiKey.placeholder = "Saved — leave blank to keep it";
+        this.renderGeminiKeyStatus();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Could not save the key.";
         this.renderGeminiKeyStatus(message, true);
@@ -2122,7 +2163,7 @@ namespace ReceiptRing.App {
       if (!month) return;
       if (!this.userHasGeminiKey && !this.serverHasGeminiKey) {
         this.notificationService.error("Add your Gemini API key in Settings first.");
-        this.openSettings();
+        this.openGeminiSettings();
         return;
       }
       const ids = this.spendingAggregatorService.idsForMonth(month, this.receipts, this.bankTransactions);
@@ -2769,7 +2810,6 @@ namespace ReceiptRing.App {
     private async downloadAllData(): Promise<void> {
       if (this.isExportingAll) return;
       this.isExportingAll = true;
-      this.closeSettings();
       this.elements.exportAllDataButtons.forEach((button) => UI.setBusy(button, true));
       const host = document.body;
       const done = this.loading.show(host, "Gathering your data…", "Receipts, transactions and rent.", {
@@ -2832,7 +2872,6 @@ namespace ReceiptRing.App {
       }
 
       this.isExportingAll = true;
-      this.closeSettings();
       const button = this.elements.databaseBackupButton;
       UI.setBusy(button, true);
       const host = document.body;
