@@ -37,6 +37,7 @@
     "../src/services/zip-writer.service.ts",
     "../src/services/data-export.service.ts",
     "../src/services/spending-aggregator.service.ts",
+    "../src/services/insights.service.ts",
     "../src/services/receipt-image.service.ts",
     "../src/services/gemini.service.ts",
     "../src/ui/split-workspace.view.ts",

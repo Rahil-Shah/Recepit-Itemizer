@@ -621,9 +621,18 @@
           </a>
 
           <nav class="tab-nav" aria-label="Sections">
-            <button class="tab-button is-active" id="tabReceipts" type="button" data-tab="receipts">Split</button>
-            <button class="tab-button" id="tabHistory" type="button" data-tab="history">History</button>
-            <button class="tab-button" id="tabBudgeting" type="button" data-tab="budgeting">Budgets</button>
+            <button class="tab-button is-active" id="tabReceipts" type="button" data-tab="receipts">
+              <svg class="tab-icon" aria-hidden="true"><use href="#i-receipt" /></svg>
+              <span>Split</span>
+            </button>
+            <button class="tab-button" id="tabHistory" type="button" data-tab="history">
+              <svg class="tab-icon" aria-hidden="true"><use href="#i-history" /></svg>
+              <span>History</span>
+            </button>
+            <button class="tab-button" id="tabBudgeting" type="button" data-tab="budgeting">
+              <svg class="tab-icon" aria-hidden="true"><use href="#i-pie" /></svg>
+              <span>Budgets</span>
+            </button>
           </nav>
 
           <div class="appbar-actions">
@@ -651,6 +660,7 @@
             <button class="btn btn-ghost btn-small" id="cancelEditButton" type="button">Cancel</button>
           </div>
           <div class="workspace" aria-label="Receipt workspace">
+            <div class="workspace-stack">
             <section class="panel" aria-label="Scan receipt">
               <header class="panel-header">
                 <h2>Scan receipt</h2>
@@ -705,6 +715,19 @@
                 </div>
               </div>
             </section>
+
+            <!-- Fills the column under the scanner: the last few receipts,
+                 one click from being reopened here. -->
+            <section class="panel recent-panel" aria-label="Recent receipts">
+              <header class="panel-header">
+                <h2>Recent receipts</h2>
+                <button class="btn btn-ghost btn-small" type="button" data-tab-jump="history">See all</button>
+              </header>
+              <div class="panel-body">
+                <div id="recentReceipts"></div>
+              </div>
+            </section>
+            </div>
 
             <section class="panel" aria-label="Line items">
               <header class="panel-header">
@@ -810,13 +833,24 @@
         </div>
 
         <div class="tab-view hidden" id="historyView">
+          <div class="history-layout">
           <section class="panel history-panel" aria-label="Saved receipts">
             <header class="panel-header">
               <h2>Saved receipts</h2>
-              <button class="btn btn-secondary" id="refreshHistoryButton" type="button">Refresh</button>
+              <div class="panel-actions">
+                <input
+                  class="table-input history-search"
+                  id="historySearch"
+                  type="search"
+                  placeholder="Search stores, items, categories"
+                  aria-label="Search saved receipts"
+                />
+                <button class="btn btn-secondary" id="refreshHistoryButton" type="button">Refresh</button>
+              </div>
             </header>
             <div class="panel-body">
               <div class="history-list" id="historyList"></div>
+              <p class="history-no-match hidden" id="historyNoMatch">No saved receipts match that search.</p>
               <div class="empty-state" id="historyEmpty">
                 <span class="empty-icon-wrap"><svg class="empty-icon" aria-hidden="true"><use href="#i-folder" /></svg></span>
                 <strong>No saved receipts</strong>
@@ -824,6 +858,24 @@
               </div>
             </div>
           </section>
+
+          <aside class="panel history-aside" aria-label="Overview">
+            <header class="panel-header">
+              <h2>Overview</h2>
+            </header>
+            <div class="panel-body">
+              <div id="historyOverview"></div>
+              <div class="aside-export">
+                <h3 class="insight-heading">Your data</h3>
+                <p>Every receipt photo, plus a spreadsheet of every transaction naming its photo.</p>
+                <button class="btn btn-secondary btn-block" type="button" data-export-all>
+                  <svg class="btn-icon" aria-hidden="true"><use href="#i-download" /></svg>
+                  Download all data (.zip)
+                </button>
+              </div>
+            </div>
+          </aside>
+          </div>
         </div>
 
         <div class="tab-view hidden" id="budgetingView">
@@ -837,6 +889,7 @@
               </div>
             </section>
 
+            <div class="workspace-stack">
             <section class="panel" aria-label="Monthly spending">
               <header class="panel-header">
                 <h2>Monthly spending</h2>
@@ -860,6 +913,16 @@
                 </div>
               </div>
             </section>
+
+            <section class="panel" aria-label="Month at a glance">
+              <header class="panel-header">
+                <h2>Month at a glance</h2>
+              </header>
+              <div class="panel-body">
+                <div id="monthGlance"></div>
+              </div>
+            </section>
+            </div>
 
             <section class="panel" aria-label="Education expenses (529)">
               <header class="panel-header">

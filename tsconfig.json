@@ -43,6 +43,7 @@
     "src/services/zip-writer.service.ts",
     "src/services/data-export.service.ts",
     "src/services/spending-aggregator.service.ts",
+    "src/services/insights.service.ts",
     "src/services/notification.service.ts",
     "src/ui/dom-registry.ts",
     "src/ui/auth.view.ts",
@@ -53,6 +54,7 @@
     "src/ui/category-prompt.view.ts",
     "src/ui/rent-entries.view.ts",
     "src/ui/loading.view.ts",
+    "src/ui/insights.view.ts",
     "src/app/app.controller.ts",
     "src/main.ts"
   ]

@@ -122,7 +122,9 @@ namespace ReceiptRing.App {
       private readonly itemAliasStoreService: Services.ItemAliasStoreService,
       private readonly authApiService: Services.AuthApiService,
       private readonly educationExportApiService: Services.EducationExportApiService,
-      private readonly dataExportService: Services.DataExportService
+      private readonly dataExportService: Services.DataExportService,
+      private readonly insightsService: Services.InsightsService,
+      private readonly insightsView: UI.InsightsView
     ) {
       this.items = this.storageService.load();
     }
@@ -139,6 +141,7 @@ namespace ReceiptRing.App {
       this.render();
       void this.initGeminiSettings();
       void this.loadPeople();
+      void this.refreshRecentReceipts();
       // Corrections made on past receipts, so the first identification of this
       // session can already be free for anything the user has taught it.
       void this.itemAliasStoreService.load();
@@ -256,6 +259,10 @@ namespace ReceiptRing.App {
       this.elements.tabButtons.forEach((button) => {
         button.addEventListener("click", () => this.switchTab(button.dataset.tab as TabName));
       });
+      this.elements.tabJumpButtons.forEach((button) => {
+        button.addEventListener("click", () => this.switchTab(button.dataset.tabJump as TabName));
+      });
+      this.elements.historySearch.addEventListener("input", () => this.renderHistoryList());
 
       ["dragenter", "dragover"].forEach((eventName) => {
         this.elements.dropzone.addEventListener(eventName, (event) => {
@@ -1470,6 +1477,7 @@ namespace ReceiptRing.App {
           await this.receiptApiService.save(payload);
           this.setSaveStatus(imageDataUrl ? "Saved to history with the receipt photo." : "Saved to history.");
         }
+        void this.refreshRecentReceipts();
         // Unless a different receipt was opened while this one was saving.
         if (this.editingReceipt?.id === editing?.id) {
           this.savedSnapshot = snapshot;
@@ -1637,18 +1645,10 @@ namespace ReceiptRing.App {
         // receipt without refetching.
         this.receipts = receipts;
         this.elements.historyEmpty.classList.toggle("hidden", receipts.length > 0);
-        this.splitWorkspaceView.renderHistory(
-          this.elements.historyList,
-          receipts,
-          (receipt) => void this.deleteReceipt(receipt),
-          (receiptId, lineId, isFood) => void this.updateLineFood(receiptId, lineId, isFood),
-          // Attaching a receipt to a bank transaction is a bank feature, so a
-          // regular account gets no link buttons rather than ones that 403.
-          this.isAdmin ? (receipt) => this.openTransactionLinkModal(receipt.id) : undefined,
-          this.isAdmin ? (receipt) => void this.unlinkReceiptFromHistory(receipt) : undefined,
-          (receipt) => this.editSavedReceipt(receipt)
-        );
+        this.renderHistoryList();
+        this.renderReceiptSidebars();
       } catch (error) {
+        this.elements.historyNoMatch.classList.add("hidden");
         this.elements.historyEmpty.classList.remove("hidden");
         // Error messages can echo server/network response text; render as
         // text nodes, never HTML.
@@ -1661,6 +1661,72 @@ namespace ReceiptRing.App {
       } finally {
         done();
       }
+    }
+
+    /**
+     * The saved receipts, narrowed by the search box. Matches the store, the
+     * category, and every item on the receipt -- printed or identified -- so
+     * "mozzarella" finds the receipt that printed "GV SHRD MOZZ".
+     */
+    private renderHistoryList(): void {
+      const query = this.elements.historySearch.value.trim().toLowerCase();
+      const receipts = query
+        ? this.receipts.filter((receipt) =>
+            [
+              receipt.storeName ?? "",
+              receipt.category,
+              receipt.budgetCategory ?? "",
+              ...receipt.lines.flatMap((line) => [line.label, line.identification?.resolvedName ?? ""])
+            ].some((text) => text.toLowerCase().includes(query))
+          )
+        : this.receipts;
+      this.elements.historyNoMatch.classList.toggle("hidden", receipts.length > 0 || this.receipts.length === 0);
+      this.splitWorkspaceView.renderHistory(
+        this.elements.historyList,
+        receipts,
+        (receipt) => void this.deleteReceipt(receipt),
+        (receiptId, lineId, isFood) => void this.updateLineFood(receiptId, lineId, isFood),
+        // Attaching a receipt to a bank transaction is a bank feature, so a
+        // regular account gets no link buttons rather than ones that 403.
+        this.isAdmin ? (receipt) => this.openTransactionLinkModal(receipt.id) : undefined,
+        this.isAdmin ? (receipt) => void this.unlinkReceiptFromHistory(receipt) : undefined,
+        (receipt) => this.editSavedReceipt(receipt)
+      );
+    }
+
+    // The side panels that read the saved receipts: History's overview and
+    // the Split tab's recent list.
+    private renderReceiptSidebars(): void {
+      this.insightsView.renderHistoryOverview(
+        this.elements.historyOverview,
+        this.insightsService.historyOverview(this.receipts)
+      );
+      const recent = [...this.receipts]
+        .sort((left, right) => (left.createdAt < right.createdAt ? 1 : -1))
+        .slice(0, 5);
+      this.insightsView.renderRecentReceipts(this.elements.recentReceipts, recent, (receipt) =>
+        this.editSavedReceipt(receipt)
+      );
+    }
+
+    private async refreshRecentReceipts(): Promise<void> {
+      try {
+        this.receipts = await this.receiptApiService.list();
+        this.renderReceiptSidebars();
+      } catch (error) {
+        console.error("Failed to load recent receipts:", error);
+      }
+    }
+
+    private renderMonthGlance(): void {
+      const month = this.selectedMonth;
+      this.insightsView.renderMonthGlance(
+        this.elements.monthGlance,
+        month
+          ? this.insightsService.monthGlance(month, this.monthlySpend, this.receipts, this.bankTransactions)
+          : null,
+        month ? this.formatMonthLabel(month) : ""
+      );
     }
 
     private async deleteReceipt(receipt: Services.SavedReceiptSummary): Promise<void> {
@@ -1837,6 +1903,8 @@ namespace ReceiptRing.App {
       this.renderTransactions();
       this.renderTrend();
       this.renderRing();
+      this.renderMonthGlance();
+      this.renderReceiptSidebars();
     }
 
     /**
@@ -2076,6 +2144,7 @@ namespace ReceiptRing.App {
         this.renderTrend();
         this.renderRing();
         this.renderTransactions();
+        this.renderMonthGlance();
         this.notificationService.success(
           `Sorted ${result.updated} ${result.updated === 1 ? "item" : "items"} into categories.`
         );
@@ -2104,6 +2173,7 @@ namespace ReceiptRing.App {
       this.elements.budgetMonth.value = month ?? "";
       this.renderTrend();
       this.renderRing();
+      this.renderMonthGlance();
       this.renderRentEntries();
       void this.renderEducationExpenses();
       this.renderTransactions();
@@ -2472,6 +2542,7 @@ namespace ReceiptRing.App {
       );
       this.renderTrend();
       this.renderRing();
+      this.renderMonthGlance();
     }
 
     private async toggleTransactionFood(transactionId: string, isFood: boolean): Promise<void> {

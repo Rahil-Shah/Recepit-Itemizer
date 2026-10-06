@@ -19,6 +19,7 @@ namespace ReceiptRing {
   const rentEntryApiService = new Services.RentEntryApiService();
   const educationExportApiService = new Services.EducationExportApiService();
   const notificationService = new Services.NotificationService();
+  const insightsService = new Services.InsightsService(spendingAggregatorService);
   const dataExportService = new Services.DataExportService(
     (receiptId) => receiptApiService.imageUrl(receiptId),
     (entryId) => `/api/rent-entries/${encodeURIComponent(entryId)}/photo`
@@ -78,7 +79,9 @@ namespace ReceiptRing {
     itemAliasStoreService,
     authApiService,
     educationExportApiService,
-    dataExportService
+    dataExportService,
+    insightsService,
+    new UI.InsightsView(currencyFormatService)
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.

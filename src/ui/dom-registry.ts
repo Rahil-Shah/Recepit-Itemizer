@@ -78,6 +78,12 @@ namespace ReceiptRing.UI {
     openAppButtons: HTMLButtonElement[];
     categorizeMonthButton: HTMLButtonElement;
     exportAllDataButtons: HTMLButtonElement[];
+    recentReceipts: HTMLElement;
+    historyOverview: HTMLElement;
+    historySearch: HTMLInputElement;
+    historyNoMatch: HTMLElement;
+    monthGlance: HTMLElement;
+    tabJumpButtons: HTMLButtonElement[];
     categorizeMonthNote: HTMLElement;
     appBrandLink: HTMLAnchorElement;
     authOverlay: HTMLElement;
@@ -235,6 +241,14 @@ namespace ReceiptRing.UI {
         appBrandLink: this.getElement("#appBrandLink", HTMLAnchorElement),
         categorizeMonthButton: this.getElement("#categorizeMonthButton", HTMLButtonElement),
         exportAllDataButtons: Array.from(document.querySelectorAll("[data-export-all]")).filter(
+          (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
+        ),
+        recentReceipts: this.getElement("#recentReceipts", HTMLElement),
+        historyOverview: this.getElement("#historyOverview", HTMLElement),
+        historySearch: this.getElement("#historySearch", HTMLInputElement),
+        historyNoMatch: this.getElement("#historyNoMatch", HTMLElement),
+        monthGlance: this.getElement("#monthGlance", HTMLElement),
+        tabJumpButtons: Array.from(document.querySelectorAll("[data-tab-jump]")).filter(
           (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
         ),
         categorizeMonthNote: this.getElement("#categorizeMonthNote", HTMLElement),

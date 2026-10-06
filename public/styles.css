@@ -238,7 +238,9 @@ body[data-access="regular"] .admin-only {
   display: none;
 }
 
-.regular-only {
+/* Outranks the display rule of whatever component carries it (an empty
+   state is a grid), which otherwise showed admins the coming-soon note. */
+body:not([data-access="regular"]) .regular-only {
   display: none;
 }
 
@@ -1004,7 +1006,7 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
   display: flex;
   align-items: center;
   gap: 24px;
-  width: min(1480px, 100%);
+  width: min(1680px, 100%);
   min-height: var(--nav-height);
   margin: 0 auto;
   padding: 8px 10px 8px 18px;
@@ -1051,8 +1053,11 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
 }
 
 /* --- Tabs: a pill inside the pill --- */
+/* Three equal tabs: the same width whatever their labels, so the strip reads
+   as one balanced control rather than three buttons of different sizes. */
 .tab-nav {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(112px, 1fr));
   align-items: center;
   gap: 2px;
   margin-right: auto;
@@ -1064,6 +1069,8 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
 .tab-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-height: 38px;
   padding: 0 18px;
   border: 0;
@@ -1080,6 +1087,12 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
 
 .tab-button:hover {
   color: var(--ink);
+}
+
+.tab-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
 }
 
 .tab-button.is-active {
@@ -1102,7 +1115,7 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
 
 /* --- Layout --- */
 .app-main {
-  width: min(1480px, 100%);
+  width: min(1680px, 100%);
   margin: 0 auto;
   padding: clamp(20px, 3vw, 32px) clamp(16px, 3vw, 32px) 64px;
 }
@@ -1136,6 +1149,314 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
 
 .panel-wide {
   grid-column: 1 / -1;
+}
+
+/* Two panels stacked in one column: the scanner over recent receipts, the
+   ring over the month at a glance. */
+.workspace-stack {
+  display: grid;
+  gap: 20px;
+  align-content: start;
+  min-width: 0;
+}
+
+.workspace-stack > .panel:first-child {
+  border-top-left-radius: var(--radius-card-lg);
+}
+
+.workspace-stack > .panel:last-child:not(:first-child) {
+  border-bottom-left-radius: var(--radius-card-lg);
+}
+
+/* On a wide screen the budgeting view runs three across -- ring, month at a
+   glance, education expenses -- so no column ends far above its neighbours.
+   The stack stops being a box and its two panels become grid items. */
+@media (min-width: 1440px) {
+  #budgetingView .workspace {
+    grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr) minmax(460px, 1.3fr);
+  }
+
+  #budgetingView .workspace-stack {
+    display: contents;
+  }
+
+  #budgetingView .workspace-stack > .panel:last-child {
+    border-radius: var(--radius-card);
+    border-top-right-radius: var(--radius-card-lg);
+  }
+
+  #budgetingView .workspace > .panel:nth-child(3) {
+    border-radius: var(--radius-card);
+    border-bottom-right-radius: var(--radius-card-lg);
+  }
+}
+
+/* History: the receipts, with an overview beside them on a wide screen. */
+.history-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 20px;
+  align-items: start;
+}
+
+.panel.history-aside {
+  position: sticky;
+  top: calc(var(--nav-height) + var(--nav-gap) * 3);
+  border-top-right-radius: var(--radius-card-lg);
+}
+
+.history-search {
+  width: clamp(180px, 22vw, 300px);
+}
+
+.history-no-match {
+  margin: 8px 0 0;
+  color: var(--ink-3);
+  font-size: 14px;
+  text-align: center;
+}
+
+.aside-export {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.aside-export p {
+  margin: 0 0 12px;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* --- Insights: the small stats and ranked bars in the side panels --- */
+.insight-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.insight-stat {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--well);
+}
+
+.insight-stat:first-child {
+  border-top-left-radius: 1.6rem;
+}
+
+.insight-value {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insight-stat:first-child .insight-value {
+  color: var(--moss);
+}
+
+.insight-stat.is-up .insight-value {
+  color: var(--clay-ink);
+}
+
+.insight-stat.is-down .insight-value {
+  color: var(--moss);
+}
+
+.insight-sub {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insight-section {
+  margin-top: 22px;
+}
+
+.insight-heading {
+  margin: 0 0 10px;
+  color: var(--ink-3);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.insight-bars {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.insight-bars li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  font-size: 13.5px;
+}
+
+.insight-bar-name {
+  overflow: hidden;
+  color: var(--ink-2);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insight-bar-value {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.insight-bar-track {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--well);
+}
+
+.insight-bar-track span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--moss), #7d9270);
+}
+
+.insight-facts {
+  display: grid;
+  gap: 0;
+  margin: 18px 0 0;
+}
+
+.insight-facts dt {
+  margin-top: 12px;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.insight-facts dd {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.insight-fact-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insight-fact-value {
+  flex: none;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.insight-note {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* --- Recent receipts under the scanner --- */
+.recent-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.recent-item:hover {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.recent-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--warm-soft);
+  color: var(--clay-ink);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.recent-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recent-name {
+  overflow: hidden;
+  font-weight: 700;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-meta {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.recent-total {
+  color: var(--moss);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Every single-column list in the app is a grid, and a grid track defaults to
@@ -2301,8 +2622,7 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
 
 /* ---------------- 6. History ---------------- */
 .history-panel {
-  max-width: 880px;
-  margin: 0 auto;
+  min-width: 0;
 }
 
 .history-list {
@@ -4006,6 +4326,10 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
     grid-template-columns: minmax(280px, 1fr) minmax(380px, 1.3fr);
   }
 
+  .history-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  }
+
   .summary-panel {
     position: static;
     grid-column: 1 / -1;
@@ -4030,18 +4354,37 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
     margin-right: 0;
   }
 
-  .tab-button {
-    flex: 1;
-    justify-content: center;
-  }
 
   .workspace,
   #budgetingView .workspace {
     grid-template-columns: 1fr;
   }
 
-  .workspace > .panel {
+  .workspace > .panel,
+  .workspace-stack > .panel {
     border-radius: var(--radius-card);
+  }
+
+  .history-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .panel.history-aside {
+    position: static;
+  }
+
+  .history-panel .panel-actions {
+    flex: 1 1 100%;
+  }
+
+  .history-search {
+    flex: 1 1 160px;
+    min-width: 0;
+    width: auto;
+  }
+
+  .tab-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
