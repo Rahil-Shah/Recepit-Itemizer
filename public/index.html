@@ -178,8 +178,12 @@
           </div>
 
           <div class="pillnav-actions">
-            <button class="btn btn-ghost" type="button" data-auth-action="login">Log in</button>
-            <button class="btn btn-primary" type="button" data-auth-action="register">Get started</button>
+            <button class="btn btn-ghost signed-out-only" type="button" data-auth-action="login">Log in</button>
+            <button class="btn btn-primary signed-out-only" type="button" data-auth-action="register">Get started</button>
+            <button class="btn btn-primary signed-in-only" type="button" data-app-action="open">
+              Open app
+              <svg class="btn-icon"><use href="#i-arrow-right" /></svg>
+            </button>
           </div>
 
           <button
@@ -201,8 +205,9 @@
           <a href="#identification">Identification</a>
           <a href="#faq">FAQ</a>
           <div class="pillnav-menu-actions">
-            <button class="btn btn-outline btn-block" type="button" data-auth-action="login">Log in</button>
-            <button class="btn btn-primary btn-block" type="button" data-auth-action="register">Get started</button>
+            <button class="btn btn-outline btn-block signed-out-only" type="button" data-auth-action="login">Log in</button>
+            <button class="btn btn-primary btn-block signed-out-only" type="button" data-auth-action="register">Get started</button>
+            <button class="btn btn-primary btn-block signed-in-only" type="button" data-app-action="open">Open app</button>
           </div>
         </div>
       </header>
@@ -608,10 +613,12 @@
     <div class="app-shell">
       <header class="appbar">
         <div class="appbar-inner">
-          <div class="brand">
+          <!-- The logo opens the public home page, the one visitors see; its
+               "Open app" button comes back here. -->
+          <a class="brand brand-link" id="appBrandLink" href="#home" title="Receipt Ring home page">
             <span class="brand-logo" aria-hidden="true"><svg><use href="#i-receipt" /></svg></span>
             <span class="brand-name">Receipt Ring</span>
-          </div>
+          </a>
 
           <nav class="tab-nav" aria-label="Sections">
             <button class="tab-button is-active" id="tabReceipts" type="button" data-tab="receipts">Split</button>

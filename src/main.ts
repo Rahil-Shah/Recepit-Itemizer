@@ -92,8 +92,42 @@ namespace ReceiptRing {
     document.body.dataset.auth = state;
   };
 
+  // A signed-in user can still visit the public home page: the logo in the
+  // app bar opens it, and its "Open app" button (or Back) returns. Kept in
+  // history so the browser's Back button behaves the way it looks like it
+  // should.
+  const showLanding = (show: boolean): void => {
+    if (show) {
+      document.body.dataset.view = "landing";
+    } else {
+      delete document.body.dataset.view;
+    }
+    window.scrollTo(0, 0);
+  };
+  const openLanding = (): void => {
+    if (document.body.dataset.view === "landing") return;
+    history.pushState({ view: "landing" }, "", "#home");
+    showLanding(true);
+  };
+  const openApp = (): void => {
+    if ((history.state as { view?: string } | null)?.view === "landing") {
+      history.back();
+    } else {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+      showLanding(false);
+    }
+  };
+  window.addEventListener("popstate", (event) => {
+    if (document.body.dataset.auth !== "user") return;
+    showLanding((event.state as { view?: string } | null)?.view === "landing");
+  });
+  elements.appBrandLink.addEventListener("click", (event) => {
+    event.preventDefault();
+    openLanding();
+  });
+
   authView.init();
-  landingView.init((mode) => authView.show(mode));
+  landingView.init((mode) => authView.show(mode), openApp);
   authView.onAuthenticated = (user) => {
     authView.hide();
     setAuthState("user");

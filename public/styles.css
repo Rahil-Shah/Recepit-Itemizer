@@ -328,6 +328,30 @@ body[data-access="regular"] .regular-only {
   text-decoration: underline;
 }
 
+/* A signed-in user looking at the home page from the app's logo. */
+body[data-auth="user"][data-view="landing"] .landing {
+  display: block;
+}
+
+body[data-auth="user"][data-view="landing"] .app-shell,
+body[data-auth="user"] .signed-out-only,
+body:not([data-auth="user"]) .signed-in-only {
+  display: none !important;
+}
+
+.brand-link {
+  border-radius: var(--radius-pill);
+  transition: opacity var(--dur) var(--ease);
+}
+
+.brand-link:hover .brand-logo {
+  transform: rotate(-8deg) scale(1.05);
+}
+
+.brand-link .brand-logo {
+  transition: transform var(--dur) var(--ease);
+}
+
 body[data-auth="pending"] .landing,
 body[data-auth="pending"] .app-shell,
 body[data-auth="anon"] .app-shell,
