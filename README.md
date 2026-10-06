@@ -70,6 +70,9 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 | Imported bank transactions | yes | no |
 | Attach a receipt to a transaction | yes | no |
 | Log rent from a bank transaction | yes | no |
+| Settings: profile, password, sessions, preferences, full data export | yes | yes |
+| Admin tools (usage across every account) | yes | no |
+| Database backup | yes | no |
 
 An account is an admin when its email is listed in `ADMIN_EMAILS`. Nothing in the database marks it,
 so promoting or demoting someone is an environment change and a redeploy.
@@ -78,6 +81,67 @@ A regular account sees the Bank transactions panel with a **Coming soon** note i
 controls, rather than a missing panel: the feature exists, it is just not open to them. The server
 enforces the same line independently — every Plaid route, the receipt-to-transaction link, and rent
 backed by a transaction all answer 403 for a non-admin, whatever the page shows.
+
+### Settings
+
+**Settings** in the app bar opens a page every account gets:
+
+- **Profile**: the display name.
+- **Sign-in & security**: change the password (needs the current one, and signs every other session
+  out), see where the account is signed in, and sign out everywhere else.
+- **Gemini**: the personal API key (write-only from the browser) and the model.
+- **Preferences**: the tab the app opens on and the category new receipts start in, kept on the device.
+- **Your data**: the full export (every photo plus a CSV of every transaction).
+- **Admin** (admin accounts only): a way into Admin tools, and the database backup.
+- **Delete account**.
+
+### Admin tools
+
+Admin accounts get an **Admin** button in the app bar. The page shows accounts (new, active in the last
+30 days, with their own Gemini key), receipts, items itemized and how many were named, spend recorded,
+photos and the storage they take, bank links, rent and saved item names; twelve months of receipts and
+sign-ups; capacity against `MAX_USERS`; and every account in a searchable, sortable table. Selecting an
+account shows its usage, its receipts by month and its recent receipts' store, date, category and total,
+with a button to sign it out of every device.
+
+What an admin sees is counts and metadata. The admin routes return no password hashes, Gemini keys,
+bank tokens, photos or receipt contents, and every `/api/admin/*` route answers 403 to a non-admin
+whatever the page shows. A test checks the responses for leaked secrets.
+
+### Database backup
+
+**Settings → Admin → Download database backup** saves one ZIP: `manifest.json`, then every table as
+JSON Lines in the order a restore loads them (users, people, item names, receipts with their photos,
+lines, splits, rent, bank connections, accounts and transactions). Sessions and rate-limit counters are
+left out. Credential columns (password hashes, encrypted Gemini keys and Plaid tokens) are left out
+unless you tick **Include credentials** and confirm; with them, a restore keeps sign-ins and bank links
+working, and the encrypted values still need the server's `TOKEN_ENCRYPTION_KEY`. The server hands the
+tables over a page at a time (`GET /api/admin/backup`, then `GET /api/admin/backup/:table?cursor=`), so
+no single response outgrows a serverless limit.
+
+---
+
+## 🔌 Using the API from another app
+
+The browser app is one client of the API; a separate front end or a mobile app can be another.
+
+- **Base path**: every route answers under `/api/v1/...` (and `/api/...`, which this repo's page uses).
+  Use `/api/v1` from anything else, so a breaking change can ship as `/api/v2` without stranding you.
+- **Discovery**: `GET /api/v1/meta` says how to sign in; `GET /api/v1/openapi.json` is an OpenAPI 3.1
+  description of every route. A test fails if a route is added without being documented there.
+- **Sign-in without cookies** (mobile apps, other origins): send `X-Auth-Mode: token` to
+  `POST /api/v1/auth/login` or `/register`. The response carries `token` and `expiresAt` and sets no
+  cookie. Send it as `Authorization: Bearer <token>`; `POST /api/v1/auth/logout` ends it. It is the same
+  kind of session as the cookie, stored only as a hash.
+- **Browsers on another origin**: list the origin in `CORS_ORIGINS` (comma-separated, e.g.
+  `https://app.example.com`). Nothing else is allowed; there is no wildcard.
+
+```bash
+TOKEN=$(curl -s -X POST https://your-app/api/v1/auth/login \
+  -H 'Content-Type: application/json' -H 'X-Auth-Mode: token' \
+  -d '{"email":"you@example.com","password":"..."}' | jq -r .token)
+curl -s https://your-app/api/v1/receipts -H "Authorization: Bearer $TOKEN"
+```
 
 ---
 
@@ -315,10 +379,20 @@ things decide whether it is lossless:
 | `npm run db:deploy` | Apply existing migrations (production) |
 | `npm run build` | Generate the Prisma client and compile the TypeScript frontend to `public/app.js` |
 | `npm run check` | Typecheck the frontend without emitting |
-| `npm test` | Build the test bundle and run the unit tests |
+| `npm test` | Build the test bundles and run every test (unit, API routes, and UI) |
+| `npm run coverage` | The same, with coverage of `src/` and `server/`; fails under 80% of lines |
 | `npm run dev` | Run the server with `--watch` for reloads |
 | `npm run start` | Build the frontend and start the server |
 | `npm run vercel-build` | What Vercel runs on deploy: generate the client, `migrate deploy`, compile |
+
+### Tests
+
+`npm test` needs nothing running. The route tests start the real Express app (`createApp` in
+`server/app.mjs`) on PGlite, Postgres compiled to WebAssembly, with every migration applied. The UI
+tests open `public/index.html` and the app compiled from `src/` in jsdom, pointed at that same test
+server. Gemini and Plaid are stubbed. `npm run coverage` reports against the TypeScript and server
+sources, counting files no test loads as zero, and CI (`.github/workflows/test.yml`) runs it on every
+push and pull request.
 
 ---
 
