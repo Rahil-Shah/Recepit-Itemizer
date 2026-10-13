@@ -1521,7 +1521,29 @@
           <h2 id="receiptLinkTitle">Attach receipt to transaction</h2>
           <p>Select a receipt from your history to attach to this transaction as proof of payment.</p>
         </header>
+        <div class="receipt-link-for hidden" id="receiptLinkFor"></div>
+        <div class="receipt-link-toolbar">
+          <div class="link-filter" id="receiptLinkFilter" role="group" aria-label="Which receipts to show">
+            <button class="link-filter-option is-active" type="button" data-filter="unlinked" aria-pressed="true">
+              Unlinked <span class="link-filter-count" data-count="unlinked"></span>
+            </button>
+            <button class="link-filter-option" type="button" data-filter="linked" aria-pressed="false">
+              Linked <span class="link-filter-count" data-count="linked"></span>
+            </button>
+            <button class="link-filter-option" type="button" data-filter="all" aria-pressed="false">
+              All <span class="link-filter-count" data-count="all"></span>
+            </button>
+          </div>
+          <input
+            class="table-input receipt-link-search"
+            id="receiptLinkSearch"
+            type="search"
+            placeholder="Search stores, items"
+            aria-label="Search saved receipts"
+          />
+        </div>
         <div class="receipt-link-list" id="receiptLinkList"></div>
+        <p class="receipt-link-no-match hidden" id="receiptLinkNoMatch"></p>
         <div class="empty-state hidden" id="receiptLinkEmpty">
           <strong>No saved receipts yet</strong>
           <span>Scan a receipt first, or attach a photo straight from the transaction menu.</span>

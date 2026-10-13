@@ -3264,6 +3264,18 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
   color: var(--moss-deep);
 }
 
+/* Ticked by the attached receipt's food lines, so it is shown but can't be
+   changed from the row. Greyed rather than faded green, so it doesn't read
+   as a flag the user set. */
+.txn-food-toggle.is-locked,
+.txn-food-toggle.is-locked:disabled {
+  opacity: 1;
+  border-color: var(--timber);
+  background: var(--well);
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
 /* --- Per-transaction menu --- */
 .txn-menu {
   position: relative;
@@ -3532,6 +3544,182 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
   text-align: center;
   color: var(--ink-3);
   font-size: 14px;
+}
+
+.receipt-link-list.is-loading {
+  min-height: 180px;
+}
+
+/* The transaction being matched, kept in view above the receipts. */
+.receipt-link-for {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: -6px 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--well);
+}
+
+.receipt-link-for-label {
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.receipt-link-for strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt-link-for-meta {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.receipt-link-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.receipt-link-search {
+  flex: 1 1 180px;
+  max-width: 260px;
+  min-width: 0;
+}
+
+/* Segmented filter: one pill track, the active option raised out of it. */
+.link-filter {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--well);
+}
+
+.link-filter-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.link-filter-option:hover {
+  color: var(--ink);
+}
+
+.link-filter-option:focus-visible {
+  outline: 2px solid var(--moss);
+  outline-offset: 1px;
+}
+
+.link-filter-option.is-active {
+  background: var(--surface);
+  color: var(--moss-deep);
+  box-shadow: var(--shadow-soft);
+}
+
+.link-filter-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: rgba(44, 44, 36, 0.07);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.link-filter-option.is-active .link-filter-count {
+  background: var(--accent-soft);
+}
+
+.receipt-link-no-match {
+  margin: 4px 0 16px;
+  padding: 24px 12px;
+  border: 2px dashed var(--timber);
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  font-size: 14px;
+  text-align: center;
+}
+
+.receipt-link-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.receipt-link-tag {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt-link-tag.is-linked {
+  border-color: var(--warm-border);
+  background: var(--warm-soft);
+  color: var(--warm-ink);
+}
+
+.receipt-link-tag.is-match {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--moss-deep);
+}
+
+.receipt-link-item.is-match {
+  border-color: var(--accent-border);
+}
+
+@media (max-width: 560px) {
+  .link-filter {
+    width: 100%;
+  }
+
+  .link-filter-option {
+    flex: 1;
+    justify-content: center;
+    padding: 0 8px;
+  }
+
+  .receipt-link-search {
+    max-width: none;
+  }
 }
 
 /* --- Transaction picker (link from History) --- */

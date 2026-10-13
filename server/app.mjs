@@ -1025,8 +1025,16 @@ export function createApp({ prisma, plaid }) {
   // server/bank.mjs), so their window must be UTC — a local-time window would
   // clip the first or last day of the period.
   async function loadFoodSummary(req, window) {
-    const receiptWhere = { userId: req.userId, lines: { some: { isFood: true, ignored: false } } };
-    const txnWhere = { isFood: true, account: { connection: { userId: req.userId } } };
+    const receiptFood = { lines: { some: { isFood: true, ignored: false } } };
+    const receiptWhere = { userId: req.userId, ...receiptFood };
+    // A transaction whose attached receipt has food lines counts through those
+    // lines (the owner's share only), so the whole charge is left out even if it
+    // was flagged as food before the receipt was itemised.
+    const txnWhere = {
+      isFood: true,
+      account: { connection: { userId: req.userId } },
+      NOT: { linkedReceipt: { is: receiptFood } }
+    };
     if (window) {
       receiptWhere.createdAt = { gte: window.local.start, lt: window.local.end };
       txnWhere.date = { gte: window.utc.start, lt: window.utc.end };
@@ -1159,11 +1167,26 @@ export function createApp({ prisma, plaid }) {
         return res.status(400).json({ error: "This transaction is already linked to another receipt." });
       }
 
-      // Update the transaction with the linked receipt
-      const updated = await prisma.bankTransaction.update({
-        where: { id: bankTransactionId },
-        data: { linkedReceiptId: req.params.receiptId },
-        include: { account: { select: { name: true, lastFour: true } } }
+      // A receipt pays for one transaction. Linking it somewhere new used to
+      // trip the unique index and answer a bare 500; now it is refused plainly,
+      // or moved when the caller says so (the picker asks the user first).
+      const current = await prisma.bankTransaction.findFirst({
+        where: { linkedReceiptId: req.params.receiptId, id: { not: bankTransactionId } },
+        select: { id: true }
+      });
+      if (current && body.move !== true) {
+        return res.status(409).json({ error: "This receipt is already linked to another transaction." });
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        if (current) {
+          await tx.bankTransaction.update({ where: { id: current.id }, data: { linkedReceiptId: null } });
+        }
+        return tx.bankTransaction.update({
+          where: { id: bankTransactionId },
+          data: { linkedReceiptId: req.params.receiptId },
+          include: { account: { select: { name: true, lastFour: true } } }
+        });
       });
 
       res.json({

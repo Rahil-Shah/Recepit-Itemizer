@@ -1,5 +1,6 @@
 namespace ReceiptRing.App {
   type TabName = "receipts" | "history" | "budgeting" | "settings" | "admin";
+  type ReceiptLinkFilter = "unlinked" | "linked" | "all";
 
   /** What the Settings and Admin pages need from the rest of the app. */
   export interface PageHooks {
@@ -100,6 +101,9 @@ namespace ReceiptRing.App {
     // already been counted as rent says so and offers to undo it.
     private rentEntryByTransaction = new Map<string, string>();
     private linkingTransactionId: string | null = null;
+    // Which saved receipts the attach picker lists. Unlinked first: a receipt
+    // already on another transaction is rarely the one being looked for.
+    private receiptLinkFilter: ReceiptLinkFilter = "unlinked";
     // The receipt awaiting a transaction, when linking from the History tab.
     private linkingReceiptId: string | null = null;
     private attachingTransactionId: string | null = null;
@@ -274,6 +278,15 @@ namespace ReceiptRing.App {
       this.elements.transactionLinkCancelButton.addEventListener("click", () =>
         this.closeTransactionLinkModal()
       );
+      this.elements.receiptLinkFilter.addEventListener("click", (event) => {
+        const option = (event.target as HTMLElement).closest<HTMLElement>(".link-filter-option");
+        const filter = option?.dataset.filter;
+        if (filter === "unlinked" || filter === "linked" || filter === "all") {
+          this.receiptLinkFilter = filter;
+          this.renderReceiptLinkCards();
+        }
+      });
+      this.elements.receiptLinkSearch.addEventListener("input", () => this.renderReceiptLinkCards());
       this.elements.receiptLinkList.addEventListener("click", (event) => {
         const target = event.target as HTMLElement;
         const button = target.closest(".receipt-link-item");
@@ -2318,7 +2331,11 @@ namespace ReceiptRing.App {
       // Only the fixed-width controls, so they line up down the list.
       const actions = document.createElement("div");
       actions.className = "transaction-actions";
-      actions.append(this.buildFoodToggle(txn), this.buildTransactionMenu(txn, linkedReceipt));
+      const foodFromReceipt = this.receiptHasFood(linkedReceipt);
+      actions.append(
+        this.buildFoodToggle(txn, foodFromReceipt),
+        this.buildTransactionMenu(txn, linkedReceipt, foodFromReceipt)
+      );
 
       const amount = document.createElement("span");
       amount.className = "transaction-amount";
@@ -2364,20 +2381,40 @@ namespace ReceiptRing.App {
       return tag;
     }
 
+    // Whether an attached receipt has been itemised with at least one food
+    // line. Its food then counts line by line, so the transaction as a whole
+    // must not be ticked on top of it.
+    private receiptHasFood(receipt: Services.SavedReceiptSummary | null): boolean {
+      return receipt?.lines.some((line) => line.isFood && !line.ignored) ?? false;
+    }
+
     // The same food control the receipt lines use, but labelled. On a bank row
     // there is no column header to explain a lone checkbox, and an unlabelled
     // one read as decoration.
-    private buildFoodToggle(txn: Services.BankTransaction): HTMLElement {
+    //
+    // With food on the attached receipt the box shows ticked but locked: the
+    // row is food, but the education total takes the receipt's food lines (and
+    // only the owner's share of them), never the whole charge.
+    private buildFoodToggle(txn: Services.BankTransaction, foodFromReceipt: boolean): HTMLElement {
+      const isOn = txn.isFood || foodFromReceipt;
       const toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "line-food-check txn-food-toggle";
-      toggle.classList.toggle("is-on", txn.isFood);
-      toggle.setAttribute("aria-pressed", String(txn.isFood));
-      toggle.setAttribute("aria-label", txn.isFood ? "Remove food flag" : "Count as food");
-      toggle.title = txn.isFood
-        ? "Counted as food in education expenses"
-        : "Count this transaction as food in education expenses";
-      toggle.innerHTML = UI.SplitWorkspaceView.getFoodCheckIcon(txn.isFood);
+      toggle.classList.toggle("is-on", isOn);
+      toggle.setAttribute("aria-pressed", String(isOn));
+      toggle.innerHTML = UI.SplitWorkspaceView.getFoodCheckIcon(isOn);
+
+      if (foodFromReceipt) {
+        toggle.disabled = true;
+        toggle.classList.add("is-locked");
+        toggle.setAttribute("aria-label", "Food, from the attached receipt");
+        toggle.title = "The attached receipt's food items count toward education expenses";
+      } else {
+        toggle.setAttribute("aria-label", txn.isFood ? "Remove food flag" : "Count as food");
+        toggle.title = txn.isFood
+          ? "Counted as food in education expenses"
+          : "Count this transaction as food in education expenses";
+      }
 
       const label = document.createElement("span");
       label.className = "txn-food-label";
@@ -2392,7 +2429,8 @@ namespace ReceiptRing.App {
     // to it. These used to be a bare click on the row, which nothing announced.
     private buildTransactionMenu(
       txn: Services.BankTransaction,
-      linkedReceipt: Services.SavedReceiptSummary | null
+      linkedReceipt: Services.SavedReceiptSummary | null,
+      foodFromReceipt: boolean
     ): HTMLDetailsElement {
       const menu = document.createElement("details");
       menu.className = "txn-menu";
@@ -2426,9 +2464,12 @@ namespace ReceiptRing.App {
         addItem("Log as rent payment", () => void this.logTransactionAsRent(txn));
       }
 
-      addItem(txn.isFood ? "Remove food flag" : "Count as food", () =>
-        void this.toggleTransactionFood(txn.id, !txn.isFood)
-      );
+      // The receipt's food lines decide this row; the toggle is locked to match.
+      if (!foodFromReceipt) {
+        addItem(txn.isFood ? "Remove food flag" : "Count as food", () =>
+          void this.toggleTransactionFood(txn.id, !txn.isFood)
+        );
+      }
 
       if (txn.linkedReceiptId) {
         const receiptId = txn.linkedReceiptId;
@@ -2583,9 +2624,27 @@ namespace ReceiptRing.App {
     // and menu are right without another round-trip, and recompute the ring:
     // an attached receipt stops counting as a purchase of its own.
     private applyReceiptLink(transactionId: string, receiptId: string | null): void {
+      // A receipt moved here leaves the transaction it was on.
       this.bankTransactions = this.bankTransactions.map((txn) =>
-        txn.id === transactionId ? { ...txn, linkedReceiptId: receiptId } : txn
+        txn.id === transactionId
+          ? { ...txn, linkedReceiptId: receiptId }
+          : receiptId && txn.linkedReceiptId === receiptId
+            ? { ...txn, linkedReceiptId: null }
+            : txn
       );
+      // And the receipts' side, which the attach picker filters on.
+      const txn = this.bankTransactions.find((candidate) => candidate.id === transactionId);
+      this.receipts = this.receipts.map((receipt) => {
+        if (receiptId && receipt.id === receiptId) {
+          return {
+            ...receipt,
+            linkedTransaction: txn
+              ? { id: txn.id, description: txn.description, date: txn.date, amount: txn.amount }
+              : receipt.linkedTransaction
+          };
+        }
+        return receipt.linkedTransaction?.id === transactionId ? { ...receipt, linkedTransaction: null } : receipt;
+      });
       this.monthlySpend = this.spendingAggregatorService.aggregate(
         this.receipts,
         this.bankTransactions,
@@ -3082,9 +3141,14 @@ namespace ReceiptRing.App {
 
     private openReceiptLinkModal(transactionId: string): void {
       this.linkingTransactionId = transactionId;
+      this.receiptLinkFilter = "unlinked";
+      this.elements.receiptLinkSearch.value = "";
+      this.renderReceiptLinkFor();
       this.elements.receiptLinkEmpty.classList.add("hidden");
-      this.renderReceiptLinkList();
+      this.elements.receiptLinkNoMatch.classList.add("hidden");
+      this.replaceReceiptLinkCards([]);
       this.elements.receiptLinkModal.classList.remove("hidden");
+      void this.loadReceiptLinkList();
     }
 
     private closeReceiptLinkModal(): void {
@@ -3092,59 +3156,173 @@ namespace ReceiptRing.App {
       this.elements.receiptLinkModal.classList.add("hidden");
     }
 
-    private renderReceiptLinkList(): void {
+    private linkingTransaction(): Services.BankTransaction | null {
+      const id = this.linkingTransactionId;
+      return id ? this.bankTransactions.find((txn) => txn.id === id) ?? null : null;
+    }
+
+    // Names the transaction being matched, so its amount and date are in view
+    // while scanning the receipts for the one that paid for it.
+    private renderReceiptLinkFor(): void {
+      const target = this.elements.receiptLinkFor;
+      const txn = this.linkingTransaction();
+      target.classList.toggle("hidden", !txn);
+      if (!txn) return;
+      const label = document.createElement("span");
+      label.className = "receipt-link-for-label";
+      label.textContent = "For";
+      const desc = document.createElement("strong");
+      desc.textContent = txn.description ?? "Transaction";
+      const meta = document.createElement("span");
+      meta.className = "receipt-link-for-meta";
+      meta.textContent = `${this.formatTransactionDate(txn.date)} \u00b7 ${this.currencyFormatService.format(txn.amount)}`;
+      target.replaceChildren(label, desc, meta);
+    }
+
+    private async loadReceiptLinkList(): Promise<void> {
+      const done = this.loading.show(this.elements.receiptLinkList, "Loading your receipts\u2026");
+      try {
+        this.receipts = await this.receiptApiService.list();
+        if (this.linkingTransactionId) this.renderReceiptLinkCards();
+      } catch {
+        const msg = document.createElement("p");
+        msg.className = "receipt-link-empty";
+        msg.textContent = "Could not load receipts.";
+        this.replaceReceiptLinkCards([msg]);
+      } finally {
+        done();
+      }
+    }
+
+    private renderReceiptLinkCards(): void {
+      const filter = this.receiptLinkFilter;
+      const receipts = this.receipts;
+      const linkedCount = receipts.filter((receipt) => receipt.linkedTransaction).length;
+      const counts: Record<ReceiptLinkFilter, number> = {
+        unlinked: receipts.length - linkedCount,
+        linked: linkedCount,
+        all: receipts.length
+      };
+
+      this.elements.receiptLinkFilter.querySelectorAll<HTMLElement>(".link-filter-option").forEach((option) => {
+        const active = option.dataset.filter === filter;
+        option.classList.toggle("is-active", active);
+        option.setAttribute("aria-pressed", String(active));
+      });
+      this.elements.receiptLinkFilter.querySelectorAll<HTMLElement>(".link-filter-count").forEach((count) => {
+        count.textContent = String(counts[count.dataset.count as ReceiptLinkFilter] ?? 0);
+      });
+
+      this.elements.receiptLinkEmpty.classList.toggle("hidden", receipts.length > 0);
+      if (receipts.length === 0) {
+        this.elements.receiptLinkNoMatch.classList.add("hidden");
+        this.replaceReceiptLinkCards([]);
+        return;
+      }
+
+      const query = this.elements.receiptLinkSearch.value.trim().toLowerCase();
+      const txn = this.linkingTransaction();
+      const wanted = txn ? Math.abs(txn.amount) : null;
+      const matchesAmount = (receipt: Services.SavedReceiptSummary): boolean =>
+        wanted !== null && receipt.total !== null && Math.abs(Number(receipt.total) - wanted) < 0.005;
+
+      const shown = receipts
+        .filter((receipt) =>
+          filter === "all" ? true : filter === "linked" ? Boolean(receipt.linkedTransaction) : !receipt.linkedTransaction
+        )
+        .filter(
+          (receipt) =>
+            !query ||
+            [
+              receipt.storeName ?? "",
+              receipt.category,
+              ...receipt.lines.flatMap((line) => [line.label, line.identification?.resolvedName ?? ""])
+            ].some((text) => text.toLowerCase().includes(query))
+        )
+        // A receipt for exactly the transaction's amount is almost always the
+        // one, so those lead; otherwise newest first, as in History.
+        .sort(
+          (a, b) =>
+            Number(matchesAmount(b)) - Number(matchesAmount(a)) || (a.createdAt < b.createdAt ? 1 : -1)
+        );
+
+      const noMatch = this.elements.receiptLinkNoMatch;
+      noMatch.classList.toggle("hidden", shown.length > 0);
+      if (shown.length === 0) {
+        noMatch.textContent = query
+          ? "No receipts match that search."
+          : filter === "unlinked"
+            ? "Every saved receipt is already linked to a transaction."
+            : "No receipts are linked to a transaction yet.";
+      }
+
+      this.replaceReceiptLinkCards(shown.map((receipt) => this.buildReceiptLinkCard(receipt, matchesAmount(receipt))));
+    }
+
+    // Swaps the cards but not a loading overlay that may still be fading out
+    // over them.
+    private replaceReceiptLinkCards(cards: HTMLElement[]): void {
       const list = this.elements.receiptLinkList;
-      list.replaceChildren();
+      list.querySelectorAll(":scope > :not(.loading-overlay)").forEach((node) => node.remove());
+      list.append(...cards);
+    }
 
-      void (async () => {
-        try {
-          const receipts = await this.receiptApiService.list();
-          this.receipts = receipts;
-          if (receipts.length === 0) {
-            this.elements.receiptLinkEmpty.classList.remove("hidden");
-            return;
-          }
+    private buildReceiptLinkCard(receipt: Services.SavedReceiptSummary, matchesAmount: boolean): HTMLElement {
+      const card = document.createElement("button");
+      card.className = "receipt-link-item";
+      card.type = "button";
+      card.dataset.receiptId = receipt.id;
 
-          receipts.forEach((receipt) => {
-            const card = document.createElement("button");
-            card.className = "receipt-link-item";
-            card.type = "button";
-            card.dataset.receiptId = receipt.id;
+      const main = document.createElement("div");
+      main.className = "receipt-link-main";
 
-            const main = document.createElement("div");
-            main.className = "receipt-link-main";
+      const storeName = document.createElement("strong");
+      storeName.textContent = receipt.storeName || "Untitled receipt";
 
-            const storeName = document.createElement("strong");
-            storeName.textContent = receipt.storeName || "Untitled receipt";
+      const meta = document.createElement("span");
+      meta.className = "receipt-link-meta";
+      const when = new Date(receipt.createdAt).toLocaleDateString();
+      meta.textContent = `${receipt.category} \u00b7 ${when}`;
 
-            const meta = document.createElement("span");
-            meta.className = "receipt-link-meta";
-            const when = new Date(receipt.createdAt).toLocaleDateString();
-            meta.textContent = `${receipt.category} · ${when}`;
+      const amount = document.createElement("span");
+      amount.className = "receipt-link-amount";
+      amount.textContent = this.currencyFormatService.format(Number(receipt.total ?? 0));
 
-            const amount = document.createElement("span");
-            amount.className = "receipt-link-amount";
-            amount.textContent = this.currencyFormatService.format(Number(receipt.total ?? 0));
+      main.append(storeName, meta, amount);
 
-            main.append(storeName, meta, amount);
-            card.append(main);
+      // What sets this receipt apart in the list: it already belongs to
+      // another transaction, or its total is exactly this one's.
+      const tags = document.createElement("div");
+      tags.className = "receipt-link-tags";
+      const linked = receipt.linkedTransaction;
+      if (linked) {
+        card.classList.add("is-linked");
+        const tag = document.createElement("span");
+        tag.className = "receipt-link-tag is-linked";
+        tag.textContent = `Linked \u00b7 ${linked.description ?? "a transaction"}`;
+        tag.title = `Linked to ${linked.description ?? "a transaction"} on ${this.formatTransactionDate(linked.date)}`;
+        tags.append(tag);
+      }
+      if (matchesAmount) {
+        card.classList.add("is-match");
+        const tag = document.createElement("span");
+        tag.className = "receipt-link-tag is-match";
+        tag.textContent = "Same amount";
+        tags.append(tag);
+      }
+      if (tags.childElementCount > 0) main.append(tags);
+      card.append(main);
 
-            if (receipt.hasImage) {
-              const thumb = document.createElement("img");
-              thumb.className = "receipt-link-thumb";
-              thumb.src = this.receiptApiService.imageUrl(receipt.id);
-              thumb.alt = `Receipt from ${receipt.storeName || "an unknown store"}`;
-              card.append(thumb);
-            }
+      if (receipt.hasImage) {
+        const thumb = document.createElement("img");
+        thumb.className = "receipt-link-thumb";
+        thumb.loading = "lazy";
+        thumb.src = this.receiptApiService.imageUrl(receipt.id);
+        thumb.alt = `Receipt from ${receipt.storeName || "an unknown store"}`;
+        card.append(thumb);
+      }
 
-            list.append(card);
-          });
-        } catch (error) {
-          const msg = document.createElement("p");
-          msg.textContent = "Could not load receipts.";
-          list.append(msg);
-        }
-      })();
+      return card;
     }
 
     // --- Linking from the History side -------------------------------------
@@ -3256,8 +3434,18 @@ namespace ReceiptRing.App {
     // Returns whether the link stuck. Callers that fire this off from a drop
     // handler have nowhere to catch a rejection, so the toast happens here.
     private async linkReceiptToTransaction(receiptId: string, transactionId: string): Promise<boolean> {
+      // A receipt pays for one transaction, so linking one that is already on
+      // another moves it -- which is worth a confirmation, not a surprise.
+      const current = this.receipts.find((receipt) => receipt.id === receiptId)?.linkedTransaction ?? null;
+      const move = current !== null && current.id !== transactionId;
+      if (move) {
+        const from = `${current.description ?? "another transaction"} (${this.formatTransactionDate(current.date)})`;
+        if (!window.confirm(`This receipt is linked to ${from}. Move it to this transaction?`)) {
+          return false;
+        }
+      }
       try {
-        await this.receiptApiService.linkTransactionToReceipt(receiptId, transactionId);
+        await this.receiptApiService.linkTransactionToReceipt(receiptId, transactionId, move);
         this.applyReceiptLink(transactionId, receiptId);
         this.renderTransactions();
         this.notificationService.success("Receipt attached to the transaction.");

@@ -153,6 +153,13 @@ export function createBank(prisma, plaid = plaidClient) {
       return accountRowByPlaidId.get(plaidAccountId) ?? null;
     };
 
+    let pending = false;
+    // Removals wait until every page is in. A pending purchase that posts is
+    // removed under its old id and added under a new one, and the two can land
+    // on different pages; deleting first would throw away the row the posted
+    // copy is about to take over.
+    const removedIds = [];
+
     while (hasMore) {
       let page;
       try {
@@ -162,7 +169,8 @@ export function createBank(prisma, plaid = plaidClient) {
         // pulling the Item's initial transactions. That's expected, not a
         // failure: report it as pending so the next sync picks the data up.
         if (error?.plaidErrorCode === "PRODUCT_NOT_READY") {
-          return { imported, cursor, pending: true, incomplete: skipped > 0 };
+          pending = true;
+          break;
         }
         throw error;
       }
@@ -196,6 +204,29 @@ export function createBank(prisma, plaid = plaidClient) {
           amount: typeof txn.amount === "number" ? -txn.amount : 0,
           category: txn.personal_finance_category?.primary ?? txn.category?.[0] ?? null
         };
+
+        // When a pending purchase posts, Plaid removes the pending transaction
+        // and adds the posted one under a new id, pointing back through
+        // pending_transaction_id. Treating that as delete-and-insert dropped
+        // everything the user had done to the row: its linked receipt, food
+        // flag, budget category and rent entry. Move the pending row over to
+        // the posted id instead, so it keeps its own id and all of that.
+        const pendingId = txn.pending_transaction_id;
+        if (!existing && pendingId) {
+          const pendingRow = await prisma.bankTransaction.findFirst({
+            where: { plaidTxnId: pendingId, account: { connection: { userId } } },
+            select: { id: true }
+          });
+          if (pendingRow) {
+            await prisma.bankTransaction.update({
+              where: { id: pendingRow.id },
+              data: { plaidTxnId: txn.transaction_id, ...data }
+            });
+            imported += 1;
+            continue;
+          }
+        }
+
         await prisma.bankTransaction.upsert({
           where: { plaidTxnId: txn.transaction_id },
           update: data,
@@ -205,14 +236,19 @@ export function createBank(prisma, plaid = plaidClient) {
       }
 
       for (const removed of page?.removed ?? []) {
-        if (!removed?.transaction_id) continue;
-        await prisma.bankTransaction.deleteMany({
-          where: {
-            plaidTxnId: removed.transaction_id,
-            account: { connection: { userId } }
-          }
-        });
+        if (removed?.transaction_id) removedIds.push(removed.transaction_id);
       }
+    }
+
+    // A pending id taken over above no longer matches any row, so this only
+    // deletes transactions that really went away.
+    if (removedIds.length > 0) {
+      await prisma.bankTransaction.deleteMany({
+        where: {
+          plaidTxnId: { in: removedIds },
+          account: { connection: { userId } }
+        }
+      });
     }
 
     if (skipped > 0) {
@@ -223,7 +259,7 @@ export function createBank(prisma, plaid = plaidClient) {
     // Holding the old cursor when anything was skipped keeps the next sync
     // replaying those pages. The writes are upserts keyed on Plaid's
     // transaction id, so replaying costs a little work and duplicates nothing.
-    return { imported, cursor, pending: false, incomplete: skipped > 0 };
+    return { imported, cursor, pending, incomplete: skipped > 0 };
   }
 
   function register(app, requireAuth, requireAdmin) {

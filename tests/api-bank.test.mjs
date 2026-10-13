@@ -185,3 +185,126 @@ test("a stale connection without an institution id is backfilled on the next lin
   assert.equal(response.body.replaced, true);
   assert.equal(await server.prisma.bankConnection.count({ where: { itemId: "item-pub-old" } }), 0);
 });
+
+test("a pending purchase that posts keeps its receipt, food flag and rent entry", async () => {
+  const admin = await server.admin();
+  for (const connection of (await admin.get("/api/plaid/connections")).body) {
+    await admin.delete(`/api/plaid/connections/${connection.id}`);
+  }
+  await admin.post("/api/plaid/exchange", {
+    publicToken: "pub-pending",
+    metadata: { institution: { name: "Amex", institution_id: "ins_pending" } }
+  });
+
+  plaid.pages.push({
+    added: [txn("p1", { pending: true, amount: 30 }), txn("p2", { pending: true, amount: 900 })],
+    modified: [],
+    removed: [],
+    next_cursor: "p-c1",
+    has_more: false
+  });
+  await admin.post("/api/plaid/sync");
+  const pendingRows = (await admin.get("/api/transactions")).body;
+  const p1 = pendingRows.find((t) => t.description === "Shop p1");
+  const p2 = pendingRows.find((t) => t.description === "Shop p2");
+
+  const receipt = (
+    await admin.post("/api/receipts", {
+      category: "Dining",
+      lines: [{ clientId: "a", label: "Dinner", amount: 30, ignored: false }],
+      people: [],
+      assignments: []
+    })
+  ).body;
+  assert.equal((await admin.patch(`/api/receipts/${receipt.id}/link-transaction`, { bankTransactionId: p1.id })).status, 200);
+  await admin.patch(`/api/bank-transactions/${p1.id}/food`, { isFood: true });
+  const rent = await admin.post("/api/rent-entries", { year: 2026, month: 6, amount: 900, bankTransactionId: p2.id });
+  assert.equal(rent.status, 201);
+
+  // Both post. The removal of p2's pending copy arrives a page before its
+  // posted copy, which must not matter.
+  plaid.pages.push(
+    {
+      added: [txn("q1", { pending_transaction_id: "p1", amount: 36, name: "Shop p1 posted" })],
+      modified: [],
+      removed: [{ transaction_id: "p1" }, { transaction_id: "p2" }],
+      next_cursor: "p-c2",
+      has_more: true
+    },
+    {
+      added: [txn("q2", { pending_transaction_id: "p2", amount: 900 })],
+      modified: [],
+      removed: [],
+      next_cursor: "p-c3",
+      has_more: false
+    }
+  );
+  assert.equal((await admin.post("/api/plaid/sync")).body.imported, 2);
+
+  const posted = (await admin.get("/api/transactions")).body;
+  assert.equal(posted.length, 2);
+  const q1 = posted.find((t) => t.id === p1.id);
+  assert.equal(q1.description, "Shop p1 posted");
+  // The tip lands when a charge posts; the new amount is taken.
+  assert.equal(q1.amount, -36);
+  assert.equal(q1.linkedReceiptId, receipt.id);
+  assert.equal(q1.isFood, true);
+  assert.ok(posted.some((t) => t.id === p2.id));
+  const rentRow = await server.prisma.rentEntry.findUnique({ where: { id: rent.body.id } });
+  assert.equal(rentRow.bankTransactionId, p2.id);
+  assert.equal(await server.prisma.bankTransaction.count({ where: { plaidTxnId: { in: ["p1", "p2"] } } }), 0);
+
+  // A transaction that really went away is still removed.
+  plaid.pages.push({ added: [], modified: [], removed: [{ transaction_id: "q2" }], next_cursor: "p-c4", has_more: false });
+  await admin.post("/api/plaid/sync");
+  assert.deepEqual((await admin.get("/api/transactions")).body.map((t) => t.id), [p1.id]);
+});
+
+test("a linked receipt moves only when asked, and its food lines replace the transaction's flag", async () => {
+  const admin = await server.admin();
+  plaid.pages.push({
+    added: [txn("m1", { amount: 50 }), txn("m2", { amount: 60 })],
+    modified: [],
+    removed: [],
+    next_cursor: "m-c1",
+    has_more: false
+  });
+  await admin.post("/api/plaid/sync");
+  const rows = (await admin.get("/api/transactions")).body;
+  const m1 = rows.find((t) => t.description === "Shop m1");
+  const m2 = rows.find((t) => t.description === "Shop m2");
+
+  const receipt = (
+    await admin.post("/api/receipts", {
+      category: "Groceries",
+      lines: [
+        { clientId: "a", label: "Apples", amount: 8, ignored: false, isFood: true },
+        { clientId: "b", label: "Soap", amount: 42, ignored: false }
+      ],
+      people: [],
+      assignments: []
+    })
+  ).body;
+  await admin.patch(`/api/receipts/${receipt.id}/link-transaction`, { bankTransactionId: m1.id });
+
+  const refused = await admin.patch(`/api/receipts/${receipt.id}/link-transaction`, { bankTransactionId: m2.id });
+  assert.equal(refused.status, 409);
+  const moved = await admin.patch(`/api/receipts/${receipt.id}/link-transaction`, { bankTransactionId: m2.id, move: true });
+  assert.equal(moved.status, 200);
+  const after = (await admin.get("/api/transactions")).body;
+  assert.equal(after.find((t) => t.id === m1.id).linkedReceiptId, null);
+  assert.equal(after.find((t) => t.id === m2.id).linkedReceiptId, receipt.id);
+  // Linking it again where it already is stays a plain success.
+  assert.equal((await admin.patch(`/api/receipts/${receipt.id}/link-transaction`, { bankTransactionId: m2.id })).status, 200);
+
+  // Flagged as food on its own, m2 would add $60; its receipt's food lines
+  // count instead, so only the apples do.
+  await admin.patch(`/api/bank-transactions/${m2.id}/food`, { isFood: true });
+  await admin.patch(`/api/bank-transactions/${m1.id}/food`, { isFood: true });
+  const food = (await admin.get("/api/receipts/food-summary")).body;
+  const ids = food.foodTransactions.map((t) => t.transactionId);
+  assert.ok(!ids.includes(m2.id));
+  assert.ok(ids.includes(m1.id));
+  const group = food.foodReceipts.find((g) => g.receiptId === receipt.id);
+  assert.equal(group.total, 8);
+});

@@ -213,11 +213,13 @@ namespace ReceiptRing.Services {
       return (await response.json()) as FoodSummary;
     }
 
-    async linkTransactionToReceipt(receiptId: string, bankTransactionId: string): Promise<void> {
+    // `move` takes the receipt off whichever transaction holds it now; without
+    // it, a receipt linked elsewhere is refused with a 409.
+    async linkTransactionToReceipt(receiptId: string, bankTransactionId: string, move = false): Promise<void> {
       const response = await fetch(`/api/receipts/${encodeURIComponent(receiptId)}/link-transaction`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankTransactionId })
+        body: JSON.stringify(move ? { bankTransactionId, move: true } : { bankTransactionId })
       });
       if (!response.ok) {
         const message = await response.text();
