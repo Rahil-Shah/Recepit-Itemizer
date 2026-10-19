@@ -129,6 +129,20 @@ export function createBank(prisma, plaid = plaidClient) {
     let skipped = 0;
     let hasMore = true;
     let refetchedAccounts = false;
+    // Removals wait until every page is in. When a pending charge posts, Plaid
+    // removes the pending id and adds the posted one, and the two need not
+    // arrive on the same page: deleting the pending row as soon as its removal
+    // shows up would leave nothing for the posted one to take over below.
+    const removedIds = [];
+    const applyRemovals = async () => {
+      if (removedIds.length === 0) return;
+      await prisma.bankTransaction.deleteMany({
+        where: {
+          plaidTxnId: { in: removedIds },
+          account: { connection: { userId } }
+        }
+      });
+    };
 
     // Accounts are captured at link time, but an Item's account list can grow
     // afterwards (the user adds a card, or opens a new account at the same
@@ -162,6 +176,7 @@ export function createBank(prisma, plaid = plaidClient) {
         // pulling the Item's initial transactions. That's expected, not a
         // failure: report it as pending so the next sync picks the data up.
         if (error?.plaidErrorCode === "PRODUCT_NOT_READY") {
+          await applyRemovals();
           return { imported, cursor, pending: true, incomplete: skipped > 0 };
         }
         throw error;
@@ -187,6 +202,22 @@ export function createBank(prisma, plaid = plaidClient) {
           continue;
         }
 
+        // A posted transaction that replaces a pending one takes over the
+        // pending row rather than starting a new one. Everything the user did
+        // to it while it was pending -- a linked receipt, the food flag, a
+        // budget category, a rent entry -- hangs off that row's id, and used
+        // to vanish when the pending row was deleted a day or two later.
+        const pending =
+          !existing && txn.pending_transaction_id
+            ? await prisma.bankTransaction.findFirst({
+                where: {
+                  plaidTxnId: txn.pending_transaction_id,
+                  account: { connection: { userId } }
+                },
+                select: { id: true }
+              })
+            : null;
+
         const data = {
           accountId,
           date: new Date(txn.date),
@@ -196,24 +227,26 @@ export function createBank(prisma, plaid = plaidClient) {
           amount: typeof txn.amount === "number" ? -txn.amount : 0,
           category: txn.personal_finance_category?.primary ?? txn.category?.[0] ?? null
         };
-        await prisma.bankTransaction.upsert({
-          where: { plaidTxnId: txn.transaction_id },
-          update: data,
-          create: { plaidTxnId: txn.transaction_id, ...data }
-        });
+        if (pending) {
+          await prisma.bankTransaction.update({
+            where: { id: pending.id },
+            data: { plaidTxnId: txn.transaction_id, ...data }
+          });
+        } else {
+          await prisma.bankTransaction.upsert({
+            where: { plaidTxnId: txn.transaction_id },
+            update: data,
+            create: { plaidTxnId: txn.transaction_id, ...data }
+          });
+        }
         imported += 1;
       }
 
       for (const removed of page?.removed ?? []) {
-        if (!removed?.transaction_id) continue;
-        await prisma.bankTransaction.deleteMany({
-          where: {
-            plaidTxnId: removed.transaction_id,
-            account: { connection: { userId } }
-          }
-        });
+        if (removed?.transaction_id) removedIds.push(removed.transaction_id);
       }
     }
+    await applyRemovals();
 
     if (skipped > 0) {
       console.warn(
