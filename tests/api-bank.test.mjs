@@ -147,6 +147,67 @@ test("exchange, sync, list, flag, link a receipt, log rent, re-link, remove", as
   assert.equal((await admin.get("/api/plaid/connections")).body.length, 0);
 });
 
+test("a pending charge that posts keeps its receipt, food flag and rent entry", async () => {
+  const admin = await server.admin();
+  await admin.post("/api/plaid/exchange", {
+    publicToken: "pub-posting",
+    metadata: { institution: { name: "Amex", institution_id: "ins_posting" } }
+  });
+
+  plaid.pages.push({ added: [txn("p1", { name: "PENDING SHOP" })], modified: [], removed: [], next_cursor: "c1", has_more: false });
+  await admin.post("/api/plaid/sync");
+  const pendingRow = (await admin.get("/api/transactions")).body.find((t) => t.description === "PENDING SHOP");
+
+  const receipt = (
+    await admin.post("/api/receipts", {
+      category: "Groceries",
+      lines: [{ clientId: "a", label: "Thing", amount: 12.5, ignored: false }],
+      people: [],
+      assignments: []
+    })
+  ).body;
+  assert.equal((await admin.patch(`/api/receipts/${receipt.id}/link-transaction`, { bankTransactionId: pendingRow.id })).status, 200);
+  assert.equal((await admin.patch(`/api/bank-transactions/${pendingRow.id}/food`, { isFood: true })).status, 200);
+  const rent = await admin.post("/api/rent-entries", { year: 2026, month: 5, amount: 12.5, bankTransactionId: pendingRow.id });
+  assert.equal(rent.status, 201);
+
+  // Plaid removes the pending id and adds the posted one -- here on separate
+  // pages, the harder case -- with the posted one pointing back at the pending.
+  plaid.pages.push(
+    { added: [], modified: [], removed: [{ transaction_id: "p1" }], next_cursor: "c2", has_more: true },
+    {
+      added: [txn("posted-1", { name: "SHOP", amount: 13, pending_transaction_id: "p1" })],
+      modified: [],
+      removed: [],
+      next_cursor: "c3",
+      has_more: false
+    }
+  );
+  assert.equal((await admin.post("/api/plaid/sync")).status, 200);
+
+  const after = (await admin.get("/api/transactions")).body;
+  assert.equal(after.length, 1);
+  const posted = after[0];
+  assert.equal(posted.id, pendingRow.id);
+  assert.equal(posted.description, "SHOP");
+  assert.equal(posted.amount, -13);
+  assert.equal(posted.linkedReceiptId, receipt.id);
+  assert.equal(posted.isFood, true);
+  const stored = await server.prisma.bankTransaction.findUnique({ where: { id: posted.id } });
+  assert.equal(stored.plaidTxnId, "posted-1");
+  const rentRow = await server.prisma.rentEntry.findUnique({ where: { id: rent.body.id } });
+  assert.equal(rentRow.bankTransactionId, posted.id);
+
+  // A plain removal still deletes the row.
+  plaid.pages.push({ added: [], modified: [], removed: [{ transaction_id: "posted-1" }], next_cursor: "c4", has_more: false });
+  await admin.post("/api/plaid/sync");
+  assert.equal((await admin.get("/api/transactions")).body.length, 0);
+
+  await server.prisma.rentEntry.delete({ where: { id: rent.body.id } });
+  const [connection] = (await admin.get("/api/plaid/connections")).body;
+  assert.equal((await admin.delete(`/api/plaid/connections/${connection.id}`)).status, 204);
+});
+
 test("sync reports a bank still preparing, and one that needs reconnecting", async () => {
   const admin = await server.admin();
   await admin.post("/api/plaid/exchange", { publicToken: "pub-3", metadata: { institution: { name: "Ally" } } });
