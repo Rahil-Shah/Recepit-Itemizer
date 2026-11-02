@@ -54,3 +54,36 @@ test("a refused update throws with the server's reason", async () => {
 
   await assert.rejects(service.update("gone", payload), /Update failed \(404\).*Receipt not found/);
 });
+
+test("createShare posts how long the link lasts and whether it can edit", async () => {
+  const { service, calls } = makeService({ ok: true, json: { id: "s1", path: "/r/abc", canEdit: true } });
+  const link = await service.createShare("r/1", 90, true);
+
+  assert.equal(calls[0].url, "/api/receipts/r%2F1/shares");
+  assert.equal(calls[0].init.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { expiresInMinutes: 90, canEdit: true });
+  assert.equal(link.path, "/r/abc");
+});
+
+test("the other share calls reach that link's own url", async () => {
+  const { service, calls } = makeService({ ok: true, json: [] });
+  await service.listShares("r1");
+  await service.setShareEditing("r1", "s/1", false);
+  await service.removeShare("r1", "s/1");
+
+  assert.deepEqual(calls.map((call) => [call.init?.method ?? "GET", call.url]), [
+    ["GET", "/api/receipts/r1/shares"],
+    ["PATCH", "/api/receipts/r1/shares/s%2F1"],
+    ["DELETE", "/api/receipts/r1/shares/s%2F1"]
+  ]);
+  assert.deepEqual(JSON.parse(calls[1].init.body), { canEdit: false });
+});
+
+test("a refused share call throws the server's own sentence", async () => {
+  const { service } = makeService({ ok: false, status: 400, json: { error: "A link can last from 1 minute to 30 days." } });
+  await assert.rejects(service.createShare("r1", 99999, false), /^Error: A link can last from 1 minute to 30 days\.$/);
+  await assert.rejects(service.removeShare("r1", "s1"), /A link can last/);
+
+  const silent = makeService({ ok: false, status: 500, json: {} });
+  await assert.rejects(silent.service.listShares("r1"), /Could not load the links \(500\)/);
+});

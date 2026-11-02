@@ -134,6 +134,19 @@ namespace ReceiptRing.Services {
     foodTransactions: FoodSummaryTransaction[];
   }
 
+  /** A live public link to a receipt. */
+  export interface ReceiptShare {
+    id: string;
+    canEdit: boolean;
+    expiresAt: string;
+    createdAt: string;
+  }
+
+  /** A link just created: the only time its path can be told. */
+  export interface ReceiptShareLink extends ReceiptShare {
+    path: string;
+  }
+
   export class ReceiptApiService {
     // The photo lives behind the session cookie, so it is fetched from the API
     // like any other request rather than linked from a public path.
@@ -188,6 +201,48 @@ namespace ReceiptRing.Services {
         const message = await response.text();
         throw new Error(`Delete failed (${response.status}): ${message}`);
       }
+    }
+
+    async createShare(receiptId: string, expiresInMinutes: number, canEdit: boolean): Promise<ReceiptShareLink> {
+      const response = await fetch(this.sharesUrl(receiptId), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expiresInMinutes, canEdit })
+      });
+      return (await this.shareResult(response, "Could not create the link")) as ReceiptShareLink;
+    }
+
+    async listShares(receiptId: string): Promise<ReceiptShare[]> {
+      const response = await fetch(this.sharesUrl(receiptId));
+      return (await this.shareResult(response, "Could not load the links")) as ReceiptShare[];
+    }
+
+    async setShareEditing(receiptId: string, shareId: string, canEdit: boolean): Promise<ReceiptShare> {
+      const response = await fetch(`${this.sharesUrl(receiptId)}/${encodeURIComponent(shareId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ canEdit })
+      });
+      return (await this.shareResult(response, "Could not update the link")) as ReceiptShare;
+    }
+
+    async removeShare(receiptId: string, shareId: string): Promise<void> {
+      const response = await fetch(`${this.sharesUrl(receiptId)}/${encodeURIComponent(shareId)}`, {
+        method: "DELETE"
+      });
+      if (!response.ok) await this.shareResult(response, "Could not stop the link");
+    }
+
+    private sharesUrl(receiptId: string): string {
+      return `/api/receipts/${encodeURIComponent(receiptId)}/shares`;
+    }
+
+    // These errors are shown to the user as they are, so it is the server's own
+    // sentence that is thrown, without a status code in front of it.
+    private async shareResult(response: Response, fallback: string): Promise<unknown> {
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(body.error || `${fallback} (${response.status}).`);
+      return body;
     }
 
     async updateLineFood(receiptId: string, lineId: string, isFood: boolean): Promise<void> {
