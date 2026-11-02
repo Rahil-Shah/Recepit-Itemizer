@@ -41,6 +41,12 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 - **Item Identification**: Receipts print shorthand — `GV SHRD MOZZ 8Z` — which is unreadable weeks later. Hit **Identify items** and every line gets its real product name, with a confidence score. Click any item to see what the receipt printed, its item code, brand, size, where the answer came from and why; correct it, or pick one of the alternatives. Corrections are remembered, so the same item on your next receipt from that shop is named for free.
 - **Smart Categorization**: Categorize receipt items (Dining, Groceries, Travel, etc.) and save defaults for specific items. Receipt category defaults to **Groceries**.
 - **Saved History (Postgres)**: Save a split to a Postgres database and review previous receipts, items, prices, and per-person splits under the **History** tab. Marked something wrong? **Edit in Split** reopens a saved receipt in the Split tab with its assignments, food flags, and item names, and **Save changes** updates it in place — it keeps its photo, its budget month, and any linked bank transaction.
+- **Filter a receipt by person**: Every saved receipt with a split shows a row of names in **History**. Click one to see only what that person bought: each item with their share of it, how it was split (`Split evenly · 3 people`, `Split by % · 40%`, `Custom amount`, `Not split`), their share of the tax and their total. **Everyone** brings the full list back. The amounts come from the same calculator as the Split tab, so they add up to what the split says that person owes.
+- **Share links**: **Share** on a saved receipt creates a link anyone can open, with or without an account, for as long as you choose (1 minute to 30 days).
+  - The page at `/r/<token>` shows the items, totals, who owes what and the same filter by person. It never shows the photo, your email, the bank transaction, or lines you marked ignored.
+  - Turn on **Allow editing** and whoever holds the link can also change the store name, items, prices, tax and who is on each item. They can only pick people already on the receipt. Food flags, the category, the photo and any linked bank transaction stay out of reach. If two people edit at once, the second is told to reload rather than overwriting the first.
+  - The dialog lists a receipt's live links, where editing can be flipped on or off and **Stop sharing** ends a link at once. Deleting the receipt ends its links too.
+  - A link's address can only be copied when it is created: only a hash of its token is stored, as with sessions.
 - **Education Expense Export**: From **Budgets → Education expenses**, **Export** asks for a format and for one month or a whole year, then downloads:
   - a **PDF** to read, print or send: a summary with the Food / Rent / Total figures, then every food receipt with its items and your share, and every rent payment, each with its photo beside it. Every page carries the Receipt Ring logo and name in its header and a page number in its footer, and the text is set in the app's own Fraunces and Nunito.
   - a **spreadsheet** (`.xlsx`) to sort and total yourself: a Summary, the food receipts (each receipt photo embedded beside its row), the individual food items, and rent payments (each proof photo embedded).
@@ -377,7 +383,7 @@ things decide whether it is lossless:
 | `npm run db:up` / `npm run db:down` | Start / stop the local Postgres container |
 | `npm run db:migrate` | Create & apply a migration (development) |
 | `npm run db:deploy` | Apply existing migrations (production) |
-| `npm run build` | Generate the Prisma client and compile the TypeScript frontend to `public/app.js` |
+| `npm run build` | Generate the Prisma client and compile the TypeScript frontend to `public/app.js` and the share link's page to `public/shared.js` |
 | `npm run check` | Typecheck the frontend without emitting |
 | `npm test` | Build the test bundles and run every test (unit, API routes, and UI) |
 | `npm run coverage` | The same, with coverage of `src/` and `server/`; fails under 80% of lines |
@@ -389,8 +395,8 @@ things decide whether it is lossless:
 
 `npm test` needs nothing running. The route tests start the real Express app (`createApp` in
 `server/app.mjs`) on PGlite, Postgres compiled to WebAssembly, with every migration applied. The UI
-tests open `public/index.html` and the app compiled from `src/` in jsdom, pointed at that same test
-server. Gemini and Plaid are stubbed. `npm run coverage` reports against the TypeScript and server
+tests open `public/index.html` and the app compiled from `src/` (and `public/shared.html` with its own
+bundle) in jsdom, pointed at that same test server. Gemini and Plaid are stubbed. `npm run coverage` reports against the TypeScript and server
 sources, counting files no test loads as zero, and CI (`.github/workflows/test.yml`) runs it on every
 push and pull request.
 
