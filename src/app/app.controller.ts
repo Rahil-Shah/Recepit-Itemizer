@@ -136,7 +136,8 @@ namespace ReceiptRing.App {
       private readonly insightsService: Services.InsightsService,
       private readonly insightsView: UI.InsightsView,
       private readonly adminBackupService: Services.AdminBackupService,
-      private readonly preferencesService: Services.PreferencesService
+      private readonly preferencesService: Services.PreferencesService,
+      private readonly shareReceiptView: UI.ShareReceiptView
     ) {
       this.items = this.storageService.load();
     }
@@ -1733,7 +1734,8 @@ namespace ReceiptRing.App {
         // regular account gets no link buttons rather than ones that 403.
         this.isAdmin ? (receipt) => this.openTransactionLinkModal(receipt.id) : undefined,
         this.isAdmin ? (receipt) => void this.unlinkReceiptFromHistory(receipt) : undefined,
-        (receipt) => this.editSavedReceipt(receipt)
+        (receipt) => this.editSavedReceipt(receipt),
+        (receipt) => this.shareReceiptView.open(receipt)
       );
     }
 

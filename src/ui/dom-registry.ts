@@ -123,6 +123,19 @@ namespace ReceiptRing.UI {
     rentEntryPhoto: HTMLInputElement;
     rentEntryCancelButton: HTMLButtonElement;
     rentEntrySaveButton: HTMLButtonElement;
+    shareModal: HTMLElement;
+    shareTitle: HTMLElement;
+    shareDurationAmount: HTMLInputElement;
+    shareDurationUnit: HTMLSelectElement;
+    shareCanEdit: HTMLInputElement;
+    shareCreateButton: HTMLButtonElement;
+    shareStatus: HTMLElement;
+    shareResult: HTMLElement;
+    shareLinkInput: HTMLInputElement;
+    shareCopyButton: HTMLButtonElement;
+    shareActive: HTMLElement;
+    shareActiveList: HTMLElement;
+    shareCloseButton: HTMLButtonElement;
     receiptLinkModal: HTMLElement;
     receiptLinkList: HTMLElement;
     receiptLinkEmpty: HTMLElement;
@@ -293,6 +306,19 @@ namespace ReceiptRing.UI {
         deleteAccountPassword: this.getElement("#deleteAccountPassword", HTMLInputElement),
         deleteAccountButton: this.getElement("#deleteAccountButton", HTMLButtonElement),
         deleteAccountStatus: this.getElement("#deleteAccountStatus", HTMLElement),
+        shareModal: this.getElement("#shareModal", HTMLElement),
+        shareTitle: this.getElement("#shareTitle", HTMLElement),
+        shareDurationAmount: this.getElement("#shareDurationAmount", HTMLInputElement),
+        shareDurationUnit: this.getElement("#shareDurationUnit", HTMLSelectElement),
+        shareCanEdit: this.getElement("#shareCanEdit", HTMLInputElement),
+        shareCreateButton: this.getElement("#shareCreateButton", HTMLButtonElement),
+        shareStatus: this.getElement("#shareStatus", HTMLElement),
+        shareResult: this.getElement("#shareResult", HTMLElement),
+        shareLinkInput: this.getElement("#shareLinkInput", HTMLInputElement),
+        shareCopyButton: this.getElement("#shareCopyButton", HTMLButtonElement),
+        shareActive: this.getElement("#shareActive", HTMLElement),
+        shareActiveList: this.getElement("#shareActiveList", HTMLElement),
+        shareCloseButton: this.getElement("#shareCloseButton", HTMLButtonElement),
         rentEntriesList: this.getElement("#rentEntriesList", HTMLElement),
         rentEntryModal: this.getElement("#rentEntryModal", HTMLElement),
         rentEntryDate: this.getElement("#rentEntryDate", HTMLInputElement),

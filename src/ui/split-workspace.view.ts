@@ -801,7 +801,8 @@ namespace ReceiptRing.UI {
       onLineFood?: (receiptId: string, lineId: string, isFood: boolean) => void,
       onLinkTransaction?: (receipt: Services.SavedReceiptSummary) => void,
       onUnlinkTransaction?: (receipt: Services.SavedReceiptSummary) => void,
-      onEdit?: (receipt: Services.SavedReceiptSummary) => void
+      onEdit?: (receipt: Services.SavedReceiptSummary) => void,
+      onShare?: (receipt: Services.SavedReceiptSummary) => void
     ): void {
       container.innerHTML = "";
       receipts.forEach((receipt) => {
@@ -955,9 +956,18 @@ namespace ReceiptRing.UI {
           body.append(detail);
         }
 
-        if (onEdit || onDelete || onLinkTransaction || onUnlinkTransaction) {
+        if (onShare || onEdit || onDelete || onLinkTransaction || onUnlinkTransaction) {
           const actions = document.createElement("div");
           actions.className = "history-actions";
+
+          if (onShare) {
+            const share = document.createElement("button");
+            share.type = "button";
+            share.className = "btn btn-secondary btn-small";
+            share.textContent = "Share";
+            share.addEventListener("click", () => onShare(receipt));
+            actions.append(share);
+          }
 
           // Reopens the receipt in Split with every control it was made with,
           // which is where a wrong assignment or food flag actually gets fixed.

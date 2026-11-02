@@ -96,7 +96,8 @@ namespace ReceiptRing {
     insightsService,
     new UI.InsightsView(currencyFormatService),
     adminBackupService,
-    preferencesService
+    preferencesService,
+    new UI.ShareReceiptView(elements, receiptApiService)
   );
 
   // Gate the app behind authentication: nothing starts until a session exists.

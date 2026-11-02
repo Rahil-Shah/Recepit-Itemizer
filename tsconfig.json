@@ -56,6 +56,7 @@
     "src/ui/monthly-trend.view.ts",
     "src/ui/person-filter.view.ts",
     "src/ui/split-workspace.view.ts",
+    "src/ui/share-receipt.view.ts",
     "src/ui/category-prompt.view.ts",
     "src/ui/rent-entries.view.ts",
     "src/ui/loading.view.ts",

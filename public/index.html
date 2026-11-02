@@ -1515,6 +1515,51 @@
       </section>
     </div>
 
+    <div class="modal-backdrop hidden" id="shareModal" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+      <section class="modal-card">
+        <header class="modal-heading">
+          <h2 id="shareTitle">Share receipt</h2>
+          <p>Anyone with the link can open this receipt without an account. They see its items, totals and the names on the split, but never the photo or your account details.</p>
+        </header>
+        <div class="field">
+          <span class="field-label">Link expires after</span>
+          <div class="share-duration">
+            <input class="table-input" id="shareDurationAmount" type="number" min="1" step="1" value="1" inputmode="numeric" aria-label="How long the link lasts" />
+            <select class="table-select" id="shareDurationUnit" aria-label="Unit of time">
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days" selected>Days</option>
+            </select>
+          </div>
+          <p class="field-note">Up to 30 days.</p>
+        </div>
+        <label class="share-switch share-switch-large">
+          <input id="shareCanEdit" type="checkbox" role="switch" />
+          <span>
+            <strong>Allow editing</strong>
+            <small>Anyone with the link can change the items, prices, tax and who is on each item.</small>
+          </span>
+        </label>
+        <button class="btn btn-primary btn-block" id="shareCreateButton" type="button">Create link</button>
+        <p class="share-status" id="shareStatus" role="status"></p>
+        <div class="share-result hidden" id="shareResult">
+          <span class="field-label">Your link</span>
+          <div class="share-link-row">
+            <input class="table-input" id="shareLinkInput" type="text" readonly aria-label="Share link" />
+            <button class="btn btn-secondary" id="shareCopyButton" type="button">Copy</button>
+          </div>
+          <p class="field-note">Copy it now. For privacy, it can't be shown again.</p>
+        </div>
+        <div class="share-active hidden" id="shareActive">
+          <span class="field-label">Active links</span>
+          <div id="shareActiveList"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="shareCloseButton" type="button">Done</button>
+        </div>
+      </section>
+    </div>
+
     <div class="modal-backdrop hidden" id="receiptLinkModal" role="dialog" aria-modal="true" aria-labelledby="receiptLinkTitle">
       <section class="modal-card modal-card-wide">
         <header class="modal-heading">
