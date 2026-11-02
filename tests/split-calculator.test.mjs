@@ -374,3 +374,53 @@ test("mixed-mode lines still hand the equal people an even part", () => {
   assert.equal(byId.get("p2") + byId.get("p3"), 667);
   assert.ok(Math.abs(byId.get("p2") - byId.get("p3")) <= 1);
 });
+
+test("personBreakdown: a person's lines, how each was split, and shares that sum to their total", () => {
+  const calculator = makeCalculator();
+  const lines = [line("even", 10), line("percent", 20), line("custom", 9), line("theirs", 3), line("nobody", 5), line("skipped", 7, true)];
+  const assignments = [
+    equalAssignment("even", "p1"),
+    equalAssignment("even", "p2"),
+    equalAssignment("even", "p3"),
+    { id: "a", lineId: "percent", personId: "p1", mode: "percentage", value: 25 },
+    { id: "b", lineId: "percent", personId: "p2", mode: "percentage", value: 75 },
+    { id: "c", lineId: "custom", personId: "p1", mode: "amount", value: 2.5 },
+    { id: "d", lineId: "custom", personId: "p3", mode: "amount", value: 6.5 },
+    equalAssignment("theirs", "p1"),
+    equalAssignment("skipped", "p1")
+  ];
+
+  const breakdown = calculator.personBreakdown(people, lines, assignments, 4, "p1");
+  assert.deepEqual(
+    breakdown.items.map(({ lineId, mode, value, splitCount }) => [lineId, mode, value, splitCount]),
+    [
+      ["even", "equal", 0, 3],
+      ["percent", "percentage", 25, 2],
+      ["custom", "amount", 2.5, 2],
+      ["theirs", "equal", 0, 1]
+    ]
+  );
+  assert.equal(breakdown.items[1].share, 5);
+  assert.equal(breakdown.items[1].lineAmount, 20);
+  assert.equal(breakdown.items[2].share, 2.5);
+
+  // Odd cents included, every person's lines add back up to calculate()'s figures.
+  const { totals } = calculator.calculate(people, lines, assignments, 4);
+  for (const person of people) {
+    const own = calculator.personBreakdown(people, lines, assignments, 4, person.id);
+    const total = totals.find((entry) => entry.personId === person.id);
+    assert.equal(own.items.reduce((sum, item) => sum + cents(item.share), 0), cents(total.itemTotal));
+    assert.equal(own.itemTotal, total.itemTotal);
+    assert.equal(own.allocatedTax, total.allocatedTax);
+    assert.equal(own.finalTotal, total.finalTotal);
+  }
+});
+
+test("personBreakdown: someone with nothing, or not on the receipt at all, comes back empty", () => {
+  const calculator = makeCalculator();
+  const lines = [line("a", 10)];
+  const assignments = [equalAssignment("a", "p1")];
+  assert.equal(calculator.personBreakdown(people, lines, assignments, 1, "p2").items.length, 0);
+  const stranger = calculator.personBreakdown(people, lines, assignments, 1, "nobody");
+  assert.equal(stranger.finalTotal, 0);
+});

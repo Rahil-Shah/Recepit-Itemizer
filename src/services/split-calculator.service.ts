@@ -125,6 +125,51 @@ namespace ReceiptRing.Services {
       };
     }
 
+    /**
+     * One person's lines and what each cost them. Walks the lines with a ledger
+     * of its own in the order calculate() does, so odd cents land on the same
+     * people and the shares here add up to that person's total there.
+     */
+    personBreakdown(
+      people: readonly Domain.SplitPerson[],
+      lines: readonly Domain.ReceiptLine[],
+      assignments: readonly Domain.LineAssignment[],
+      tax: number,
+      personId: string
+    ): Domain.PersonBreakdown {
+      const ledger: CentLedger = { drift: new Map(), turn: 0 };
+      const items: Domain.PersonBreakdownItem[] = [];
+
+      lines
+        .filter((line) => !line.ignored)
+        .forEach((line) => {
+          const lineAssignments = assignments.filter((assignment) => assignment.lineId === line.id);
+          if (lineAssignments.length === 0) return;
+
+          const shares = this.getLineShares(line, lineAssignments, ledger);
+          const mine = lineAssignments.find((assignment) => assignment.personId === personId);
+          if (!mine) return;
+          items.push({
+            lineId: line.id,
+            label: line.label,
+            lineAmount: line.amount,
+            share: this.toAmount(shares.get(personId) ?? 0),
+            mode: mine.mode,
+            value: mine.value,
+            splitCount: lineAssignments.length
+          });
+        });
+
+      const total = this.calculate(people, lines, assignments, tax).totals.find((entry) => entry.personId === personId);
+      return {
+        personId,
+        items,
+        itemTotal: total?.itemTotal ?? 0,
+        allocatedTax: total?.allocatedTax ?? 0,
+        finalTotal: total?.finalTotal ?? 0
+      };
+    }
+
     getUnassignedCount(
       lines: readonly Domain.ReceiptLine[],
       assignments: readonly Domain.LineAssignment[]

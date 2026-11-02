@@ -141,6 +141,28 @@ namespace ReceiptRing.Domain {
     finalTotal: number;
   }
 
+  /** One line as it fell to one person. */
+  export interface PersonBreakdownItem {
+    lineId: string;
+    label: string;
+    lineAmount: number;
+    share: number;
+    mode: AssignmentMode;
+    // The percentage or custom amount they were given; 0 on an even split.
+    value: number;
+    // How many people the line was split between, this person included.
+    splitCount: number;
+  }
+
+  /** What one person bought on a receipt, and how each line was split. */
+  export interface PersonBreakdown {
+    personId: string;
+    items: PersonBreakdownItem[];
+    itemTotal: number;
+    allocatedTax: number;
+    finalTotal: number;
+  }
+
   export interface SplitSummary {
     totals: PersonSplitTotal[];
     // Money on assigned lines that custom amounts or percentages left on
