@@ -1646,6 +1646,9 @@ export function createApp({ prisma, plaid }) {
   // directory. On Vercel the CDN serves it and this handler is never reached
   // (see vercel.json); dotfiles: "ignore" keeps any stray dotfile a 404 here.
   const publicDir = path.join(__dirname, "public");
+  // A share link is a page anyone can open, whatever the token turns out to be
+  // worth. The page itself asks the API (vercel.json does the same on Vercel).
+  app.get("/r/:token", (_req, res) => res.sendFile(path.join(publicDir, "shared.html")));
   app.use(express.static(publicDir, { dotfiles: "ignore", index: "index.html" }));
 
   // Anything else is a page that does not exist. Vercel serves public/404.html

@@ -1392,3 +1392,72 @@ h1.display {
   font-size: 15.5px;
   line-height: 1.65;
 }
+
+/* The page behind a share link. */
+.shared-page {
+  max-width: 560px;
+}
+
+.shared-card {
+  margin-bottom: 16px;
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.shared-page .shared-card h2 {
+  margin: 0 0 8px;
+}
+
+.shared-card .person-filter {
+  margin: 0 0 8px;
+}
+
+.shared-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+}
+
+.shared-row:last-child {
+  border-bottom: none;
+}
+
+.shared-row b {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.shared-row-label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shared-row-note {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.shared-totals {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-strong);
+}
+
+.shared-row.is-final {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.shared-page .shared-expiry {
+  color: var(--ink-3);
+  font-size: 13px;
+}

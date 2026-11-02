@@ -20,6 +20,7 @@ CLAUDE.md
 
 # Compiled frontend bundle (built by npm run build; Vercel builds it on deploy)
 public/app.js
+public/shared.js
 dist/
 
 # Vercel CLI project link

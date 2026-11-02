@@ -16,6 +16,7 @@ import { JPEG_DATA_URL } from "./test-server.mjs";
 const require = createRequire(import.meta.url);
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const loadApp = require(path.join(root, "tests", "dist", "app.cjs"));
+const loadSharedPage = require(path.join(root, "tests", "dist", "shared.cjs"));
 
 // jsdom's own constructors, put on the global object so the app's
 // `instanceof HTMLButtonElement`, `new Event(...)` and friends see the same
@@ -208,6 +209,67 @@ export async function openApp(server, { as = null, setup } = {}) {
   await ui.waitFor(() => window.document.body.dataset.auth !== "pending", { message: "the session check" });
   if (as) await ui.waitFor(() => window.document.body.dataset.access, { message: "the app to start" });
   await ui.settle();
+  return ui;
+}
+
+/**
+ * Open a share link the way a stranger does: public/shared.html and its own
+ * bundle, at `linkPath`, with no session.
+ */
+export async function openSharedPage(server, linkPath) {
+  const errors = [];
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on("jsdomError", (error) => errors.push(error));
+  const html = readFileSync(path.join(root, "public", "shared.html"), "utf8").replace(/<script[^>]*src=[^>]*><\/script>/g, "");
+  const dom = new JSDOM(html, { url: `${server.baseUrl}${linkPath}`, pretendToBeVisual: true, virtualConsole });
+  const { window } = dom;
+  installGlobals(window);
+
+  const requests = [];
+  const pageFetch = async (input, init = {}) => {
+    const url = new URL(String(input), `${server.baseUrl}/`);
+    requests.push(`${init.method ?? "GET"} ${url.pathname}`);
+    return fetch(url, { method: init.method ?? "GET", headers: init.headers, body: init.body });
+  };
+
+  loadSharedPage({
+    window,
+    document: window.document,
+    localStorage: window.localStorage,
+    fetch: pageFetch,
+    navigator: window.navigator,
+    Event: window.Event,
+    CustomEvent: window.CustomEvent,
+    EventTarget: window.EventTarget,
+    MouseEvent: window.MouseEvent,
+    KeyboardEvent: window.KeyboardEvent
+  });
+
+  const ui = {
+    window,
+    document: window.document,
+    errors,
+    requests,
+    $: (selector) => window.document.querySelector(selector),
+    $$: (selector) => [...window.document.querySelectorAll(selector)],
+    text: (selector) => window.document.querySelector(selector)?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+    click: (element) => element.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true })),
+    type(element, value) {
+      element.value = value;
+      element.dispatchEvent(new window.Event("input", { bubbles: true }));
+      element.dispatchEvent(new window.Event("change", { bubbles: true }));
+    },
+    async waitFor(check, message = "the page") {
+      const started = Date.now();
+      for (;;) {
+        const value = await check();
+        if (value) return value;
+        if (Date.now() - started > 5000) throw new Error(`timed out waiting for ${message}`);
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      }
+    }
+  };
+  await ui.waitFor(() => !ui.$("#sharedReceipt .loader"), "the receipt");
   return ui;
 }
 

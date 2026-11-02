@@ -48,7 +48,8 @@ test("the OpenAPI document is served and covers every registered route", async (
   const app = createApp({ prisma: server.prisma });
   const registered = new Set();
   for (const layer of app.router.stack) {
-    if (!layer.route) continue;
+    // The API's routes, not the share link's page.
+    if (!layer.route?.path.startsWith("/api")) continue;
     for (const method of Object.keys(layer.route.methods)) {
       const path = layer.route.path.replace(/^\/api/, "").replace(/:(\w+)/g, "{$1}");
       registered.add(`${method} ${path}`);

@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outFile": "public/shared.js"
+  },
+  "files": [
+    "src/domain/models.ts",
+    "src/services/currency-format.service.ts",
+    "src/services/split-calculator.service.ts",
+    "src/services/shared-receipt-api.service.ts",
+    "src/ui/loading.view.ts",
+    "src/ui/person-filter.view.ts",
+    "src/ui/shared-receipt.view.ts",
+    "src/shared-receipt.main.ts"
+  ]
+}

@@ -40,7 +40,8 @@ function wrap(input, output) {
   writeFileSync(path.join(dist, output), `${header}${code}\nreturn ReceiptRing;\n};\n${map}\n`);
 }
 
-// The pure-service bundle most tests load, and the whole app (main.ts
-// included) that the UI tests drive in jsdom.
+// The pure-service bundle most tests load, the whole app (main.ts included)
+// that the UI tests drive in jsdom, and the share link's page.
 wrap("bundle.js", "bundle.cjs");
 wrap("app.js", "app.cjs");
+wrap("shared.js", "shared.cjs");
