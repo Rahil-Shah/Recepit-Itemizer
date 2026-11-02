@@ -2822,12 +2822,97 @@ body:not([data-tab="budgeting"]) .loading-overlay[data-for="budgeting"] {
   object-fit: contain;
 }
 
-.history-people {
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--well);
+/* The names above a receipt's lines, and what the chosen one bought. */
+.person-filter {
+  margin-top: 12px;
+}
+
+.person-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.person-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
   color: var(--ink-2);
-  font-size: 13px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.person-chip:hover {
+  border-color: var(--accent-border);
+}
+
+.person-chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.person-breakdown {
+  display: grid;
+  margin-top: 10px;
+}
+
+.person-breakdown-row,
+.person-breakdown-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+
+.person-breakdown-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.person-breakdown-how,
+.person-breakdown-amounts span {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.person-breakdown-amounts {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.person-breakdown b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.person-breakdown-total {
+  color: var(--ink-2);
+}
+
+.person-breakdown-total.is-final {
+  border-bottom: none;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.person-breakdown-empty {
+  margin: 0;
+  padding: 8px 0;
+  color: var(--ink-3);
+  font-size: 13.5px;
 }
 
 .history-actions {

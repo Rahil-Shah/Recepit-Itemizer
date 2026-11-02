@@ -99,6 +99,75 @@ test("history: list, search, food flags, edit, delete", async () => {
   assert.deepEqual(ui.errors, []);
 });
 
+test("history: click a name to see what that person bought and how it was split", async () => {
+  const user = await server.signUp({ name: "Rahil" });
+  const [me] = (await user.get("/api/people")).body;
+  const sam = (await user.post("/api/people", { name: "Sam" })).body;
+  const ana = (await user.post("/api/people", { name: "Ana" })).body;
+  await user.post("/api/receipts", {
+    storeName: "Costco",
+    category: "Groceries",
+    tax: 3,
+    total: 63,
+    people: [{ clientId: me.id }, { clientId: sam.id }, { clientId: ana.id }],
+    lines: [
+      { clientId: "a", label: "Wine", amount: 30, ignored: false, identification: { resolvedName: "Pinot Noir", confidence: 0.9, source: "ai", alternatives: [], confirmed: false } },
+      { clientId: "b", label: "Olives", amount: 20, ignored: false },
+      { clientId: "c", label: "Socks", amount: 10, ignored: false },
+      { clientId: "d", label: "Gum", amount: 5, ignored: true }
+    ],
+    assignments: [
+      { lineClientId: "a", personClientId: me.id, mode: "equal", value: 0 },
+      { lineClientId: "a", personClientId: sam.id, mode: "equal", value: 0 },
+      { lineClientId: "b", personClientId: me.id, mode: "percentage", value: 25 },
+      { lineClientId: "b", personClientId: sam.id, mode: "percentage", value: 75 },
+      { lineClientId: "c", personClientId: sam.id, mode: "equal", value: 0 }
+    ]
+  });
+
+  const ui = await openApp(server, { as: user });
+  ui.click("#tabHistory");
+  await ui.waitFor(() => card(ui, "Costco"), { message: "the card" });
+  const costco = card(ui, "Costco");
+  const chip = (name) => [...costco.querySelectorAll(".person-chip")].find((c) => c.textContent === name);
+  const lines = costco.querySelector(".history-lines");
+  const panel = costco.querySelector(".person-breakdown");
+  const rows = () => [...panel.querySelectorAll(".person-breakdown-row")].map((row) => row.textContent.replace(/\s+/g, " "));
+
+  assert.deepEqual([...costco.querySelectorAll(".person-chip")].map((c) => c.textContent), ["Everyone", "Rahil", "Sam", "Ana"]);
+  assert.equal(chip("Everyone").getAttribute("aria-pressed"), "true");
+  assert.ok(panel.classList.contains("hidden"));
+  assert.ok(!lines.classList.contains("hidden"));
+
+  ui.click(chip("Rahil"));
+  assert.equal(chip("Rahil").getAttribute("aria-pressed"), "true");
+  assert.equal(chip("Everyone").getAttribute("aria-pressed"), "false");
+  assert.ok(lines.classList.contains("hidden"));
+  assert.deepEqual(rows(), [
+    "Pinot NoirSplit evenly · 2 people$15.00of $30.00",
+    "OlivesSplit by % · 25%$5.00of $20.00"
+  ]);
+  assert.match(panel.textContent, /Share of tax\$1\.00/);
+  assert.match(panel.textContent, /Total\$21\.00/);
+
+  ui.click(chip("Sam"));
+  assert.deepEqual(rows(), [
+    "Pinot NoirSplit evenly · 2 people$15.00of $30.00",
+    "OlivesSplit by % · 75%$15.00of $20.00",
+    "SocksNot split$10.00"
+  ]);
+  assert.match(panel.textContent, /Total\$42\.00/);
+
+  // On the receipt, but with nothing assigned.
+  ui.click(chip("Ana"));
+  assert.match(panel.textContent, /Nothing on this receipt is assigned/);
+
+  ui.click(chip("Everyone"));
+  assert.ok(panel.classList.contains("hidden"));
+  assert.ok(!lines.classList.contains("hidden"));
+  assert.deepEqual(ui.errors, []);
+});
+
 test("history for an admin: link a receipt to a transaction and unlink it", async () => {
   const admin = await server.admin();
   await seed(admin);

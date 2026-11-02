@@ -69,7 +69,8 @@ namespace ReceiptRing.UI {
 
     constructor(
       private readonly currencyFormatService: Services.CurrencyFormatService,
-      private readonly receiptApiService: Services.ReceiptApiService
+      private readonly receiptApiService: Services.ReceiptApiService,
+      private readonly personFilterView: PersonFilterView
     ) {}
 
     renderLines(
@@ -870,6 +871,24 @@ namespace ReceiptRing.UI {
         if (receipt.lines.length > 0) {
           const linesWrap = document.createElement("div");
           linesWrap.className = "history-lines";
+          if (receipt.people.length > 0) {
+            body.append(
+              this.personFilterView.build(
+                {
+                  people: receipt.people,
+                  lines: receipt.lines.map((line) => ({
+                    id: line.id,
+                    name: line.identification?.resolvedName ?? line.label,
+                    amount: line.amount,
+                    ignored: line.ignored,
+                    assignments: line.assignments
+                  })),
+                  tax: Number(receipt.tax) || 0
+                },
+                linesWrap
+              )
+            );
+          }
           receipt.lines.forEach((line) => {
             const lineRow = document.createElement("div");
             lineRow.className = "history-line";
@@ -922,13 +941,6 @@ namespace ReceiptRing.UI {
             linesWrap.append(lineRow);
           });
           body.append(linesWrap);
-        }
-
-        if (receipt.people.length > 0) {
-          const peopleWrap = document.createElement("div");
-          peopleWrap.className = "history-people";
-          peopleWrap.textContent = `People: ${receipt.people.map((person) => person.name).join(", ")}`;
-          body.append(peopleWrap);
         }
 
         const linked = receipt.linkedTransaction;

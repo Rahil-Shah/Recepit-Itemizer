@@ -43,6 +43,7 @@
     "../src/services/insights.service.ts",
     "../src/services/receipt-image.service.ts",
     "../src/services/gemini.service.ts",
+    "../src/ui/person-filter.view.ts",
     "../src/ui/split-workspace.view.ts",
     "../src/ui/loading.view.ts",
     "../src/ui/dom-registry.ts",

@@ -53,7 +53,11 @@ namespace ReceiptRing {
   // Any loader written into the page's own markup gets its drawing here.
   UI.mountLoaders(document);
   const categoryPromptView = new UI.CategoryPromptView(categories, elements);
-  const splitWorkspaceView = new UI.SplitWorkspaceView(currencyFormatService, receiptApiService);
+  const splitWorkspaceView = new UI.SplitWorkspaceView(
+    currencyFormatService,
+    receiptApiService,
+    new UI.PersonFilterView(currencyFormatService, splitCalculatorService)
+  );
   const budgetRingView = new UI.BudgetRingView(currencyFormatService);
   const monthlyTrendView = new UI.MonthlyTrendView(currencyFormatService);
   const rentEntriesView = new UI.RentEntriesView(currencyFormatService);

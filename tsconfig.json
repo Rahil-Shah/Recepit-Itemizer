@@ -54,6 +54,7 @@
     "src/ui/landing.view.ts",
     "src/ui/budget-ring.view.ts",
     "src/ui/monthly-trend.view.ts",
+    "src/ui/person-filter.view.ts",
     "src/ui/split-workspace.view.ts",
     "src/ui/category-prompt.view.ts",
     "src/ui/rent-entries.view.ts",
