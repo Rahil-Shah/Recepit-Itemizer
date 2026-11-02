@@ -107,3 +107,108 @@ test("an expired or made-up link says so", async () => {
   assert.match(madeUp.text(".page-title"), /no longer available/);
   assert.equal(madeUp.$(".shared-card"), null);
 });
+
+test("with edit access, a stranger can change the items, tax and split, and the owner sees it", async () => {
+  const { user, receipt, link } = await sharedReceipt({ canEdit: true });
+  const ui = await openSharedPage(server, link.path);
+  const inputs = () => ui.$$(".shared-editor-line");
+  const line = (index) => inputs()[index];
+  const name = (index) => line(index).querySelector('input[type="text"]');
+  const price = (index) => line(index).querySelector(".shared-editor-amount");
+  const chip = (index, person) => [...line(index).querySelectorAll(".person-chip")].find((c) => c.textContent === person);
+  const owned = async () => (await user.get("/api/receipts")).body.find((item) => item.id === receipt.id);
+
+  ui.click(ui.$(".shared-edit-button"));
+  assert.equal(inputs().length, 3);
+
+  // A form that cannot be saved says why and sends nothing.
+  ui.type(name(0), "  ");
+  ui.$(".shared-editor").dispatchEvent(new ui.window.Event("submit", { bubbles: true, cancelable: true }));
+  assert.match(ui.text(".shared-editor-error"), /needs a name/);
+  ui.type(name(0), "Red wine");
+  ui.type(price(0), "");
+  ui.$(".shared-editor").dispatchEvent(new ui.window.Event("submit", { bubbles: true, cancelable: true }));
+  assert.match(ui.text(".shared-editor-error"), /Enter a price for Red wine/);
+  assert.ok(!ui.requests.some((request) => request.startsWith("PUT")));
+
+  // Cancel throws it all away.
+  ui.click([...ui.$$(".shared-editor button")].find((b) => b.textContent === "Cancel"));
+  assert.match(ui.text(".shared-lines"), /Wine/);
+  assert.doesNotMatch(ui.text(".shared-lines"), /Red wine/);
+
+  ui.click(ui.$(".shared-edit-button"));
+  ui.type(ui.$('.shared-editor input[aria-label="Store name"]'), "Costco Wholesale");
+  ui.type(price(0), "40");
+
+  // Percentages keep their people; adjust one.
+  const samPercent = line(0).querySelector('input[aria-label="Sam (%)"]');
+  assert.equal(samPercent.value, "75");
+  ui.type(samPercent, "50");
+  ui.type(line(0).querySelector('input[aria-label="Rahil (%)"]'), "50");
+
+  // Socks go to Sam alone. A switch of mode starts everyone on an even share.
+  ui.click(chip(1, "Rahil"));
+  const mode = line(1).querySelector(".shared-editor-mode");
+  ui.type(mode, "amount");
+  assert.equal(line(1).querySelector('input[aria-label="Sam ($)"]').value, "7");
+
+  // Gum goes, bread comes.
+  ui.click(line(2).querySelector(".shared-remove-item"));
+  ui.click(ui.$(".shared-add-item"));
+  ui.type(name(2), "Bread");
+  ui.type(price(2), "3.5");
+  ui.click(chip(2, "Rahil"));
+
+  ui.type(ui.$('.shared-editor input[aria-label="Tax"]'), "5");
+  ui.$(".shared-editor").dispatchEvent(new ui.window.Event("submit", { bubbles: true, cancelable: true }));
+  await ui.waitFor(() => ui.$(".shared-lines"), "the save");
+
+  // Back on the page, from what the server answered.
+  assert.equal(ui.text(".page-title"), "Costco Wholesale");
+  assert.match(ui.text(".shared-totals"), /Subtotal\$50\.50.*Tax\$5\.00.*Total\$55\.50/);
+  assert.match(ui.text(".shared-split"), /Rahil\$25\.83.*Sam\$29\.67/);
+
+  const after = await owned();
+  assert.equal(after.storeName, "Costco Wholesale");
+  assert.equal(after.total, 55.5);
+  // "Red wine" went with the cancelled form.
+  assert.deepEqual(after.lines.map((item) => item.label), ["Wine", "Socks", "Bread"]);
+  const socks = after.lines.find((item) => item.label === "Socks");
+  assert.deepEqual(socks.assignments.map((a) => [a.personName, a.mode, a.value]), [["Sam", "amount", 7]]);
+  assert.deepEqual(ui.errors, []);
+});
+
+test("a refused save keeps the form and says why", async () => {
+  const { user, receipt, link } = await sharedReceipt({ canEdit: true });
+  const ui = await openSharedPage(server, link.path);
+  ui.click(ui.$(".shared-edit-button"));
+
+  // The owner turns editing off while the form is open.
+  await user.patch(`/api/receipts/${receipt.id}/shares/${link.id}`, { canEdit: false });
+  ui.$(".shared-editor").dispatchEvent(new ui.window.Event("submit", { bubbles: true, cancelable: true }));
+  await ui.waitFor(() => ui.text(".shared-editor-error"), "the refusal");
+  assert.match(ui.text(".shared-editor-error"), /view only/);
+  assert.equal(ui.$(".shared-save").disabled, false);
+  assert.ok(ui.$(".shared-editor"));
+});
+
+test("a receipt with no people can still have its items edited, but no split is offered", async () => {
+  const user = await server.signUp();
+  const saved = await user.post("/api/receipts", {
+    storeName: "Deli",
+    category: "Dining",
+    total: 9,
+    people: [],
+    assignments: [],
+    lines: [{ clientId: "a", label: "Burrito", amount: 9, ignored: false }]
+  });
+  const link = await user.post(`/api/receipts/${saved.body.id}/shares`, { expiresInMinutes: 5, canEdit: true });
+  const ui = await openSharedPage(server, link.body.path);
+  ui.click(ui.$(".shared-edit-button"));
+  assert.equal(ui.$(".shared-editor-mode"), null);
+
+  // Removing the only item is refused here rather than at the server.
+  ui.click(ui.$(".shared-remove-item"));
+  ui.$(".shared-editor").dispatchEvent(new ui.window.Event("submit", { bubbles: true, cancelable: true }));
+  assert.match(ui.text(".shared-editor-error"), /at least one item/);
+});

@@ -83,7 +83,21 @@ namespace ReceiptRing.UI {
         timeStyle: "short"
       })}.`;
 
-      this.root.replaceChildren(heading, meta, card, ...(split ? [split] : []), expiry);
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "btn btn-secondary shared-edit-button";
+      edit.textContent = "Edit receipt";
+      edit.addEventListener("click", () => this.openEditor(receipt));
+
+      this.root.replaceChildren(heading, meta, card, ...(split ? [split] : []), ...(receipt.canEdit ? [edit] : []), expiry);
+    }
+
+    private openEditor(receipt: Services.SharedReceipt): void {
+      new SharedReceiptEditorView(this.root, receipt, {
+        save: (draft) => this.api.save(this.token, draft),
+        onSaved: (saved) => this.render(saved),
+        onCancel: () => this.render(receipt)
+      }).render();
     }
 
     /** Who owes what, using the same arithmetic the app's Split tab does. */

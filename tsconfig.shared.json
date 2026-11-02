@@ -10,6 +10,7 @@
     "src/services/shared-receipt-api.service.ts",
     "src/ui/loading.view.ts",
     "src/ui/person-filter.view.ts",
+    "src/ui/shared-receipt-editor.view.ts",
     "src/ui/shared-receipt.view.ts",
     "src/shared-receipt.main.ts"
   ]

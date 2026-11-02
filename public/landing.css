@@ -1461,3 +1461,52 @@ h1.display {
   color: var(--ink-3);
   font-size: 13px;
 }
+
+.shared-edit-button {
+  margin-bottom: 16px;
+}
+
+.shared-editor-field {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.shared-editor-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.shared-editor-top .table-input {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.shared-editor-top .shared-editor-amount {
+  flex: 0 1 110px;
+}
+
+.shared-editor-split {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.shared-editor-split .shared-editor-field {
+  margin-bottom: 0;
+}
+
+.shared-add-item {
+  margin-bottom: 20px;
+}
+
+.shared-page .shared-editor-error {
+  margin: 0;
+  color: var(--red);
+  font-size: 14px;
+}
+
+.shared-page .shared-editor-error:empty {
+  display: none;
+}
