@@ -50,6 +50,12 @@ export const ROUTES = [
   ["put", "/receipts/{id}", "Replace a saved receipt's contents", { auth: "user", tag: "Receipts", body: "SaveReceipt", response: "Receipt", params: [idParam("id", "Receipt id")] }],
   ["delete", "/receipts/{id}", "Delete a receipt", { auth: "user", tag: "Receipts", params: [idParam("id", "Receipt id")] }],
   ["get", "/receipts/{id}/image", "The receipt photo (binary)", { auth: "user", tag: "Receipts", params: [idParam("id", "Receipt id")], binary: true }],
+  ["post", "/receipts/{id}/shares", "Create an expiring public link", { auth: "user", tag: "Sharing", body: "CreateShare", response: "ShareLink", status: 201, params: [idParam("id", "Receipt id")] }],
+  ["get", "/receipts/{id}/shares", "The receipt's live public links", { auth: "user", tag: "Sharing", response: { type: "array", items: ref("Share") }, params: [idParam("id", "Receipt id")] }],
+  ["patch", "/receipts/{id}/shares/{shareId}", "Turn editing on or off for a link", { auth: "user", tag: "Sharing", response: "Share", params: [idParam("id", "Receipt id"), idParam("shareId", "Link id")] }],
+  ["delete", "/receipts/{id}/shares/{shareId}", "Stop a link working", { auth: "user", tag: "Sharing", status: 204, params: [idParam("id", "Receipt id"), idParam("shareId", "Link id")] }],
+  ["get", "/shared-receipts/{token}", "Read a receipt through its public link", { auth: "none", tag: "Sharing", response: "SharedReceipt", params: [idParam("token", "The token from the link")] }],
+  ["put", "/shared-receipts/{token}", "Edit a receipt through a link that allows it", { auth: "none", tag: "Sharing", body: "EditSharedReceipt", response: "SharedReceipt", params: [idParam("token", "The token from the link")] }],
   ["patch", "/receipts/{receiptId}/lines/{lineId}", "Flag a line as food", { auth: "user", tag: "Receipts", params: [idParam("receiptId", "Receipt id"), idParam("lineId", "Line id")] }],
   ["get", "/receipts/food-summary", "The owner's food spend for a month", { auth: "user", tag: "Receipts", query: [queryParam("month", "YYYY-MM")] }],
   ["patch", "/receipts/{receiptId}/link-transaction", "Attach a receipt to a bank transaction", { auth: "admin", tag: "Bank", params: [idParam("receiptId", "Receipt id")] }],
@@ -145,6 +151,82 @@ const SCHEMAS = {
         }
       },
       imageDataUrl: { type: ["string", "null"], description: "A base64 JPEG/PNG/WebP data URL" }
+    }
+  },
+  CreateShare: {
+    type: "object",
+    required: ["expiresInMinutes"],
+    properties: {
+      expiresInMinutes: { type: "integer", minimum: 1, maximum: 43200 },
+      canEdit: { type: "boolean", default: false }
+    }
+  },
+  Share: {
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      canEdit: { type: "boolean" },
+      expiresAt: { type: "string", format: "date-time" },
+      createdAt: { type: "string", format: "date-time" }
+    }
+  },
+  ShareLink: {
+    type: "object",
+    description: "A Share, plus the link's path. Returned once: only a hash of the token is stored.",
+    properties: {
+      id: { type: "string" },
+      path: { type: "string", examples: ["/r/abc"] },
+      canEdit: { type: "boolean" },
+      expiresAt: { type: "string", format: "date-time" },
+      createdAt: { type: "string", format: "date-time" }
+    }
+  },
+  SharedReceipt: {
+    type: "object",
+    properties: {
+      storeName: { type: ["string", "null"] },
+      category: { type: "string" },
+      subtotal: { type: ["number", "null"] },
+      tax: { type: ["number", "null"] },
+      total: { type: ["number", "null"] },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" },
+      canEdit: { type: "boolean" },
+      expiresAt: { type: "string", format: "date-time" },
+      people: { type: "array", items: { type: "object" } },
+      lines: { type: "array", items: { type: "object" } }
+    }
+  },
+  EditSharedReceipt: {
+    type: "object",
+    required: ["updatedAt", "storeName", "tax", "lines"],
+    properties: {
+      updatedAt: { type: "string", description: "From the SharedReceipt being edited; a stale value answers 409" },
+      storeName: { type: ["string", "null"] },
+      tax: { type: ["number", "null"] },
+      lines: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["label", "amount", "assignments"],
+          properties: {
+            id: { type: "string", description: "Omit for a new item" },
+            label: { type: "string" },
+            amount: { type: "number" },
+            assignments: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  personId: { type: "string" },
+                  mode: { type: "string", enum: ["equal", "percentage", "amount"] },
+                  value: { type: "number" }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   Receipt: {

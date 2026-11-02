@@ -37,6 +37,7 @@ import { maxReceiptsPerUser } from "./access.mjs";
 import { apiVersionAlias, corsMiddleware, registerApiPlatform } from "./api-platform.mjs";
 import { registerAdminBackup, BACKUP_RATE_LIMIT } from "./admin-backup.mjs";
 import { registerAdminMetrics, ADMIN_RATE_LIMIT } from "./admin-metrics.mjs";
+import { registerReceiptShare, SHARE_RATE_LIMIT, SHARED_EDIT_RATE_LIMIT } from "./receipt-share.mjs";
 import { isVercel } from "./deployment.mjs";
 
 
@@ -667,6 +668,25 @@ export function createApp({ prisma, plaid }) {
       }
       console.error("Failed to update receipt:", error);
       res.status(500).json({ error: "Failed to update receipt." });
+    }
+  });
+
+  // Expiring public links to a receipt (see server/receipt-share.mjs).
+  registerReceiptShare(app, requireAuth, prisma, {
+    createLimiters: [
+      createRateLimiter(SHARE_RATE_LIMIT),
+      dbRateLimiter(limitStore, { bucket: "share", ...SHARE_RATE_LIMIT, keyOf: (req) => req.userId })
+    ],
+    editLimiters: [
+      createRateLimiter(SHARED_EDIT_RATE_LIMIT),
+      dbRateLimiter(limitStore, { bucket: "shared-edit", ...SHARED_EDIT_RATE_LIMIT })
+    ],
+    rules: {
+      isStorableAmount,
+      isShortString,
+      modes: ASSIGNMENT_MODES,
+      maxLines: MAX_LINES,
+      maxAssignments: MAX_ASSIGNMENTS
     }
   });
 
