@@ -34,6 +34,7 @@ import { buildSpendingCsv, spendingExportFileName, SPENDING_EXPORT_RATE_LIMIT } 
 import { summariseReceiptFood } from "./food-share.mjs";
 import { registerBudgetCategorize, CATEGORIZE_RATE_LIMIT } from "./budget-categorize.mjs";
 import { maxReceiptsPerUser } from "./access.mjs";
+import { ensureSelfPerson } from "./people.mjs";
 import { apiVersionAlias, corsMiddleware, registerApiPlatform } from "./api-platform.mjs";
 import { registerAdminBackup, BACKUP_RATE_LIMIT } from "./admin-backup.mjs";
 import { registerAdminMetrics, ADMIN_RATE_LIMIT } from "./admin-metrics.mjs";
@@ -766,47 +767,6 @@ export function createApp({ prisma, plaid }) {
     }
   });
 
-  // The account owner's own participant row. A receipt split three ways should
-  // only put a third of the bill in the owner's budget, which needs them to be
-  // one of the people it is split between. Created on first use rather than at
-  // signup so existing accounts pick one up too.
-  async function ensureSelfPerson(userId) {
-    const existing = await prisma.accountPerson.findFirst({
-      where: { userId, isSelf: true }
-    });
-    if (existing) return existing;
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true, email: true }
-    });
-    // Fall back through name, the local part of the email, then a plain label:
-    // the column is only unique per user, so a collision with a person the user
-    // already added by the same name is the one case that needs a distinct name.
-    const preferred = (user?.name ?? "").trim() || (user?.email ?? "").split("@")[0].trim() || "Me";
-    const candidates = [preferred, `${preferred} (me)`, "Me", "Myself"];
-
-    for (const name of candidates) {
-      const taken = await prisma.accountPerson.findUnique({
-        where: { userId_name: { userId, name } }
-      });
-      if (taken) {
-        // An ordinary person already holds this name; promote it rather than
-        // leaving the user with two rows that mean the same person.
-        if (name === preferred) {
-          return prisma.accountPerson.update({ where: { id: taken.id }, data: { isSelf: true } });
-        }
-        continue;
-      }
-      return prisma.accountPerson.create({ data: { userId, name, isSelf: true } });
-    }
-
-    // Every candidate was taken by someone else; fall back to a unique suffix.
-    return prisma.accountPerson.create({
-      data: { userId, name: `Me ${Date.now().toString(36)}`, isSelf: true }
-    });
-  }
-
   const serializeAccountPerson = (person) => ({
     id: person.id,
     name: person.name,
@@ -816,7 +776,7 @@ export function createApp({ prisma, plaid }) {
   // GET /api/people - list all account people for the user
   app.get("/api/people", requireAuth, async (req, res) => {
     try {
-      await ensureSelfPerson(req.userId);
+      await ensureSelfPerson(prisma, req.userId);
       const people = await prisma.accountPerson.findMany({
         where: { userId: req.userId },
         orderBy: [{ isSelf: "desc" }, { name: "asc" }]
