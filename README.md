@@ -227,6 +227,14 @@ Claude reads the photo itself; the photo is never sent to Receipt Ring.
 
 ### Deployment notes
 
+**Vercel preview deployments are behind Vercel's own login by default** (Deployment Protection →
+Vercel Authentication). Claude's servers cannot get past it, so every request, discovery and
+registration included, gets Vercel's `401 Protected deployment` and Claude reports that it
+"couldn't register". Connect Claude to your production URL, or to test a preview, turn Vercel
+Authentication off for preview deployments under **Project Settings → Deployment Protection**. The app
+still requires its own sign-in and tokens. A protection-bypass secret in the URL does not help: Claude
+builds the discovery URLs from the origin and drops the query string.
+
 The OAuth metadata names the server by the address the request came in on. That is right on Vercel
 (`vercel.json` routes `/.well-known/oauth-*` to the function) and behind a proxy that `TRUST_PROXY`
 trusts. Anywhere else, or if Claude reports an `http://` or mismatched address, set `PUBLIC_URL` to
