@@ -5085,6 +5085,161 @@ body:not([data-tab="admin"]) .loading-overlay[data-for="admin"] {
   background: var(--accent-soft);
 }
 
+/* Settings → Claude & AI assistants. */
+.copy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+
+.copy-row-block {
+  align-items: flex-start;
+}
+
+.copy-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--well);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+pre.copy-value {
+  white-space: pre-wrap;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.copy-row .btn {
+  flex: none;
+}
+
+.setup-steps,
+.prompt-examples {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding-left: 22px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.prompt-examples {
+  list-style: none;
+  padding-left: 0;
+}
+
+.prompt-examples li {
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent-border);
+  border-radius: 0 12px 12px 0;
+  background: var(--surface-2);
+}
+
+.snippet-label {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.snippet-details {
+  margin: 10px 0 0;
+}
+
+.snippet-details summary {
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--moss-deep);
+}
+
+.snippet-details[open] summary {
+  margin-bottom: 4px;
+}
+
+.new-token {
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--accent-border);
+  border-radius: 18px;
+  background: var(--accent-soft);
+}
+
+.new-token-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--moss-deep);
+}
+
+.new-token .settings-note {
+  margin-top: 6px;
+}
+
+.assistant-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-2);
+}
+
+.assistant-item-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13.5px;
+}
+
+.assistant-item-text strong {
+  overflow-wrap: anywhere;
+}
+
+.assistant-item-text span {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.assistant-item .btn {
+  flex: none;
+}
+
+.assistant-empty {
+  color: var(--ink-3);
+  font-size: 13.5px;
+}
+
+@media (max-width: 560px) {
+  .copy-row {
+    flex-wrap: wrap;
+  }
+
+  .copy-row .btn {
+    width: 100%;
+  }
+}
+
 .admin-entry {
   display: flex;
   flex-wrap: wrap;
