@@ -23,6 +23,9 @@ model User {
   accountPeople       AccountPerson[]
   rentEntries         RentEntry[]
   itemAliases         ItemAlias[]
+  apiTokens           ApiToken[]
+  oauthCodes          OAuthCode[]
+  oauthGrants         OAuthGrant[]
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -39,6 +42,91 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+// A personal access token, for an AI assistant (or a script) that reaches the
+// account through the MCP endpoint (server/mcp.mjs). It opens nothing else:
+// the rest of the API only takes sessions. Only the SHA-256 of the token is
+// kept, like a session's; `prefix` is the first few characters, shown in
+// Settings so the owner can tell their tokens apart. `scopes` is a space-
+// separated list ("receipts:read receipts:write").
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String    @db.VarChar(80)
+  tokenHash  String    @unique
+  prefix     String
+  scopes     String
+  expiresAt  DateTime
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@map("api_tokens")
+}
+
+// An OAuth client registered through dynamic client registration (RFC 7591),
+// such as claude.ai adding Receipt Ring as a connector. Registration is open,
+// so a client is only a name and the redirect URIs it may be sent back to; it
+// can do nothing until a signed-in user approves it on the consent page.
+// clientSecretHash is set only for clients that asked for a secret.
+model OAuthClient {
+  id               String       @id @default(cuid())
+  clientId         String       @unique
+  clientSecretHash String?
+  name             String       @db.VarChar(100)
+  redirectUris     String[]
+  codes            OAuthCode[]
+  grants           OAuthGrant[]
+  createdAt        DateTime     @default(now())
+
+  @@index([createdAt])
+  @@map("oauth_clients")
+}
+
+// A one-time authorization code, valid for a few minutes, bound to the client,
+// redirect URI and PKCE challenge it was issued for. Deleted when exchanged.
+model OAuthCode {
+  id            String      @id @default(cuid())
+  codeHash      String      @unique
+  clientId      String
+  client        OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redirectUri   String
+  codeChallenge String
+  scopes        String
+  expiresAt     DateTime
+  createdAt     DateTime    @default(now())
+
+  @@index([expiresAt])
+  @@map("oauth_codes")
+}
+
+// One app a user connected: the access token it holds now (short-lived) and
+// the refresh token that renews it. Both rotate on every refresh, and only
+// their hashes are kept. previousRefreshTokenHash is the one just replaced:
+// presented again, it means the token was copied, and the grant is revoked.
+model OAuthGrant {
+  id                       String      @id @default(cuid())
+  userId                   String
+  user                     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId                 String
+  client                   OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  scopes                   String
+  accessTokenHash          String      @unique
+  accessExpiresAt          DateTime
+  refreshTokenHash         String      @unique
+  previousRefreshTokenHash String?     @unique
+  refreshExpiresAt         DateTime
+  lastUsedAt               DateTime?
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([clientId])
+  @@map("oauth_grants")
 }
 
 // A linked bank Item. The Plaid access token is stored encrypted at rest
