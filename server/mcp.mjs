@@ -106,7 +106,12 @@ function originGuard(req, res, next) {
   const origin = req.headers.origin;
   if (!origin) return next();
   const normalized = String(origin).replace(/\/+$/, "");
-  if (normalized === publicOrigin(req) || corsOrigins().has(normalized)) return next();
+  if (corsOrigins().has(normalized)) return next();
+  try {
+    if (new URL(normalized).host === new URL(publicOrigin(req)).host) return next();
+  } catch {
+    // "null" or garbage: not this site.
+  }
   return res.status(403).json(rpcError(null, -32600, "Requests from this origin are not allowed."));
 }
 

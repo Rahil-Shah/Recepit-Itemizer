@@ -39,6 +39,12 @@ export const ROUTES = [
   ["get", "/mcp", "Not served (405): this endpoint has no event stream", { auth: "none", tag: "Assistants", status: 405 }],
   ["delete", "/mcp", "Not served (405): this endpoint keeps no sessions", { auth: "none", tag: "Assistants", status: 405 }],
 
+  ["post", "/oauth/register", "Register an OAuth client (RFC 7591); redirect URIs must be https or loopback http", { auth: "none", tag: "OAuth", status: 201 }],
+  ["get", "/oauth/authorize", "The sign-in and consent page (HTML). Requires PKCE with S256", { auth: "none", tag: "OAuth", html: true }],
+  ["post", "/oauth/authorize", "The user's answer on the consent page (form post from that page only)", { auth: "none", tag: "OAuth", status: 303 }],
+  ["post", "/oauth/token", "Exchange an authorization code (with its PKCE verifier) or a refresh token; form-encoded", { auth: "none", tag: "OAuth" }],
+  ["post", "/oauth/revoke", "Revoke an access or refresh token, ending the grant (RFC 7009); form-encoded", { auth: "none", tag: "OAuth" }],
+
   ["get", "/gemini-config", "Model and whether a Gemini key is available", { auth: "user", tag: "Gemini" }],
   ["put", "/gemini-key", "Save a personal Gemini key (stored encrypted, never returned)", { auth: "user", tag: "Gemini" }],
   ["delete", "/gemini-key", "Remove the personal Gemini key", { auth: "user", tag: "Gemini" }],
@@ -335,6 +341,10 @@ function operation([method, path, summary, options]) {
   const ok = String(options.status ?? 200);
   if (options.status === 204) {
     responses[ok] = { description: "Done" };
+  } else if (options.status === 303) {
+    responses[ok] = { description: "Redirect back to the client with a code or an error" };
+  } else if (options.html) {
+    responses[ok] = { description: "An HTML page", content: { "text/html": { schema: { type: "string" } } } };
   } else if (options.status === 405) {
     responses[ok] = { description: "Method not allowed", ...json(ref("Error")) };
   } else if (options.binary) {
@@ -376,11 +386,11 @@ export const OPENAPI_SPEC = {
     title: "Receipt Ring API",
     version: "1.0.0",
     description:
-      "Every route is served under /api/v1 (and, for this repo's own page, /api). Browsers on this site sign in with a cookie. Other clients -- a mobile app, or a front end on another origin -- send `X-Auth-Mode: token` to /auth/login or /auth/register, keep the returned token, and send it as `Authorization: Bearer <token>`. Browsers on another origin must be listed in the server's CORS_ORIGINS."
+      "AI assistants connect through the MCP endpoint (/mcp) with a personal access token from Settings, or through OAuth: discovery starts at /.well-known/oauth-protected-resource/api/mcp on this server's origin. Every route is served under /api/v1 (and, for this repo's own page, /api). Browsers on this site sign in with a cookie. Other clients -- a mobile app, or a front end on another origin -- send `X-Auth-Mode: token` to /auth/login or /auth/register, keep the returned token, and send it as `Authorization: Bearer <token>`. Browsers on another origin must be listed in the server's CORS_ORIGINS."
   },
   servers: [{ url: "/api/v1" }],
   security: [{ bearerAuth: [] }, { cookieAuth: [] }],
-  tags: ["Platform", "Auth", "Assistants", "Receipts", "People", "Items", "Rent", "Gemini", "Exports", "Bank", "Admin"].map((name) => ({ name })),
+  tags: ["Platform", "Auth", "Assistants", "OAuth", "Receipts", "People", "Items", "Rent", "Gemini", "Exports", "Bank", "Admin"].map((name) => ({ name })),
   paths,
   components: {
     securitySchemes: {

@@ -42,6 +42,13 @@ import { registerReceiptShare, SHARE_RATE_LIMIT, SHARED_EDIT_RATE_LIMIT } from "
 import { isVercel } from "./deployment.mjs";
 import { registerApiTokens, TOKEN_RATE_LIMIT } from "./api-tokens.mjs";
 import { registerMcp, MCP_RATE_LIMIT, MCP_ADDRESS_RATE_LIMIT } from "./mcp.mjs";
+import {
+  registerOAuth,
+  REGISTER_RATE_LIMIT,
+  TOKEN_ENDPOINT_RATE_LIMIT,
+  AUTHORIZE_RATE_LIMIT,
+  METADATA_RATE_LIMIT
+} from "./oauth.mjs";
 
 
 const __dirname = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -295,6 +302,21 @@ export function createApp({ prisma, plaid }) {
   registerApiTokens(app, requireAuth, prisma, {
     // Counted per account: creating a token needs a session anyway.
     createLimiters: [dbRateLimiter(limitStore, { bucket: "api-token", ...TOKEN_RATE_LIMIT, keyOf: (req) => req.userId })]
+  });
+  // OAuth, so an app such as claude.ai can be connected with a sign-in and an
+  // Allow button instead of a pasted token (see server/oauth.mjs). Registration
+  // and the token endpoint are counted per address across instances as well.
+  registerOAuth(app, prisma, {
+    registerLimiters: [
+      createRateLimiter(REGISTER_RATE_LIMIT),
+      dbRateLimiter(limitStore, { bucket: "oauth-register", ...REGISTER_RATE_LIMIT })
+    ],
+    tokenLimiters: [
+      createRateLimiter(TOKEN_ENDPOINT_RATE_LIMIT),
+      dbRateLimiter(limitStore, { bucket: "oauth-token", ...TOKEN_ENDPOINT_RATE_LIMIT })
+    ],
+    authorizeLimiters: [createRateLimiter(AUTHORIZE_RATE_LIMIT)],
+    metadataLimiters: [createRateLimiter(METADATA_RATE_LIMIT)]
   });
   registerMcp(app, prisma, {
     limiters: [dbRateLimiter(limitStore, { bucket: "mcp", ...MCP_RATE_LIMIT, keyOf: (req) => req.userId })]
