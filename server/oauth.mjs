@@ -48,6 +48,10 @@ const CODE_TTL_MS = 5 * 60 * 1000;
 export const ACCESS_TOKEN_TTL_S = 60 * 60;
 export const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 // Clients that registered and were never approved are swept after a day.
+// A refresh token replayed within this long of its rotation is taken for two
+// requests racing (an assistant calling tools in parallel as its token runs
+// out) and refused without revoking anything; later, it means a copy.
+const REFRESH_REUSE_GRACE_MS = 60 * 1000;
 const UNUSED_CLIENT_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_REDIRECT_URIS = 5;
 const MAX_REDIRECT_URI_LENGTH = 500;
@@ -562,13 +566,15 @@ export function registerOAuth(app, prisma, { registerLimiters = [], tokenLimiter
     if (body.scope !== undefined && typeof body.scope !== "string") return fail("scope must be a string.");
     const name =
       typeof body.client_name === "string"
-        ? body.client_name.replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim().slice(0, MAX_CLIENT_NAME)
+        ? [...body.client_name.toWellFormed().replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim()].slice(0, MAX_CLIENT_NAME).join("")
         : "";
 
     try {
-      // Registrations nobody approved within a day are of no use.
+      // Registrations nobody approved within a day are of no use. One that
+      // was approved stays, even with no grant left, so the app that holds
+      // it can connect again after being disconnected.
       await prisma.oAuthClient.deleteMany({
-        where: { createdAt: { lt: new Date(Date.now() - UNUSED_CLIENT_TTL_MS) }, grants: { none: {} }, codes: { none: {} } }
+        where: { approvedAt: null, createdAt: { lt: new Date(Date.now() - UNUSED_CLIENT_TTL_MS) }, codes: { none: {} } }
       });
 
       const clientId = `rrc_${base64url(crypto.randomBytes(16))}`;
@@ -657,6 +663,9 @@ export function registerOAuth(app, prisma, { registerLimiters = [], tokenLimiter
       }
 
       await prisma.oAuthCode.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+      if (!request.client.approvedAt) {
+        await prisma.oAuthClient.update({ where: { id: request.client.id }, data: { approvedAt: new Date() } });
+      }
       const code = generateSessionToken();
       await prisma.oAuthCode.create({
         data: {
@@ -717,10 +726,18 @@ export function registerOAuth(app, prisma, { registerLimiters = [], tokenLimiter
 
         const grant = await prisma.oAuthGrant.findUnique({ where: { refreshTokenHash: hash }, include: { user: { select: { email: true } } } });
         if (!grant) {
-          // A refresh token that was already rotated away is being replayed:
-          // somebody has a copy. End the grant for everyone.
-          const reused = await prisma.oAuthGrant.deleteMany({ where: { previousRefreshTokenHash: hash } });
-          if (reused.count > 0) console.warn("Revoked an OAuth grant after its old refresh token was presented again.");
+          // A refresh token that was already rotated away. Moments after the
+          // rotation it is a race between two of the app's own requests;
+          // after that, somebody has a copy, and the grant ends for everyone.
+          const rotated = await prisma.oAuthGrant.findUnique({
+            where: { previousRefreshTokenHash: hash },
+            select: { id: true, accessExpiresAt: true }
+          });
+          const rotatedAt = rotated ? rotated.accessExpiresAt.getTime() - ACCESS_TOKEN_TTL_S * 1000 : 0;
+          if (rotated && Date.now() - rotatedAt > REFRESH_REUSE_GRACE_MS) {
+            await prisma.oAuthGrant.deleteMany({ where: { id: rotated.id, previousRefreshTokenHash: hash } });
+            console.warn("Revoked an OAuth grant after its old refresh token was presented again.");
+          }
           throw new OAuthError("invalid_grant", "The refresh token is not valid.");
         }
         if (grant.clientId !== client.id) throw new OAuthError("invalid_grant", "The refresh token was issued to another client.");

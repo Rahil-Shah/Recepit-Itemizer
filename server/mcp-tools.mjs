@@ -72,7 +72,8 @@ function text(value, name, { required = false, max = MAX_TEXT } = {}) {
     return null;
   }
   if (typeof value !== "string") throw new ToolError(`${name} must be a string.`);
-  const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  // toWellFormed: a lone surrogate would make Postgres refuse the row.
+  const cleaned = value.toWellFormed().replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
   if (!cleaned) {
     if (required) throw new ToolError(`${name} must not be empty.`);
     return null;
@@ -331,26 +332,24 @@ function bigrams(value) {
     const gram = compact.slice(index, index + 2);
     grams.set(gram, (grams.get(gram) ?? 0) + 1);
   }
-  return grams;
+  let size = 0;
+  for (const count of grams.values()) size += count;
+  return { label: value, grams, size };
+}
+
+function diceOf(a, b) {
+  if (!a.label || !b.label) return 0;
+  if (a.label === b.label) return 1;
+  if (a.size + b.size === 0) return 0;
+  let shared = 0;
+  const [small, large] = a.grams.size <= b.grams.size ? [a.grams, b.grams] : [b.grams, a.grams];
+  for (const [gram, count] of small) shared += Math.min(count, large.get(gram) ?? 0);
+  return (2 * shared) / (a.size + b.size);
 }
 
 /** Dice similarity of two labels' letter pairs, 0..1. */
 export function labelSimilarity(left, right) {
-  const a = normalizeLabel(left);
-  const b = normalizeLabel(right);
-  if (!a || !b) return 0;
-  if (a === b) return 1;
-  const gramsA = bigrams(a);
-  const gramsB = bigrams(b);
-  let sizeA = 0;
-  let sizeB = 0;
-  let shared = 0;
-  for (const count of gramsA.values()) sizeA += count;
-  for (const [gram, count] of gramsB) {
-    sizeB += count;
-    shared += Math.min(count, gramsA.get(gram) ?? 0);
-  }
-  return sizeA + sizeB === 0 ? 0 : (2 * shared) / (sizeA + sizeB);
+  return diceOf(bigrams(normalizeLabel(left)), bigrams(normalizeLabel(right)));
 }
 
 /**
@@ -380,36 +379,53 @@ export function matchItems(saved, scanned) {
   };
   const samePrice = (line, item) => toCents(line.amount) === toCents(item.amount);
 
+  // Each line's comparison keys, worked out once.
+  const keys = new Map(
+    saved.map((line) => [line.id, { code: normalizeCode(line.itemCode), label: normalizeLabel(line.label), name: normalizeLabel(line.name) }])
+  );
+
   // An exact pass runs twice: first only pairs at the same price, across every
   // item, then whatever is left in order. Otherwise a repeated item whose price
   // changed could take the line another copy matches exactly.
-  const exactPass = (sameKey, how) => {
+  const exactPass = (itemKey, lineMatches, how) => {
+    const itemKeys = scanned.map(itemKey);
     for (const priceMustMatch of [true, false]) {
       scanned.forEach((item, itemIndex) => {
-        if (usedItems.has(itemIndex)) return;
-        const candidate = saved
-          .filter((line) => !usedLines.has(line.id) && sameKey(line, item) && (!priceMustMatch || samePrice(line, item)))
-          .sort((a, b) => a.sortOrder - b.sortOrder)[0];
+        const key = itemKeys[itemIndex];
+        if (usedItems.has(itemIndex) || !key) return;
+        let candidate = null;
+        for (const line of saved) {
+          if (usedLines.has(line.id) || !lineMatches(keys.get(line.id), key)) continue;
+          if (priceMustMatch && !samePrice(line, item)) continue;
+          if (!candidate || line.sortOrder < candidate.sortOrder) candidate = line;
+        }
         if (candidate) take(itemIndex, candidate, how, 1);
       });
     }
   };
 
-  exactPass((line, item) => {
-    const code = normalizeCode(item.itemCode);
-    return Boolean(code) && normalizeCode(line.itemCode) === code;
-  }, "item_code");
-  exactPass((line, item) => {
-    const label = normalizeLabel(item.label);
-    return Boolean(label) && (normalizeLabel(line.label) === label || normalizeLabel(line.name) === label);
-  }, "label");
+  exactPass((item) => normalizeCode(item.itemCode), (line, code) => line.code === code, "item_code");
+  exactPass((item) => normalizeLabel(item.label), (line, label) => line.label === label || line.name === label, "label");
 
+  // Each label's letter pairs are worked out once, not once per comparison:
+  // 500 scanned items against 500 lines is a quarter of a million pairings.
+  const cache = new Map();
+  const gramsOf = (value) => {
+    const key = value ?? "";
+    let grams = cache.get(key);
+    if (!grams) {
+      grams = bigrams(normalizeLabel(key));
+      cache.set(key, grams);
+    }
+    return grams;
+  };
   const fuzzy = [];
   scanned.forEach((item, itemIndex) => {
     if (usedItems.has(itemIndex)) return;
+    const itemGrams = gramsOf(item.label);
     for (const line of saved) {
       if (usedLines.has(line.id)) continue;
-      const similarity = Math.max(labelSimilarity(item.label, line.label), labelSimilarity(item.label, line.name));
+      const similarity = Math.max(diceOf(itemGrams, gramsOf(line.label)), diceOf(itemGrams, gramsOf(line.name)));
       const same = samePrice(line, item);
       if (similarity >= 0.5 || (same && similarity >= 0.3)) {
         fuzzy.push({ itemIndex, line, similarity, score: similarity + (same ? 0.15 : 0) });

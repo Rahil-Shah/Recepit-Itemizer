@@ -58,7 +58,9 @@ export function normalizeScopes(scopes) {
 }
 
 export function cleanTokenName(value) {
+  // toWellFormed: a lone surrogate from JSON would make Postgres refuse the row.
   return String(value ?? "")
+    .toWellFormed()
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .replace(/\s+/g, " ")
     .trim();

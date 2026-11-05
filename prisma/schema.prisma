@@ -71,12 +71,15 @@ model ApiToken {
 // so a client is only a name and the redirect URIs it may be sent back to; it
 // can do nothing until a signed-in user approves it on the consent page.
 // clientSecretHash is set only for clients that asked for a secret.
+// approvedAt is when someone first approved it: a client nobody approved is
+// swept after a day, one that was approved is kept so it can reconnect.
 model OAuthClient {
   id               String       @id @default(cuid())
   clientId         String       @unique
   clientSecretHash String?
   name             String       @db.VarChar(100)
   redirectUris     String[]
+  approvedAt       DateTime?
   codes            OAuthCode[]
   grants           OAuthGrant[]
   createdAt        DateTime     @default(now())

@@ -33,7 +33,14 @@ async function request(method, path, { form, json, cookie, headers = {} } = {}) 
   return { status: response.status, headers: response.headers, body };
 }
 
-async function register(metadata = {}) {
+// Registration is limited to 30 an hour from one address, which is every test
+// here, so a test that does not care which client it gets shares one.
+let sharedClient = null;
+async function register(metadata = {}, { fresh = false } = {}) {
+  if (!fresh && Object.keys(metadata).length === 0) {
+    sharedClient ??= await register({}, { fresh: true });
+    return sharedClient;
+  }
   const created = await request("POST", "/api/oauth/register", {
     json: { client_name: "Claude", redirect_uris: [REDIRECT], token_endpoint_auth_method: "none", ...metadata }
   });
@@ -130,7 +137,7 @@ test("PUBLIC_URL, when set, is the address the metadata names", async () => {
 
 test("the whole flow: register, sign in, allow, exchange, call, refresh", async () => {
   const user = await server.signUp({ name: "Rahil" });
-  const client = await register();
+  const client = await register({}, { fresh: true });
   assert.match(client.client_id, /^rrc_/);
   assert.equal(client.client_secret, undefined);
   assert.equal(client.token_endpoint_auth_method, "none");
@@ -206,6 +213,20 @@ test("the whole flow: register, sign in, allow, exchange, call, refresh", async 
   assert.equal((await user.delete(`/api/connected-apps/${apps.body[0].id}`)).status, 404);
 });
 
+test("a refresh token replayed moments after rotation is refused without revoking (a race)", async () => {
+  const user = await server.signUp();
+  const client = await register();
+  const { code, verifier } = await approve(user, client);
+  const first = (await exchange(client, code, verifier)).body;
+  const refresh = (token) => request("POST", "/api/oauth/token", { form: { grant_type: "refresh_token", refresh_token: token, client_id: client.client_id } });
+  const second = (await refresh(first.refresh_token)).body;
+  assert.ok(second.access_token);
+  const raced = await refresh(first.refresh_token);
+  assert.equal(raced.body.error, "invalid_grant");
+  assert.equal((await mcp(second.access_token)).status, 200);
+  assert.ok((await refresh(second.refresh_token)).body.access_token);
+});
+
 test("a refresh token used twice revokes the whole grant", async () => {
   const user = await server.signUp();
   const client = await register();
@@ -213,6 +234,11 @@ test("a refresh token used twice revokes the whole grant", async () => {
   const first = (await exchange(client, code, verifier)).body;
   const second = (await request("POST", "/api/oauth/token", { form: { grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: client.client_id } })).body;
   assert.ok(second.access_token);
+  // Two minutes later, as far as the grant can tell.
+  await server.prisma.oAuthGrant.updateMany({
+    where: { userId: user.user.id },
+    data: { accessExpiresAt: new Date(Date.now() + 3600_000 - 120_000) }
+  });
 
   const replay = await request("POST", "/api/oauth/token", { form: { grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: client.client_id } });
   assert.equal(replay.status, 400);
@@ -225,7 +251,7 @@ test("a refresh token used twice revokes the whole grant", async () => {
 test("the code is bound to the verifier, the client and the redirect URI, and expires", async () => {
   const user = await server.signUp();
   const client = await register();
-  const other = await register();
+  const other = await register({}, { fresh: true });
 
   // A wrong verifier uses the code up.
   let approved = await approve(user, client);
@@ -323,11 +349,32 @@ test("registration only accepts safe redirect URIs and sane metadata", async () 
   assert.equal(broken.status, 400);
 });
 
-test("a client nobody approved is swept after a day", async () => {
-  const stale = await register();
-  await server.prisma.oAuthClient.update({ where: { clientId: stale.client_id }, data: { createdAt: new Date(Date.now() - 2 * 86_400_000) } });
-  await register();
+test("a client nobody approved is swept after a day; an approved one can reconnect after a disconnect", async () => {
+  const user = await server.signUp();
+  const stale = await register({}, { fresh: true });
+  const approved = await register({}, { fresh: true });
+  const { code, verifier } = await approve(user, approved);
+  await exchange(approved, code, verifier);
+  const [app] = (await user.get("/api/connected-apps")).body;
+  assert.equal((await user.delete(`/api/connected-apps/${app.id}`)).status, 204);
+
+  const old = new Date(Date.now() - 2 * 86_400_000);
+  await server.prisma.oAuthClient.updateMany({ where: { clientId: { in: [stale.client_id, approved.client_id] } }, data: { createdAt: old } });
+  await register({}, { fresh: true });
   assert.equal(await server.prisma.oAuthClient.count({ where: { clientId: stale.client_id } }), 0);
+  assert.equal(await server.prisma.oAuthClient.count({ where: { clientId: approved.client_id } }), 1);
+
+  const again = await approve(user, approved);
+  assert.equal((await exchange(approved, again.code, again.verifier)).status, 200);
+});
+
+test("a name with a broken character is stored, not refused by the database", async () => {
+  const client = await register({ client_name: "Claude \ud800 test" });
+  assert.equal(client.client_name, "Claude \ufffd test");
+  const user = await server.signUp();
+  const token = await user.post("/api/tokens", { name: "laptop \udc00", expiresInDays: 7, canWrite: false });
+  assert.equal(token.status, 201);
+  assert.equal(token.body.name, "laptop \ufffd");
 });
 
 test("a request that cannot be trusted is answered on the page, never redirected", async () => {
