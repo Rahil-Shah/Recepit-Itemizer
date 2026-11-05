@@ -390,9 +390,21 @@ test("a request that cannot be trusted is answered on the page, never redirected
   assert.equal(elsewhere.headers.get("location"), null);
 });
 
-test("other problems are sent back to the app with the state", async () => {
+test("an app nobody has approved is shown its errors on the page, not redirected to", async () => {
+  const fresh = await register({}, { fresh: true });
+  const query = new URLSearchParams(authorizeQuery(fresh, { challenge: pkce().challenge }));
+  query.set("response_type", "token");
+  const response = await request("GET", `/api/oauth/authorize?${query}`);
+  assert.equal(response.status, 400);
+  assert.equal(response.headers.get("location"), null);
+  assert.match(response.body, /Only response_type=code/);
+});
+
+test("other problems are sent back to an approved app with the state", async () => {
   const user = await server.signUp();
   const client = await register();
+  // Approved once, by someone.
+  await approve(user, client);
   const cases = [
     [{ code_challenge: "" }, "invalid_request"],
     [{ code_challenge_method: "plain" }, "invalid_request"],

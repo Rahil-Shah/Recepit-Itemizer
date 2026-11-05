@@ -610,6 +610,10 @@ export function registerOAuth(app, prisma, { registerLimiters = [], tokenLimiter
       request = await readAuthorizationRequest(prisma, req, req.query);
     } catch (error) {
       if (error instanceof OAuthError && error.request) {
+        // Only an app someone has approved is sent its errors. Registration
+        // is open, so for any other the redirect would let a link on this
+        // site bounce a visitor to wherever its registrant chose.
+        if (!error.request.client.approvedAt) return errorPage(res, error.message);
         return redirectWith(res, req, error.request.redirectUri, { error: error.code, error_description: error.message, state: error.request.state });
       }
       if (error instanceof PageError) return errorPage(res, error.message);
