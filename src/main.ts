@@ -109,7 +109,12 @@ namespace ReceiptRing {
     // admin (the server refuses their routes to anyone else regardless).
     const settings = new App.AccountSettingsController(accountApiService, preferencesService, notificationService);
     settings.start(user);
-    controller.hooks.onShowSettings = () => settings.show();
+    const assistants = new App.AssistantSettingsController(new Services.AssistantApiService(), notificationService);
+    assistants.start();
+    controller.hooks.onShowSettings = () => {
+      settings.show();
+      assistants.show();
+    };
     if (user.isAdmin) {
       const admin = new App.AdminToolsController(
         adminApiService,

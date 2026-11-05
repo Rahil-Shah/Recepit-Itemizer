@@ -24,6 +24,7 @@ import {
   publicSignupAllowed
 } from "./access.mjs";
 import { isProduction } from "./deployment.mjs";
+import { revokeAllApiAccess } from "./api-tokens.mjs";
 
 const SESSION_COOKIE = "rr_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -335,7 +336,8 @@ export function createAuth(prisma, limitStore = null) {
     });
 
     // Changing the password signs every other session out: whoever might
-    // have known the old one should not stay signed in with it.
+    // have known the old one should not stay signed in with it. It also
+    // revokes every API token and connected app (server/api-tokens.mjs).
     app.post("/api/auth/password", requireAuth, async (req, res) => {
       const currentPassword = String(req.body?.currentPassword ?? "");
       const newPassword = String(req.body?.newPassword ?? "");
@@ -351,9 +353,12 @@ export function createAuth(prisma, limitStore = null) {
         if (await verifyPassword(newPassword, user.passwordHash)) {
           return res.status(400).json({ error: "The new password is the same as the current one." });
         }
+        // Tokens and connected apps go too: one minted from a stolen session
+        // would otherwise outlive the password change meant to end it.
         await prisma.$transaction([
           prisma.user.update({ where: { id: req.userId }, data: { passwordHash: await hashPassword(newPassword) } }),
-          prisma.session.deleteMany({ where: { userId: req.userId, id: { not: req.sessionId } } })
+          prisma.session.deleteMany({ where: { userId: req.userId, id: { not: req.sessionId } } }),
+          ...revokeAllApiAccess(prisma, req.userId)
         ]);
         res.json({ changed: true });
       } catch (error) {

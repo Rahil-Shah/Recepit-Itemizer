@@ -1058,7 +1058,7 @@
             </button>
             <div>
               <h1 class="page-title">Settings</h1>
-              <p class="page-lede">Your account, sign-in, Gemini key, preferences and data.</p>
+              <p class="page-lede">Your account, sign-in, Claude, Gemini key, preferences and data.</p>
             </div>
           </div>
 
@@ -1066,6 +1066,7 @@
             <nav class="settings-nav" aria-label="Settings sections">
               <a href="#settingsProfile">Profile</a>
               <a href="#settingsSecurity">Sign-in &amp; security</a>
+              <a href="#settingsAssistants">Claude &amp; AI assistants</a>
               <a href="#settingsGemini">Gemini</a>
               <a href="#settingsPreferences">Preferences</a>
               <a href="#settingsData">Your data</a>
@@ -1115,12 +1116,112 @@
                     <button class="btn btn-primary" id="changePasswordButton" type="submit">Change password</button>
                   </form>
                   <p class="settings-status" id="passwordStatus" role="status"></p>
-                  <p class="settings-note">Changing your password signs you out everywhere else.</p>
+                  <p class="settings-note">Changing your password signs you out everywhere else, revokes your access tokens and disconnects connected apps.</p>
 
                   <h3 class="settings-subhead">Where you're signed in</h3>
                   <ul class="session-list" id="sessionList"></ul>
                   <button class="btn btn-secondary" id="revokeSessionsButton" type="button">Sign out everywhere else</button>
                   <p class="settings-status" id="sessionStatus" role="status"></p>
+                </div>
+              </section>
+
+              <!-- Connecting Claude (or another MCP client) to the receipts. The
+                   connection URL, setup steps, personal access tokens and
+                   connected apps are filled in by AssistantSettingsController. -->
+              <section class="panel settings-card" id="settingsAssistants" aria-labelledby="settingsAssistantsTitle">
+                <header class="panel-header"><h2 id="settingsAssistantsTitle">Claude &amp; AI assistants</h2></header>
+                <div class="panel-body">
+                  <p class="settings-copy">
+                    Connect Claude to Receipt Ring and it can answer questions about your receipts (who had what,
+                    who owes what, what something cost) and check a photo of a receipt against the one you saved,
+                    correcting any prices you agree to. It never sees your password or your receipt photos.
+                  </p>
+
+                  <h3 class="settings-subhead">Your connection URL</h3>
+                  <div class="copy-row">
+                    <code class="copy-value" id="mcpUrl"></code>
+                    <button class="btn btn-secondary btn-small" type="button" data-copy-target="mcpUrl">Copy</button>
+                  </div>
+
+                  <h3 class="settings-subhead">Add it to Claude (web, desktop and mobile)</h3>
+                  <ol class="setup-steps">
+                    <li>In Claude, open <strong>Settings → Connectors</strong> and choose <strong>Add custom connector</strong>.</li>
+                    <li>Name it <strong>Receipt Ring</strong> and paste the connection URL above. Leave the advanced settings empty.</li>
+                    <li>Choose <strong>Add</strong>, then <strong>Connect</strong>. Sign in to Receipt Ring when asked and choose <strong>Allow</strong>.</li>
+                    <li>In a chat, turn Receipt Ring on from the tools menu, attach a photo of a receipt and ask Claude to check it.</li>
+                  </ol>
+                  <p class="settings-note">
+                    A connector added on claude.ai also shows up in the Claude desktop and mobile apps. On a Team or
+                    Enterprise plan, an owner may have to add the connector for the organization first.
+                  </p>
+
+                  <h3 class="settings-subhead">Things to ask</h3>
+                  <ul class="prompt-examples">
+                    <li>"Check this receipt against Receipt Ring and fix any prices that are different."</li>
+                    <li>"Who owes me what for October?"</li>
+                    <li>"What did Sam have at Trader Joe's last week, and what's their share with tax?"</li>
+                    <li>"When did I last buy oat milk, and what did it cost?"</li>
+                  </ul>
+
+                  <h3 class="settings-subhead">Claude Code and other tools</h3>
+                  <p class="settings-copy">
+                    Tools that can't sign in through a browser use a personal access token instead. Create one below
+                    and it is filled into these for you. Treat a token like a password.
+                  </p>
+                  <p class="snippet-label">Claude Code (in a terminal)</p>
+                  <div class="copy-row copy-row-block">
+                    <pre class="copy-value"><code id="claudeCodeCommand"></code></pre>
+                    <button class="btn btn-secondary btn-small" type="button" data-copy-target="claudeCodeCommand">Copy</button>
+                  </div>
+                  <details class="snippet-details">
+                    <summary>Claude Desktop config file instead of a connector</summary>
+                    <p class="settings-note">
+                      Add this to <code>claude_desktop_config.json</code> (Settings → Developer → Edit Config) and
+                      restart Claude. It needs Node.js installed.
+                    </p>
+                    <div class="copy-row copy-row-block">
+                      <pre class="copy-value"><code id="desktopConfig"></code></pre>
+                      <button class="btn btn-secondary btn-small" type="button" data-copy-target="desktopConfig">Copy</button>
+                    </div>
+                  </details>
+
+                  <h3 class="settings-subhead">Personal access tokens</h3>
+                  <form class="settings-grid-form" id="apiTokenForm">
+                    <div class="field">
+                      <label class="field-label" for="apiTokenName">Name</label>
+                      <input class="table-input" id="apiTokenName" maxlength="80" autocomplete="off" placeholder="Claude Code on my laptop" />
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="apiTokenExpiry">Expires after</label>
+                      <select class="table-select" id="apiTokenExpiry">
+                        <option value="7">7 days</option>
+                        <option value="30">30 days</option>
+                        <option value="90" selected>90 days</option>
+                        <option value="365">1 year</option>
+                      </select>
+                    </div>
+                    <button class="btn btn-primary" id="createApiTokenButton" type="submit">Create token</button>
+                  </form>
+                  <label class="checkbox-row">
+                    <input id="apiTokenCanWrite" type="checkbox" form="apiTokenForm" checked />
+                    <span>Allow corrections: fix prices and tax, add missed items, and save new receipts</span>
+                  </label>
+                  <p class="settings-status" id="assistantStatus" role="status"></p>
+                  <div class="new-token hidden" id="newApiToken" role="region" aria-label="Your new token">
+                    <p class="new-token-title">Copy your token now. You won't be able to see it again.</p>
+                    <div class="copy-row">
+                      <code class="copy-value" id="newApiTokenValue"></code>
+                      <button class="btn btn-primary btn-small" type="button" data-copy-target="newApiTokenValue">Copy</button>
+                    </div>
+                    <p class="settings-note">The commands above now include it.</p>
+                  </div>
+                  <ul class="assistant-list" id="apiTokenList" aria-label="Your tokens"></ul>
+
+                  <h3 class="settings-subhead">Connected apps</h3>
+                  <ul class="assistant-list" id="connectedAppList" aria-label="Connected apps"></ul>
+                  <p class="settings-note">
+                    Changing your password revokes every token and disconnects every app.
+                  </p>
                 </div>
               </section>
 
