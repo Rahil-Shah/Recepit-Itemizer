@@ -74,6 +74,8 @@ export function calculateSplit(people, lines, tax) {
   }
   let unallocatedCents = 0;
   let unassignedLines = 0;
+  // What each person pays of each line, for a caller that lists the lines.
+  const lineShares = new Map();
   const taxCents = toCents(tax);
   let receiptCents = taxCents;
 
@@ -86,6 +88,7 @@ export function calculateSplit(people, lines, tax) {
     }
 
     const shares = getLineShares(toCents(line.amount), asShareInput(assignments), ledger);
+    lineShares.set(line.id, new Map([...shares].map(([personId, cents]) => [personId, cents / 100])));
     let allocated = 0;
     shares.forEach((cents, personId) => {
       itemCents.set(personId, (itemCents.get(personId) ?? 0) + cents);
@@ -120,6 +123,7 @@ export function calculateSplit(people, lines, tax) {
     totals,
     unallocated: unallocatedCents / 100,
     unassignedLines,
+    lineShares,
     receiptTotal: receiptCents / 100,
     assignedTotal: assignedCents / 100,
     isBalanced: receiptCents === assignedCents

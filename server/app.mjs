@@ -40,6 +40,8 @@ import { registerAdminBackup, BACKUP_RATE_LIMIT } from "./admin-backup.mjs";
 import { registerAdminMetrics, ADMIN_RATE_LIMIT } from "./admin-metrics.mjs";
 import { registerReceiptShare, SHARE_RATE_LIMIT, SHARED_EDIT_RATE_LIMIT } from "./receipt-share.mjs";
 import { isVercel } from "./deployment.mjs";
+import { registerApiTokens, TOKEN_RATE_LIMIT } from "./api-tokens.mjs";
+import { registerMcp, MCP_RATE_LIMIT, MCP_ADDRESS_RATE_LIMIT } from "./mcp.mjs";
 
 
 const __dirname = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -107,9 +109,16 @@ export function createApp({ prisma, plaid }) {
   // Counted per address before any session lookup, like the blanket limit,
   // so a flood of made-up tokens on this path is turned away for free.
   const backupLimiter = createRateLimiter(BACKUP_RATE_LIMIT);
-  app.use("/api", (req, res, next) =>
-    req.path.startsWith("/admin/backup/") ? backupLimiter(req, res, next) : blanketLimiter(req, res, next)
-  );
+  // The MCP endpoint is called by hosted assistants (claude.ai) from a few
+  // addresses shared by everyone who connected one, so it is counted per
+  // address on a looser limit of its own, and per account once the token is
+  // known (see registerMcp below).
+  const mcpAddressLimiter = createRateLimiter(MCP_ADDRESS_RATE_LIMIT);
+  app.use("/api", (req, res, next) => {
+    if (req.path.startsWith("/admin/backup/")) return backupLimiter(req, res, next);
+    if (req.path === "/mcp") return mcpAddressLimiter(req, res, next);
+    return blanketLimiter(req, res, next);
+  });
   const limitStore = createRateLimitStore(prisma);
 
   const authLimiter = createRateLimiter({
@@ -280,6 +289,16 @@ export function createApp({ prisma, plaid }) {
     createRateLimiter(CATEGORIZE_RATE_LIMIT),
     dbRateLimiter(limitStore, { bucket: "categorize", ...CATEGORIZE_RATE_LIMIT, keyOf: (req) => req.userId })
   ]);
+
+  // Personal access tokens and connected apps, managed from Settings, and the
+  // MCP endpoint they open (see server/api-tokens.mjs and server/mcp.mjs).
+  registerApiTokens(app, requireAuth, prisma, {
+    // Counted per account: creating a token needs a session anyway.
+    createLimiters: [dbRateLimiter(limitStore, { bucket: "api-token", ...TOKEN_RATE_LIMIT, keyOf: (req) => req.userId })]
+  });
+  registerMcp(app, prisma, {
+    limiters: [dbRateLimiter(limitStore, { bucket: "mcp", ...MCP_RATE_LIMIT, keyOf: (req) => req.userId })]
+  });
 
   // --- API -------------------------------------------------------------------
 

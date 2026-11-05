@@ -11,8 +11,9 @@ const idParam = (name, description) => ({ name, in: "path", required: true, sche
 const queryParam = (name, description, schema = { type: "string" }) => ({ name, in: "query", required: false, schema, description });
 
 /**
- * [method, path, summary, options]. `auth` is "none", "user" (a session) or
- * "admin" (a session on an ADMIN_EMAILS account).
+ * [method, path, summary, options]. `auth` is "none", "user" (a session),
+ * "admin" (a session on an ADMIN_EMAILS account) or "token" (a personal access
+ * token or OAuth access token, for the MCP endpoint only).
  */
 export const ROUTES = [
   ["get", "/health", "Liveness and database reachability", { auth: "none", tag: "Platform" }],
@@ -28,6 +29,15 @@ export const ROUTES = [
   ["get", "/auth/sessions", "Where this account is signed in", { auth: "user", tag: "Auth" }],
   ["post", "/auth/sessions/revoke-others", "Sign out every other session", { auth: "user", tag: "Auth" }],
   ["delete", "/auth/account", "Delete the account and everything in it", { auth: "user", tag: "Auth", body: "PasswordConfirmation", status: 204 }],
+
+  ["get", "/tokens", "The account's personal access tokens (never the tokens themselves)", { auth: "user", tag: "Assistants", response: { type: "array", items: ref("ApiToken") } }],
+  ["post", "/tokens", "Create a personal access token for an AI assistant; the token is returned once", { auth: "user", tag: "Assistants", body: "CreateApiToken", response: "ApiTokenCreated", status: 201 }],
+  ["delete", "/tokens/{id}", "Revoke a personal access token", { auth: "user", tag: "Assistants", status: 204, params: [idParam("id", "Token id")] }],
+  ["get", "/connected-apps", "Apps connected through OAuth, such as claude.ai", { auth: "user", tag: "Assistants", response: { type: "array", items: ref("ConnectedApp") } }],
+  ["delete", "/connected-apps/{id}", "Disconnect an app and revoke its tokens", { auth: "user", tag: "Assistants", status: 204, params: [idParam("id", "Connected app id")] }],
+  ["post", "/mcp", "Model Context Protocol endpoint: JSON-RPC 2.0 over Streamable HTTP, stateless. Takes a personal access token or an OAuth access token, never a session", { auth: "token", tag: "Assistants", body: "JsonRpcMessage", response: "JsonRpcMessage" }],
+  ["get", "/mcp", "Not served (405): this endpoint has no event stream", { auth: "none", tag: "Assistants", status: 405 }],
+  ["delete", "/mcp", "Not served (405): this endpoint keeps no sessions", { auth: "none", tag: "Assistants", status: 405 }],
 
   ["get", "/gemini-config", "Model and whether a Gemini key is available", { auth: "user", tag: "Gemini" }],
   ["put", "/gemini-key", "Save a personal Gemini key (stored encrypted, never returned)", { auth: "user", tag: "Gemini" }],
@@ -245,6 +255,48 @@ const SCHEMAS = {
       lines: { type: "array", items: { type: "object" } }
     }
   },
+  CreateApiToken: {
+    type: "object",
+    required: ["name", "expiresInDays", "canWrite"],
+    properties: {
+      name: { type: "string", minLength: 1, maxLength: 80 },
+      expiresInDays: { type: "integer", enum: [7, 30, 90, 365] },
+      canWrite: { type: "boolean", description: "Also allow correcting prices and saving receipts (receipts:write)" }
+    }
+  },
+  ApiToken: {
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      name: { type: "string" },
+      prefix: { type: "string", description: "The token's first characters, to tell tokens apart" },
+      scopes: { type: "array", items: { type: "string", enum: ["receipts:read", "receipts:write"] } },
+      expiresAt: { type: "string", format: "date-time" },
+      lastUsedAt: { type: ["string", "null"], format: "date-time" },
+      createdAt: { type: "string", format: "date-time" }
+    }
+  },
+  ApiTokenCreated: {
+    allOf: [
+      ref("ApiToken"),
+      { type: "object", properties: { token: { type: "string", description: "rr_pat_..., shown only in this response" } } }
+    ]
+  },
+  ConnectedApp: {
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      name: { type: "string" },
+      scopes: { type: "array", items: { type: "string" } },
+      connectedAt: { type: "string", format: "date-time" },
+      lastUsedAt: { type: ["string", "null"], format: "date-time" },
+      expiresAt: { type: "string", format: "date-time" }
+    }
+  },
+  JsonRpcMessage: {
+    description: "A JSON-RPC 2.0 message, or (from older clients) a batch of them. See https://modelcontextprotocol.io",
+    oneOf: [{ type: "object" }, { type: "array", items: { type: "object" } }]
+  },
   BankTransaction: {
     type: "object",
     properties: {
@@ -283,6 +335,8 @@ function operation([method, path, summary, options]) {
   const ok = String(options.status ?? 200);
   if (options.status === 204) {
     responses[ok] = { description: "Done" };
+  } else if (options.status === 405) {
+    responses[ok] = { description: "Method not allowed", ...json(ref("Error")) };
   } else if (options.binary) {
     responses[ok] = { description: "The file", content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } };
   } else {
@@ -301,6 +355,7 @@ function operation([method, path, summary, options]) {
       summary,
       tags: [options.tag],
       ...(options.auth === "none" ? { security: [] } : {}),
+      ...(options.auth === "token" ? { security: [{ bearerAuth: [] }] } : {}),
       ...(options.auth === "admin" ? { "x-requires-admin": true } : {}),
       ...(options.params || options.query ? { parameters: [...(options.params ?? []), ...(options.query ?? [])] } : {}),
       ...(options.body ? { requestBody: { required: true, ...json(ref(options.body)) } } : {}),
@@ -325,7 +380,7 @@ export const OPENAPI_SPEC = {
   },
   servers: [{ url: "/api/v1" }],
   security: [{ bearerAuth: [] }, { cookieAuth: [] }],
-  tags: ["Platform", "Auth", "Receipts", "People", "Items", "Rent", "Gemini", "Exports", "Bank", "Admin"].map((name) => ({ name })),
+  tags: ["Platform", "Auth", "Assistants", "Receipts", "People", "Items", "Rent", "Gemini", "Exports", "Bank", "Admin"].map((name) => ({ name })),
   paths,
   components: {
     securitySchemes: {
