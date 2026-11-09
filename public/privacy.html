@@ -45,6 +45,7 @@
         <li><strong>Rent entries:</strong> amounts, dates and any photo you attach, if you use the education expense tracker.</li>
         <li><strong>Your Gemini API key, if you add one:</strong> encrypted with AES-256-GCM before it is stored, and never sent back to your browser.</li>
         <li><strong>Bank transactions, for admin accounts that connect a bank:</strong> imported read-only through Plaid. The access token is encrypted at rest. Bank credentials are entered with Plaid and never reach this service.</li>
+        <li><strong>Access tokens and connected apps, if you connect an AI assistant:</strong> the name you gave each token, when it expires and when it was last used, and which apps you allowed. Tokens are stored only as hashes.</li>
         <li><strong>A session cookie</strong> so you stay signed in, and short-lived counters used to rate limit sign-in attempts.</li>
       </ul>
 
@@ -62,6 +63,7 @@
       </ul>
       <p>Data is not sold, rented, or shared with anyone else, unless you choose to share it yourself:</p>
       <ul>
+        <li><strong>AI assistants you connect:</strong> if you connect Claude (or another assistant) under <strong>Settings → Claude &amp; AI assistants</strong>, it can read your receipts, items, prices, people and splits when you ask it something, and, if you allowed corrections, change prices, tax and items or save new receipts. What it reads is then processed by that assistant's provider under its own terms. It never receives your password or receipt photos. You can revoke a token or disconnect an app at any time, and changing your password does both.</li>
         <li><strong>Share links:</strong> when you create a link to a receipt, anyone who has that link can see the receipt's store, date, items, totals and the names on its split until the link expires or you stop it. If you allow editing, they can change those items and the split as well. The receipt photo and your account details are never included.</li>
       </ul>
 
@@ -69,7 +71,7 @@
       <p>
         Your data is kept until you delete it. You can delete individual receipts at any time, and you can
         delete your entire account from <strong>Settings</strong>. Deleting your account removes your
-        receipts, photos, saved item names, people, rent entries and any bank connection. Deletion is
+        receipts, photos, saved item names, people, rent entries, access tokens, connected apps and any bank connection. Deletion is
         immediate and cannot be undone. Backups, if any, age out on their own schedule.
       </p>
 

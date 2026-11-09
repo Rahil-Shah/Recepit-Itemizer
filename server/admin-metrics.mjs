@@ -9,6 +9,7 @@
 // when an account looks compromised.
 
 import { isAdmin, maxReceiptsPerUser, maxUsers } from "./access.mjs";
+import { revokeAllApiAccess } from "./api-tokens.mjs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MONTHS_SHOWN = 12;
@@ -319,7 +320,7 @@ export function registerAdminMetrics(app, requireAuth, requireAdmin, prisma, lim
     }
   });
 
-  // Ends every session the account holds. Not offered on your own account:
+  // Ends every session the account holds, and revokes its API access. Not offered on your own account:
   // Settings has "sign out everywhere else" for that, which keeps this one.
   app.post("/api/admin/users/:id/sign-out", ...guards, async (req, res) => {
     if (!ID_PATTERN.test(req.params.id)) return res.status(400).json({ error: "That id is not valid." });
@@ -329,8 +330,13 @@ export function registerAdminMetrics(app, requireAuth, requireAdmin, prisma, lim
     try {
       const exists = await prisma.user.count({ where: { id: req.params.id } });
       if (!exists) return res.status(404).json({ error: "No such account." });
-      const { count } = await prisma.session.deleteMany({ where: { userId: req.params.id } });
-      console.log(`Admin ${req.userEmail} signed out account ${req.params.id} (${count} session(s)).`);
+      // Its API tokens and connected apps too: signing someone out should
+      // leave nothing still able to act for them.
+      const [{ count }] = await prisma.$transaction([
+        prisma.session.deleteMany({ where: { userId: req.params.id } }),
+        ...revokeAllApiAccess(prisma, req.params.id)
+      ]);
+      console.log(`Admin ${req.userEmail} signed out account ${req.params.id} (${count} session(s), API access revoked).`);
       res.json({ revoked: count });
     } catch (error) {
       console.error("Admin sign-out failed:", error);
