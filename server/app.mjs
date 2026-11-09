@@ -34,11 +34,21 @@ import { buildSpendingCsv, spendingExportFileName, SPENDING_EXPORT_RATE_LIMIT } 
 import { summariseReceiptFood } from "./food-share.mjs";
 import { registerBudgetCategorize, CATEGORIZE_RATE_LIMIT } from "./budget-categorize.mjs";
 import { maxReceiptsPerUser } from "./access.mjs";
+import { ensureSelfPerson } from "./people.mjs";
 import { apiVersionAlias, corsMiddleware, registerApiPlatform } from "./api-platform.mjs";
 import { registerAdminBackup, BACKUP_RATE_LIMIT } from "./admin-backup.mjs";
 import { registerAdminMetrics, ADMIN_RATE_LIMIT } from "./admin-metrics.mjs";
 import { registerReceiptShare, SHARE_RATE_LIMIT, SHARED_EDIT_RATE_LIMIT } from "./receipt-share.mjs";
 import { isVercel } from "./deployment.mjs";
+import { registerApiTokens, TOKEN_RATE_LIMIT } from "./api-tokens.mjs";
+import { registerMcp, MCP_RATE_LIMIT, MCP_ADDRESS_RATE_LIMIT } from "./mcp.mjs";
+import {
+  registerOAuth,
+  REGISTER_RATE_LIMIT,
+  TOKEN_ENDPOINT_RATE_LIMIT,
+  AUTHORIZE_RATE_LIMIT,
+  METADATA_RATE_LIMIT
+} from "./oauth.mjs";
 
 
 const __dirname = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -106,9 +116,16 @@ export function createApp({ prisma, plaid }) {
   // Counted per address before any session lookup, like the blanket limit,
   // so a flood of made-up tokens on this path is turned away for free.
   const backupLimiter = createRateLimiter(BACKUP_RATE_LIMIT);
-  app.use("/api", (req, res, next) =>
-    req.path.startsWith("/admin/backup/") ? backupLimiter(req, res, next) : blanketLimiter(req, res, next)
-  );
+  // The MCP endpoint is called by hosted assistants (claude.ai) from a few
+  // addresses shared by everyone who connected one, so it is counted per
+  // address on a looser limit of its own, and per account once the token is
+  // known (see registerMcp below).
+  const mcpAddressLimiter = createRateLimiter(MCP_ADDRESS_RATE_LIMIT);
+  app.use("/api", (req, res, next) => {
+    if (req.path.startsWith("/admin/backup/")) return backupLimiter(req, res, next);
+    if (req.path === "/mcp") return mcpAddressLimiter(req, res, next);
+    return blanketLimiter(req, res, next);
+  });
   const limitStore = createRateLimitStore(prisma);
 
   const authLimiter = createRateLimiter({
@@ -279,6 +296,31 @@ export function createApp({ prisma, plaid }) {
     createRateLimiter(CATEGORIZE_RATE_LIMIT),
     dbRateLimiter(limitStore, { bucket: "categorize", ...CATEGORIZE_RATE_LIMIT, keyOf: (req) => req.userId })
   ]);
+
+  // Personal access tokens and connected apps, managed from Settings, and the
+  // MCP endpoint they open (see server/api-tokens.mjs and server/mcp.mjs).
+  registerApiTokens(app, requireAuth, prisma, {
+    // Counted per account: creating a token needs a session anyway.
+    createLimiters: [dbRateLimiter(limitStore, { bucket: "api-token", ...TOKEN_RATE_LIMIT, keyOf: (req) => req.userId })]
+  });
+  // OAuth, so an app such as claude.ai can be connected with a sign-in and an
+  // Allow button instead of a pasted token (see server/oauth.mjs). Registration
+  // and the token endpoint are counted per address across instances as well.
+  registerOAuth(app, prisma, {
+    registerLimiters: [
+      createRateLimiter(REGISTER_RATE_LIMIT),
+      dbRateLimiter(limitStore, { bucket: "oauth-register", ...REGISTER_RATE_LIMIT })
+    ],
+    tokenLimiters: [
+      createRateLimiter(TOKEN_ENDPOINT_RATE_LIMIT),
+      dbRateLimiter(limitStore, { bucket: "oauth-token", ...TOKEN_ENDPOINT_RATE_LIMIT })
+    ],
+    authorizeLimiters: [createRateLimiter(AUTHORIZE_RATE_LIMIT)],
+    metadataLimiters: [createRateLimiter(METADATA_RATE_LIMIT)]
+  });
+  registerMcp(app, prisma, {
+    limiters: [dbRateLimiter(limitStore, { bucket: "mcp", ...MCP_RATE_LIMIT, keyOf: (req) => req.userId })]
+  });
 
   // --- API -------------------------------------------------------------------
 
@@ -766,47 +808,6 @@ export function createApp({ prisma, plaid }) {
     }
   });
 
-  // The account owner's own participant row. A receipt split three ways should
-  // only put a third of the bill in the owner's budget, which needs them to be
-  // one of the people it is split between. Created on first use rather than at
-  // signup so existing accounts pick one up too.
-  async function ensureSelfPerson(userId) {
-    const existing = await prisma.accountPerson.findFirst({
-      where: { userId, isSelf: true }
-    });
-    if (existing) return existing;
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true, email: true }
-    });
-    // Fall back through name, the local part of the email, then a plain label:
-    // the column is only unique per user, so a collision with a person the user
-    // already added by the same name is the one case that needs a distinct name.
-    const preferred = (user?.name ?? "").trim() || (user?.email ?? "").split("@")[0].trim() || "Me";
-    const candidates = [preferred, `${preferred} (me)`, "Me", "Myself"];
-
-    for (const name of candidates) {
-      const taken = await prisma.accountPerson.findUnique({
-        where: { userId_name: { userId, name } }
-      });
-      if (taken) {
-        // An ordinary person already holds this name; promote it rather than
-        // leaving the user with two rows that mean the same person.
-        if (name === preferred) {
-          return prisma.accountPerson.update({ where: { id: taken.id }, data: { isSelf: true } });
-        }
-        continue;
-      }
-      return prisma.accountPerson.create({ data: { userId, name, isSelf: true } });
-    }
-
-    // Every candidate was taken by someone else; fall back to a unique suffix.
-    return prisma.accountPerson.create({
-      data: { userId, name: `Me ${Date.now().toString(36)}`, isSelf: true }
-    });
-  }
-
   const serializeAccountPerson = (person) => ({
     id: person.id,
     name: person.name,
@@ -816,7 +817,7 @@ export function createApp({ prisma, plaid }) {
   // GET /api/people - list all account people for the user
   app.get("/api/people", requireAuth, async (req, res) => {
     try {
-      await ensureSelfPerson(req.userId);
+      await ensureSelfPerson(prisma, req.userId);
       const people = await prisma.accountPerson.findMany({
         where: { userId: req.userId },
         orderBy: [{ isSelf: "desc" }, { name: "asc" }]
@@ -1045,8 +1046,16 @@ export function createApp({ prisma, plaid }) {
   // server/bank.mjs), so their window must be UTC — a local-time window would
   // clip the first or last day of the period.
   async function loadFoodSummary(req, window) {
-    const receiptWhere = { userId: req.userId, lines: { some: { isFood: true, ignored: false } } };
-    const txnWhere = { isFood: true, account: { connection: { userId: req.userId } } };
+    const receiptFood = { lines: { some: { isFood: true, ignored: false } } };
+    const receiptWhere = { userId: req.userId, ...receiptFood };
+    // A transaction whose attached receipt has food lines counts through those
+    // lines (the owner's share only), so the whole charge is left out even if it
+    // was flagged as food before the receipt was itemised.
+    const txnWhere = {
+      isFood: true,
+      account: { connection: { userId: req.userId } },
+      NOT: { linkedReceipt: { is: receiptFood } }
+    };
     if (window) {
       receiptWhere.createdAt = { gte: window.local.start, lt: window.local.end };
       txnWhere.date = { gte: window.utc.start, lt: window.utc.end };
@@ -1179,11 +1188,26 @@ export function createApp({ prisma, plaid }) {
         return res.status(400).json({ error: "This transaction is already linked to another receipt." });
       }
 
-      // Update the transaction with the linked receipt
-      const updated = await prisma.bankTransaction.update({
-        where: { id: bankTransactionId },
-        data: { linkedReceiptId: req.params.receiptId },
-        include: { account: { select: { name: true, lastFour: true } } }
+      // A receipt pays for one transaction. Linking it somewhere new used to
+      // trip the unique index and answer a bare 500; now it is refused plainly,
+      // or moved when the caller says so (the picker asks the user first).
+      const current = await prisma.bankTransaction.findFirst({
+        where: { linkedReceiptId: req.params.receiptId, id: { not: bankTransactionId } },
+        select: { id: true }
+      });
+      if (current && body.move !== true) {
+        return res.status(409).json({ error: "This receipt is already linked to another transaction." });
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        if (current) {
+          await tx.bankTransaction.update({ where: { id: current.id }, data: { linkedReceiptId: null } });
+        }
+        return tx.bankTransaction.update({
+          where: { id: bankTransactionId },
+          data: { linkedReceiptId: req.params.receiptId },
+          include: { account: { select: { name: true, lastFour: true } } }
+        });
       });
 
       res.json({

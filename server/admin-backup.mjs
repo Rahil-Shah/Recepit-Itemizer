@@ -7,9 +7,10 @@
 // photos is well past that; the client (the app's Settings page, or any other
 // client of the API) stitches the pages into one archive.
 //
-// Sessions, share links and rate-limit counters are left out: they are
-// short-lived, a restored session would sign somebody in, a restored link would
-// reopen a receipt, and none of them is anybody's data.
+// Sessions, share links, API tokens, OAuth clients and grants, and rate-limit
+// counters are left out: they are credentials or short-lived, a restored
+// session or token would sign somebody in, a restored link would reopen a
+// receipt, and none of them is anybody's data.
 //
 // Credential columns -- password hashes, the encrypted Gemini keys and Plaid
 // tokens -- are left out unless the request asks for them with secrets=true.

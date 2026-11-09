@@ -42,6 +42,7 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
 - **Smart Categorization**: Categorize receipt items (Dining, Groceries, Travel, etc.) and save defaults for specific items. Receipt category defaults to **Groceries**.
 - **Saved History (Postgres)**: Save a split to a Postgres database and review previous receipts, items, prices, and per-person splits under the **History** tab. Marked something wrong? **Edit in Split** reopens a saved receipt in the Split tab with its assignments, food flags, and item names, and **Save changes** updates it in place — it keeps its photo, its budget month, and any linked bank transaction.
 - **Filter a receipt by person**: Every saved receipt with a split shows a row of names in **History**. Click one to see only what that person bought: each item with their share of it, how it was split (`Split evenly · 3 people`, `Split by % · 40%`, `Custom amount`, `Not split`), their share of the tax and their total. **Everyone** brings the full list back. The amounts come from the same calculator as the Split tab, so they add up to what the split says that person owes.
+- **Connect Claude (MCP)**: add Receipt Ring to Claude as a connector, attach a photo of a receipt, and Claude checks it against the saved copy and corrects the prices you agree to. It also answers questions such as who owes what, what one person had, or what an item cost. See [Connecting Claude](#-connecting-claude-mcp).
 - **Share links**: **Share** on a saved receipt creates a link anyone can open, with or without an account, for as long as you choose (1 minute to 30 days).
   - The page at `/r/<token>` shows the items, totals, who owes what and the same filter by person. It never shows the photo, your email, the bank transaction, or lines you marked ignored.
   - Turn on **Allow editing** and whoever holds the link can also change the store name, items, prices, tax and who is on each item. They can only pick people already on the receipt. Food flags, the category, the photo and any linked bank transaction stay out of reach. If two people edit at once, the second is told to reload rather than overwriting the first.
@@ -54,6 +55,7 @@ To use the advanced AI features of Gemini for parsing receipt items, the applica
   PDF and WebP attachments cannot be placed inside either file, so their rows say so. The dialog remembers the format you used last, and **Cancel** stops a file that is still being built. Both formats share one limit of 10 exports per 15 minutes per account, one at a time.
 - **Bank Connection (Plaid)**: Securely link a bank through [Plaid Link](https://plaid.com/docs/link/) to import **read-only** transactions. Access tokens are exchanged server-side and stored AES-256-GCM encrypted at rest — they never reach the browser.
 - **Budgeting**: The **Budgeting** tab aggregates saved receipts and imported bank transactions into monthly spend by category, visualized as a spending ring, with a **Month at a glance** panel beside it (change from last month, per-day average, biggest category, top merchant).
+- **Receipts on bank transactions**: A transaction's menu attaches a photo or links a saved receipt. The picker names the transaction it is for, opens on **Unlinked** receipts (with **Linked** and **All** a click away, plus a search), and lists any receipt for exactly the transaction's amount first; picking one already linked elsewhere asks before moving it. Once the attached receipt has a food line, the row's **Food** box shows ticked and locked: the receipt's food lines (your share of them) count toward education expenses, never the whole charge. A pending charge that posts keeps its receipt, food flag, budget category and rent entry.
 - **Sort a month with AI**: **Sort this month with AI** under the ring sends the month's receipts (with their items) and transactions to Gemini in one request, which files each under a budget category (Groceries, Dining, Transport, Travel, Shopping, Home, Utilities, Health, Subscriptions, …). The result is stored as `budgetCategory` beside the original category, which is never overwritten; changing a receipt's category by hand clears the AI's guess.
 - **Full data export**: **Settings → Your data** (or **History → Overview**) downloads one ZIP with every receipt photo and rent proof, `transactions.csv` (every receipt, bank transaction and rent payment, each naming the photo that belongs to it), `items.csv` (every receipt line) and a README. The ZIP is assembled in the browser from the app's own endpoints, so it is not limited by the size cap on a serverless response.
 - **Even splits, to the cent**: when odd amounts are split evenly — a batch of $0.99 items four ways — the spare cents go to whoever has paid least against their exact share so far, and tax is shared on those exact shares, so nobody ends up more than a cent from even.
@@ -93,8 +95,12 @@ backed by a transaction all answer 403 for a non-admin, whatever the page shows.
 **Settings** in the app bar opens a page every account gets:
 
 - **Profile**: the display name.
-- **Sign-in & security**: change the password (needs the current one, and signs every other session
-  out), see where the account is signed in, and sign out everywhere else.
+- **Sign-in & security**: change the password (needs the current one, signs every other session out,
+  revokes access tokens and disconnects connected apps), see where the account is signed in, and sign
+  out everywhere else.
+- **Claude & AI assistants**: the connection URL and how to add it to Claude, personal access tokens
+  for Claude Code and other tools, and the apps connected through OAuth. See
+  [Connecting Claude](#-connecting-claude-mcp).
 - **Gemini**: the personal API key (write-only from the browser) and the model.
 - **Preferences**: the tab the app opens on and the category new receipts start in, kept on the device.
 - **Your data**: the full export (every photo plus a CSV of every transaction).
@@ -118,8 +124,8 @@ whatever the page shows. A test checks the responses for leaked secrets.
 
 **Settings → Admin → Download database backup** saves one ZIP: `manifest.json`, then every table as
 JSON Lines in the order a restore loads them (users, people, item names, receipts with their photos,
-lines, splits, rent, bank connections, accounts and transactions). Sessions and rate-limit counters are
-left out. Credential columns (password hashes, encrypted Gemini keys and Plaid tokens) are left out
+lines, splits, rent, bank connections, accounts and transactions). Sessions, share links, access
+tokens, OAuth clients and grants, and rate-limit counters are left out. Credential columns (password hashes, encrypted Gemini keys and Plaid tokens) are left out
 unless you tick **Include credentials** and confirm; with them, a restore keeps sign-ins and bank links
 working, and the encrypted values still need the server's `TOKEN_ENCRYPTION_KEY`. The server hands the
 tables over a page at a time (`GET /api/admin/backup`, then `GET /api/admin/backup/:table?cursor=`), so
@@ -148,6 +154,92 @@ TOKEN=$(curl -s -X POST https://your-app/api/v1/auth/login \
   -d '{"email":"you@example.com","password":"..."}' | jq -r .token)
 curl -s https://your-app/api/v1/receipts -H "Authorization: Bearer $TOKEN"
 ```
+
+---
+
+## 🤖 Connecting Claude (MCP)
+
+Receipt Ring is also a [Model Context Protocol](https://modelcontextprotocol.io) server, so Claude (or
+any MCP client) can work with your receipts. The endpoint is `/api/mcp` on your deployment, for example
+`https://receipts.example.com/api/mcp`. **Settings → Claude & AI assistants** shows the exact URL and
+everything below.
+
+### Adding it to Claude
+
+**claude.ai, Claude Desktop and the mobile apps** (signs in with OAuth, no token to paste):
+
+1. In Claude, open **Settings → Connectors → Add custom connector**.
+2. Name it *Receipt Ring* and paste the connection URL. Leave the advanced settings empty.
+3. Choose **Add**, then **Connect**. A Receipt Ring page opens: sign in and choose **Allow**.
+4. In a chat, turn Receipt Ring on from the tools menu, attach a receipt photo and ask
+   *"Check this receipt against Receipt Ring and fix any prices that are different."*
+
+**Claude Code** (and other tools that take a header), with a personal access token from Settings:
+
+```bash
+claude mcp add --transport http receipt-ring https://receipts.example.com/api/mcp \
+  --header "Authorization: Bearer rr_pat_..."
+```
+
+**Claude Desktop through its config file** instead of a connector: Settings shows a ready
+`claude_desktop_config.json` entry that runs [`mcp-remote`](https://www.npmjs.com/package/mcp-remote)
+with the token.
+
+### What Claude can do
+
+| Tool | Access | What it does |
+| --- | --- | --- |
+| `list_receipts` | read | Saved receipts, newest first, filtered by store, dates, total or a person on them |
+| `get_receipt` | read | One receipt: every item, each person's share, who owes what with tax, and whether the items add up to the saved totals |
+| `search_items` | read | Find an item across receipts by name, as printed or as identified, or by item code |
+| `list_people` | read | The people you split with |
+| `person_summary` | read | Everything one person had, with their share and tax, per receipt and in total |
+| `who_owes_what` | read | Totals per person across receipts |
+| `compare_receipt` | read | Pairs the items Claude read off a photo with the saved lines (item code, then label, then a similar label) and reports price differences, missing items and totals. Changes nothing |
+| `update_receipt` | write | Applies the corrections you agree to: prices, tax, store name, added or ignored items. Subtotal and total are recalculated the way the app saves them, and splits follow the new prices |
+| `create_receipt` | write | Saves a receipt that is not there yet, split between named people |
+
+The account owner is assumed to have paid each receipt, so everyone else's share is what they owe.
+Claude reads the photo itself; the photo is never sent to Receipt Ring.
+
+### Security
+
+- **Two ways in, both only for `/api/mcp`.** A personal access token (`rr_pat_…`, expiring after 7 to
+  365 days, read-only or with corrections) or an OAuth access token. Neither opens any other route, and
+  a session cookie never opens the MCP endpoint, so a web page cannot drive it with a visitor's session.
+  A request from a web page on another origin is refused unless it is listed in `CORS_ORIGINS`.
+- **Only hashes are stored** for tokens, refresh tokens, authorization codes and client secrets. A new
+  personal token is shown once.
+- **OAuth**: discovery at `/.well-known/oauth-protected-resource` and
+  `/.well-known/oauth-authorization-server`, open dynamic client registration, PKCE (S256) required,
+  redirect URIs must be https (or http on localhost) and match exactly, codes last five minutes and are
+  used up by the first attempt, access tokens last an hour, and refresh tokens rotate. A refresh token
+  presented a second time revokes the whole grant. The consent page names the app, your account and
+  the site you will be sent back to, cannot be framed, runs under a nonce-based CSP, and its form is
+  tied to your session and the exact request.
+- **Edits cannot overwrite each other.** `update_receipt` carries the version Claude read; if the
+  receipt changed since (in the app, through a share link, or another chat), nothing is written.
+  Everything is scoped to your account in the query itself, so another account's receipt reads as "not
+  found".
+- **Revoking**: from Settings, one token or app at a time. Changing your password revokes all of them,
+  as does an admin signing your account out, and deleting the account removes them.
+- **Limits**: 300 calls per 15 minutes per account, counted across instances, plus a per-address
+  ceiling. The receipt and people limits apply to `create_receipt` as they do in the app.
+
+### Deployment notes
+
+**Vercel preview deployments are behind Vercel's own login by default** (Deployment Protection →
+Vercel Authentication). Claude's servers cannot get past it, so every request, discovery and
+registration included, gets Vercel's `401 Protected deployment` and Claude reports that it
+"couldn't register". Connect Claude to your production URL, or to test a preview, turn Vercel
+Authentication off for preview deployments under **Project Settings → Deployment Protection**. The app
+still requires its own sign-in and tokens. A protection-bypass secret in the URL does not help: Claude
+builds the discovery URLs from the origin and drops the query string.
+
+The OAuth metadata names the server by the address the request came in on. That is right on Vercel
+(`vercel.json` routes `/.well-known/oauth-*` to the function) and behind a proxy that `TRUST_PROXY`
+trusts. Anywhere else, or if Claude reports an `http://` or mismatched address, set `PUBLIC_URL` to
+the address people use, such as `https://receipts.example.com`.
 
 ---
 
@@ -298,6 +390,7 @@ Postgres does.
    | `MAX_USERS`, `MAX_RECEIPTS_PER_USER` | optional: both default to 20, and only matter when sign-up is open |
    | `AUTH_SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY` | generated as described above |
    | `GEMINI_API_KEY`, `GEMINI_MODEL` | your Gemini key (or save one in Settings after signing in) and the model |
+   | `PUBLIC_URL` | optional: your app's address, if the MCP connector reports a mismatched one (see [Connecting Claude](#-connecting-claude-mcp)) |
    | `PLAID_ENV`, `PLAID_CLIENT_ID`, `PLAID_SECRET` | optional, for bank import |
 
 3. Deploy. The build runs `npm run vercel-build`: it generates the Prisma client, applies pending
