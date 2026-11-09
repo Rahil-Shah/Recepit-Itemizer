@@ -128,9 +128,32 @@ test("admin budgets: link a bank, sort the month with AI, work the transaction m
     message: "the attach"
   });
 
-  // Link a saved receipt from the modal.
+  // Link a saved receipt from the modal. It opens on the unlinked receipts:
+  // Target, not the photo just attached to Uber.
   ui.click(menuItem(ui, txnRow(ui, "Refund"), "Link a saved receipt"));
   await ui.waitFor(() => ui.$$("#receiptLinkList .receipt-link-item").length > 0, { message: "the receipt list" });
+  assert.match(ui.text("#receiptLinkFor"), /Refund/);
+  const pickerCards = () => ui.$$("#receiptLinkList .receipt-link-item").map((item) => item.textContent);
+  const filterOption = (name) => ui.$(`#receiptLinkFilter [data-filter="${name}"]`);
+  assert.deepEqual(pickerCards().map((text) => /Target/.test(text)), [true]);
+  assert.match(filterOption("unlinked").textContent, /1/);
+  assert.match(filterOption("linked").textContent, /1/);
+  assert.match(filterOption("all").textContent, /2/);
+
+  ui.click(filterOption("linked"));
+  assert.equal(filterOption("linked").getAttribute("aria-pressed"), "true");
+  assert.equal(pickerCards().length, 1);
+  assert.match(pickerCards()[0], /Linked · Uber/);
+
+  ui.click(filterOption("all"));
+  assert.equal(pickerCards().length, 2);
+  ui.type("#receiptLinkSearch", "towel");
+  assert.equal(pickerCards().length, 1);
+  ui.type("#receiptLinkSearch", "nothing like it");
+  assert.equal(pickerCards().length, 0);
+  assert.match(ui.text("#receiptLinkNoMatch"), /No receipts match/);
+  ui.type("#receiptLinkSearch", "");
+
   ui.click(ui.$$("#receiptLinkList .receipt-link-item").find((item) => item.textContent.includes("Target")));
   await ui.waitFor(() => txnRow(ui, "Refund").classList.contains("has-receipt"), { message: "the link" });
   ui.click(menuItem(ui, txnRow(ui, "Refund"), "Detach receipt"));
@@ -148,6 +171,16 @@ test("admin budgets: link a bank, sort the month with AI, work the transaction m
   txnRow(ui, "Rent Co").dispatchEvent(new ui.window.Event("dragleave", { bubbles: true }));
   txnRow(ui, "Rent Co").dispatchEvent(drop);
   await ui.waitFor(() => txnRow(ui, "Rent Co").classList.contains("has-receipt"), { message: "the drop link" });
+
+  // Target has a food line, so the row reads as food but can't be toggled:
+  // the receipt's lines are what count.
+  const lockedFood = txnRow(ui, "Rent Co").querySelector(".txn-food-toggle");
+  assert.ok(lockedFood.disabled);
+  assert.ok(lockedFood.classList.contains("is-on"));
+  assert.ok(lockedFood.classList.contains("is-locked"));
+  assert.ok(!menuItem(ui, txnRow(ui, "Rent Co"), "Count as food"));
+  // Uber's attached photo has no food line, so its toggle stays live.
+  assert.ok(!txnRow(ui, "Uber").querySelector(".txn-food-toggle").disabled);
 
   // Spending CSV.
   ui.click("#spendingExportButton");
